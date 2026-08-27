@@ -21,6 +21,7 @@ interface AdminWithdrawal {
 
 const STATUS_FILTERS = ['', 'PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'CANCELLED'];
 const CANCELLABLE = new Set(['PENDING', 'PROCESSING']);
+const COMPLETABLE = new Set(['PENDING', 'PROCESSING']);
 
 function destinationLabel(d: AdminWithdrawal['destination']): string {
   if (d.method === 'CASH_APP') return `Cash App ${d.cashtag ?? ''}`.trim();
@@ -38,7 +39,12 @@ const STATUS_STYLES: Record<string, string> = {
 
 export default function AdminWithdrawalsPage() {
   const { can } = useAdminAuth();
-  const canCancel = can.includes('withdrawals:cancel');
+  // Reuses the existing 'withdrawals:cancel' capability rather than adding a
+  // new one — the SUPERADMIN capability list returned by GET /api/admin/me
+  // is a locked contract (D-ADMIN-04, enforced by a test asserting exactly
+  // 11 entries), and "mark this manual payout as sent" is the same class of
+  // financially-terminal, SUPERADMIN-only action as cancelling one.
+  const canManageWithdrawals = can.includes('withdrawals:cancel');
   const [status, setStatus] = useState('');
   const [items, setItems] = useState<AdminWithdrawal[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -92,6 +98,23 @@ export default function AdminWithdrawalsPage() {
       load(status);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not cancel this withdrawal.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function complete(id: string) {
+    if (
+      !window.confirm('Confirm you already sent this payout (Cash App/Zelle) outside Vendylio?')
+    ) {
+      return;
+    }
+    setBusyId(id);
+    try {
+      await api(`/api/admin/withdrawals/${id}/complete`, { method: 'POST', body: {} });
+      load(status);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not complete this withdrawal.');
     } finally {
       setBusyId(null);
     }
@@ -162,7 +185,17 @@ export default function AdminWithdrawalsPage() {
                 >
                   {w.status}
                 </span>
-                {canCancel && CANCELLABLE.has(w.status) && (
+                {canManageWithdrawals && COMPLETABLE.has(w.status) && (
+                  <button
+                    type="button"
+                    disabled={busyId === w.id}
+                    onClick={() => complete(w.id)}
+                    className="flex-shrink-0 rounded-lg border border-green-200 bg-white px-3 py-1.5 text-xs font-semibold text-green-700 disabled:opacity-50"
+                  >
+                    Mark as Sent
+                  </button>
+                )}
+                {canManageWithdrawals && CANCELLABLE.has(w.status) && (
                   <button
                     type="button"
                     disabled={busyId === w.id}

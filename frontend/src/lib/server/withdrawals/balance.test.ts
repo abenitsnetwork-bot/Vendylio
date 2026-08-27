@@ -30,7 +30,7 @@ describe('createDefaultBalanceComputer', () => {
     const orderArgs = prismaMock.order.findMany.mock.calls[0]?.[0];
     expect(orderArgs?.where).toEqual({
       storeId: 'store-1',
-      status: 'PAID',
+      status: { in: ['PAID', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED'] },
       provider: 'stripe_platform',
     });
     const withdrawalArgs = prismaMock.withdrawal.findMany.mock.calls[0]?.[0];
@@ -54,6 +54,25 @@ describe('createDefaultBalanceComputer', () => {
     // clause, so this test only proves the *filter is requested* — the
     // real Prisma query engine is what actually excludes stripe_connect
     // rows at read time.
+  });
+
+  it('still counts an order toward the balance after it progresses past PAID to DELIVERED', async () => {
+    // Regression: an exact `status: 'PAID'` match made a seller's earnings
+    // vanish from their withdrawable balance the moment an order advanced
+    // past its first post-payment status.
+    mockResolveOwnStore.mockResolvedValue({ id: 'store-1' } as never);
+    prismaMock.order.findMany.mockResolvedValue([{ amount: 1000, netAmount: 940 }] as never);
+    prismaMock.withdrawal.findMany.mockResolvedValue([]);
+
+    const computeBalance = createDefaultBalanceComputer(prismaMock as never);
+    const balance = await computeBalance('seller-1');
+
+    expect(balance).toBe(940);
+    const orderArgs = prismaMock.order.findMany.mock.calls[0]?.[0];
+    const statusFilter = (orderArgs?.where as { status?: { in?: string[] } } | undefined)?.status;
+    expect(statusFilter?.in).toContain('DELIVERED');
+    expect(statusFilter?.in).not.toContain('REFUNDED');
+    expect(statusFilter?.in).not.toContain('CANCELLED');
   });
 
   it('returns 0 (not an error) when the caller has no store yet', async () => {

@@ -17,9 +17,19 @@ export interface BalanceComputer {
   (userId: string, tx?: TxClient): Promise<number>;
 }
 
+// Any status a stripe_platform order can reach once it's actually been paid
+// — the seller earned this money at the PAID transition and keeps it
+// regardless of what fulfillment stage the order is later in. An exact
+// `status: 'PAID'` match would make an order's netAmount vanish from the
+// seller's withdrawable balance the moment it progressed to PREPARING/
+// READY/OUT_FOR_DELIVERY/DELIVERED — the same bug found in the seller
+// dashboard's sales stats (api/stores/me/route.ts). REFUNDED is
+// deliberately excluded: that money went back to the buyer.
+const EARNED_ORDER_STATUSES = ['PAID', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED'];
+
 /**
  * Default balance formula for the Vendylio marketplace:
- *   balance = sum(PAID stripe_platform Orders.netAmount or amount FOR THE SELLER'S STORE)
+ *   balance = sum(paid, non-refunded stripe_platform Orders.netAmount or amount FOR THE SELLER'S STORE)
  *             - sum(non-cancelled Withdrawals.amount)
  *
  * Phase 2 fix: earnings are scoped by the caller's Store (resolved via
@@ -57,7 +67,11 @@ export function createDefaultBalanceComputer(prisma: PrismaClient): BalanceCompu
     const [orders, withdrawals] = await Promise.all([
       store
         ? client.order.findMany({
-            where: { storeId: store.id, status: 'PAID', provider: 'stripe_platform' },
+            where: {
+              storeId: store.id,
+              status: { in: EARNED_ORDER_STATUSES },
+              provider: 'stripe_platform',
+            },
             select: { amount: true, netAmount: true },
           })
         : Promise.resolve([]),
