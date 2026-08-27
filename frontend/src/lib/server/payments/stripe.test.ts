@@ -218,6 +218,29 @@ describe('createStripeProvider', () => {
         /has no PaymentIntent to refund/,
       );
     });
+
+    it('passes reverse_transfer + refund_application_fee for a Stripe Connect refund', async () => {
+      const provider = createStripeProvider(ENV);
+      refundsCreate.mockResolvedValue({ id: 're_3', status: 'succeeded' });
+
+      await provider.refund!({ providerChargeId: 'pi_connect_1', reverseTransfer: true });
+
+      expect(refundsCreate.mock.calls[0]?.[0]).toMatchObject({
+        payment_intent: 'pi_connect_1',
+        reverse_transfer: true,
+        refund_application_fee: true,
+      });
+    });
+
+    it('omits reverse_transfer/refund_application_fee for a plain platform refund', async () => {
+      const provider = createStripeProvider(ENV);
+      refundsCreate.mockResolvedValue({ id: 're_4', status: 'succeeded' });
+
+      await provider.refund!({ providerChargeId: 'pi_platform_1' });
+
+      expect(refundsCreate.mock.calls[0]?.[0]).not.toHaveProperty('reverse_transfer');
+      expect(refundsCreate.mock.calls[0]?.[0]).not.toHaveProperty('refund_application_fee');
+    });
   });
 
   describe('webhookProvider', () => {

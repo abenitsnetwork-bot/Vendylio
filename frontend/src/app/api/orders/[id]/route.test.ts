@@ -118,10 +118,6 @@ describe('PATCH /api/orders/[id] — status transitions', () => {
     ['READY', 'OUT_FOR_DELIVERY'],
     ['READY', 'DELIVERED'], // Phase — pickup orders skip straight through
     ['OUT_FOR_DELIVERY', 'DELIVERED'],
-    ['PAID', 'CANCELLED'],
-    ['PREPARING', 'CANCELLED'],
-    ['READY', 'CANCELLED'],
-    ['OUT_FOR_DELIVERY', 'CANCELLED'],
   ])('allows %s -> %s', async (from, to) => {
     prismaMock.order.findFirst.mockResolvedValue({ ...OWNED_ORDER, status: from } as never);
     prismaMock.$transaction.mockImplementation(async (fn: unknown) =>
@@ -147,6 +143,10 @@ describe('PATCH /api/orders/[id] — status transitions', () => {
     ['DELIVERED', 'CANCELLED'], // terminal — no transitions out
     ['CANCELLED', 'PREPARING'], // terminal — no transitions out
     ['PENDING', 'PREPARING'], // not yet paid — not part of the seller lifecycle
+    ['PAID', 'CANCELLED'], // superseded by POST /api/orders/[id]/refund
+    ['PREPARING', 'CANCELLED'], // superseded by POST /api/orders/[id]/refund
+    ['READY', 'CANCELLED'], // superseded by POST /api/orders/[id]/refund
+    ['OUT_FOR_DELIVERY', 'CANCELLED'], // superseded by POST /api/orders/[id]/refund
   ])('422s INVALID_STATUS_TRANSITION for %s -> %s', async (from, to) => {
     prismaMock.order.findFirst.mockResolvedValue({ ...OWNED_ORDER, status: from } as never);
 

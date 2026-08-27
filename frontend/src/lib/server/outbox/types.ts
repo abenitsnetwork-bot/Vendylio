@@ -14,6 +14,7 @@ export type OutboxEvent =
   | EmailPasswordResetEvent
   | NotificationOrderPaidEvent
   | EmailOrderConfirmationEvent
+  | EmailOrderRefundedEvent
   | NotificationDeliveryCompletedEvent
   | NotificationDeliveryFailedEvent;
 
@@ -65,6 +66,20 @@ export interface NotificationOrderPaidEvent {
  */
 export interface EmailOrderConfirmationEvent {
   kind: 'email.order_confirmation';
+  payload: {
+    to: string;
+    orderId: string;
+    amount: number;
+    currency: string;
+  };
+}
+
+/**
+ * Phase 7 — emitted by POST /api/orders/[id]/refund, addressed to the guest
+ * buyer's `customerEmail` (skipped if the buyer didn't provide one).
+ */
+export interface EmailOrderRefundedEvent {
+  kind: 'email.order_refunded';
   payload: {
     to: string;
     orderId: string;

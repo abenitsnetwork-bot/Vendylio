@@ -85,6 +85,13 @@ export interface RefundInput {
   providerChargeId: string;
   /** Defaults to full refund when omitted. */
   amount?: number;
+  /**
+   * Set for a Stripe Connect destination charge (Order.provider ===
+   * 'stripe_connect') — reverses the transfer to the seller's connected
+   * account and returns the platform's application fee, instead of only
+   * refunding the platform's own held portion.
+   */
+  reverseTransfer?: boolean;
 }
 
 export type RefundStatus = 'PENDING' | 'COMPLETED' | 'FAILED';

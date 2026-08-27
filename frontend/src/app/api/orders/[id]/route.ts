@@ -20,7 +20,15 @@ interface RouteCtx {
 
 // Explicit transition table — PENDING/EXPIRED/FAILED/REFUNDED aren't part of
 // the seller-controlled lifecycle (they're managed by checkout/webhook/cron),
-// and DELIVERED/CANCELLED are terminal, so none of those appear as keys here.
+// and DELIVERED is terminal, so none of those appear as keys here.
+//
+// CANCELLED is deliberately NOT a reachable target from any of these
+// post-payment states — it used to be, but that was a bare status flip that
+// never touched money: a seller "cancelling" a paid Stripe order left the
+// buyer's card charged with no way to reverse it from inside Vendylio.
+// Ending a paid order early now always goes through
+// POST /api/orders/[id]/refund, which actually reverses the charge (or
+// records a manual refund for Cash App/Zelle) before setting REFUNDED.
 //
 // Phase 5 note: READY→OUT_FOR_DELIVERY and OUT_FOR_DELIVERY→DELIVERED stay
 // reachable here too (not removed in favor of the new
@@ -39,12 +47,16 @@ interface RouteCtx {
 // only offers it for PICKUP orders, but the API itself doesn't forbid it for
 // a seller who genuinely handed a delivery order over without a courier.
 const TRANSITIONS: Record<string, readonly string[]> = {
-  PAID: ['PREPARING', 'CANCELLED'],
-  PREPARING: ['READY', 'CANCELLED'],
-  READY: ['OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'],
-  OUT_FOR_DELIVERY: ['DELIVERED', 'CANCELLED'],
+  PAID: ['PREPARING'],
+  PREPARING: ['READY'],
+  READY: ['OUT_FOR_DELIVERY', 'DELIVERED'],
+  OUT_FOR_DELIVERY: ['DELIVERED'],
 };
 
+// CANCELLED stays a syntactically valid value here (rather than rejected as
+// VALIDATION_FAILED) purely so a caller still sending it gets the more
+// informative 422 INVALID_STATUS_TRANSITION pointing at POST .../refund,
+// instead of a generic 400.
 const PatchBody = z.object({
   status: z.enum(['PREPARING', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED']),
 });

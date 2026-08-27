@@ -212,4 +212,23 @@ describe('drainOutbox (TEST-02)', () => {
     const finalUpdate = prismaMock.outboxEvent.update.mock.calls[0]?.[0];
     expect(finalUpdate?.data).toMatchObject({ lastError: 'email queue not configured' });
   });
+
+  it('dispatches email.order_refunded via the EmailQueue addressed to the buyer', async () => {
+    const row = makeRow({
+      kind: 'email.order_refunded',
+      payload: { to: 'buyer@example.com', orderId: 'order-1', amount: 3600, currency: 'USD' },
+    });
+    prismaMock.outboxEvent.findMany.mockResolvedValue([{ id: 'oe_1' }] as never);
+    prismaMock.outboxEvent.updateMany.mockResolvedValue({ count: 1 } as never);
+    prismaMock.outboxEvent.findUnique.mockResolvedValue(row as never);
+    vi.mocked(emailQueueMock.enqueue).mockResolvedValue(undefined as never);
+    prismaMock.outboxEvent.update.mockResolvedValue({} as never);
+
+    const stats = await drainOutbox({ prisma: prismaMock, emailQueue: emailQueueMock });
+
+    expect(stats.succeeded).toBe(1);
+    const enqueueArgs = vi.mocked(emailQueueMock.enqueue).mock.calls[0]?.[0];
+    expect(enqueueArgs).toMatchObject({ to: 'buyer@example.com' });
+    expect(enqueueArgs?.html).toContain('order-1');
+  });
 });

@@ -176,6 +176,7 @@ export function createStripeProvider(env: StripeEnv): StripeProviderHandle {
       const refundObj = await stripe.refunds.create({
         payment_intent: paymentIntentId,
         ...(input.amount !== undefined ? { amount: input.amount } : {}),
+        ...(input.reverseTransfer ? { reverse_transfer: true, refund_application_fee: true } : {}),
       });
       const status: RefundResult['status'] =
         refundObj.status === 'succeeded'

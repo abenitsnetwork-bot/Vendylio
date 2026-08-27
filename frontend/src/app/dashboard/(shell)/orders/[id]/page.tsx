@@ -34,17 +34,23 @@ interface NextAction {
 
 // READY and OUT_FOR_DELIVERY are handled separately below (delivery-aware
 // buttons) — see the file header for why the generic PATCH transition still
-// exists alongside the Phase 5 delivery sub-resource.
+// exists alongside the Phase 5 delivery sub-resource. "Cancel Order" isn't
+// in here anymore — cancelling a paid order now always goes through the
+// dedicated Refund action below (POST /api/orders/[id]/refund), which
+// actually reverses the charge instead of just flipping the status.
 const NEXT_ACTIONS: Record<string, NextAction[]> = {
-  PAID: [
-    { label: 'Start Preparing', value: 'PREPARING' },
-    { label: 'Cancel Order', value: 'CANCELLED', danger: true },
-  ],
-  PREPARING: [
-    { label: 'Mark Ready', value: 'READY' },
-    { label: 'Cancel Order', value: 'CANCELLED', danger: true },
-  ],
+  PAID: [{ label: 'Start Preparing', value: 'PREPARING' }],
+  PREPARING: [{ label: 'Mark Ready', value: 'READY' }],
 };
+
+// Any status a paid order can still be in when the seller wants to refund it.
+const REFUNDABLE_STATUSES = new Set([
+  'PAID',
+  'PREPARING',
+  'READY',
+  'OUT_FOR_DELIVERY',
+  'DELIVERED',
+]);
 
 function deliveryAddressLines(addr: Record<string, unknown> | null): string[] {
   if (!addr) return [];
@@ -136,6 +142,22 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not mark this order delivered.');
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  async function refundOrder() {
+    if (!window.confirm('Refund this order in full and cancel it? This cannot be undone.')) {
+      return;
+    }
+    setUpdating(true);
+    setError(null);
+    try {
+      await api(`/api/orders/${id}/refund`, { method: 'POST' });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not refund this order.');
     } finally {
       setUpdating(false);
     }
@@ -257,14 +279,6 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         Request Delivery
                       </button>
                     )}
-                    <button
-                      type="button"
-                      disabled={updating}
-                      onClick={() => advance('CANCELLED')}
-                      className="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 disabled:opacity-50"
-                    >
-                      Cancel Order
-                    </button>
                   </div>
                 </Card>
               )}
@@ -300,15 +314,25 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         Mark Delivered
                       </button>
                     )}
-                    <button
-                      type="button"
-                      disabled={updating}
-                      onClick={() => advance('CANCELLED')}
-                      className="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 disabled:opacity-50"
-                    >
-                      Cancel Order
-                    </button>
                   </div>
+                </Card>
+              )}
+
+              {REFUNDABLE_STATUSES.has(order.status) && (
+                <Card className="mb-6">
+                  <p className="mb-4 text-sm font-semibold text-foreground">
+                    {order.provider === 'cashapp_manual' || order.provider === 'zelle_manual'
+                      ? 'Already refunded this buyer outside Vendylio? Record it here.'
+                      : 'Need to cancel? This issues a real refund to the buyer.'}
+                  </p>
+                  <button
+                    type="button"
+                    disabled={updating}
+                    onClick={refundOrder}
+                    className="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 disabled:opacity-50"
+                  >
+                    {updating ? 'Processing…' : 'Refund Order'}
+                  </button>
                 </Card>
               )}
 

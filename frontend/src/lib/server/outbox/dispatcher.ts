@@ -165,6 +165,17 @@ async function dispatchEvent(deps: OutboxDispatcherDeps, event: OutboxEvent): Pr
       });
       return;
     }
+    case 'email.order_refunded': {
+      // Phase 7 — emitted by POST /api/orders/[id]/refund.
+      if (!deps.emailQueue) throw new Error('email queue not configured');
+      const { to, orderId, amount, currency } = event.payload;
+      await deps.emailQueue.enqueue({
+        to,
+        subject: 'Your order has been refunded',
+        html: `<p>Your order <strong>${orderId}</strong> for $${(amount / 100).toFixed(2)} ${currency} has been refunded. The funds should appear back in your original payment method within 5–10 business days.</p>`,
+      });
+      return;
+    }
     case 'notification.delivery_completed': {
       // Uber Direct — emitted by the delivery webhook's onPaid handler.
       const { userId, orderId } = event.payload;
