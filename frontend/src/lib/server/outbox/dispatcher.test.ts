@@ -11,20 +11,30 @@
 //   4. on dispatch failure with attempts >= MAX_ATTEMPTS, marks the row DEAD.
 //   5. concurrent claim losing the race (claimed.count === 0) is skipped
 //      without further work.
-import { describe, it, expect, beforeEach } from 'vitest';
+//
+// Fixture kind is `email.verification_code` (generic dispatch-mechanics
+// coverage — any surviving OutboxEvent variant works equally well here;
+// the payment-specific kinds this test used to exercise were removed when
+// the Bictorys payment infra was pruned).
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { mockDeep, mockReset, type DeepMockProxy } from 'vitest-mock-extended';
 import type { PrismaClient } from '@prisma/client';
 import { drainOutbox } from './dispatcher';
+import type { EmailQueue } from '../queues/email-queue';
 
 const prismaMock = mockDeep<PrismaClient>() as unknown as DeepMockProxy<PrismaClient>;
+const emailQueueMock = { enqueue: vi.fn() } as unknown as EmailQueue;
 
-beforeEach(() => mockReset(prismaMock));
+beforeEach(() => {
+  mockReset(prismaMock);
+  vi.mocked(emailQueueMock.enqueue).mockReset();
+});
 
 function makeRow(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
   return {
     id: 'oe_1',
-    kind: 'notification.payment_received',
-    payload: { userId: 'u_1', orderId: 'o_1', amount: 1000, currency: 'XOF' },
+    kind: 'email.verification_code',
+    payload: { to: 'a@b.com', code: 'ABCD1234', expiresAt: '2026-01-01T00:15:00Z' },
     status: 'PROCESSING',
     attempts: 1,
     scheduledAt: new Date('2026-01-01T00:00:00Z'),
@@ -40,11 +50,10 @@ describe('drainOutbox (TEST-02)', () => {
     prismaMock.outboxEvent.findMany.mockResolvedValue([{ id: 'oe_1' }] as never);
     prismaMock.outboxEvent.updateMany.mockResolvedValue({ count: 1 } as never);
     prismaMock.outboxEvent.findUnique.mockResolvedValue(row as never);
-    // Make the dispatch succeed (notification.payment_received → createNotification).
-    prismaMock.notification.create.mockResolvedValue({} as never);
+    vi.mocked(emailQueueMock.enqueue).mockResolvedValue(undefined as never);
     prismaMock.outboxEvent.update.mockResolvedValue({} as never);
 
-    await drainOutbox({ prisma: prismaMock });
+    await drainOutbox({ prisma: prismaMock, emailQueue: emailQueueMock });
 
     expect(prismaMock.outboxEvent.updateMany).toHaveBeenCalledWith({
       where: { id: 'oe_1', status: 'PENDING' },
@@ -57,10 +66,10 @@ describe('drainOutbox (TEST-02)', () => {
     prismaMock.outboxEvent.findMany.mockResolvedValue([{ id: 'oe_1' }] as never);
     prismaMock.outboxEvent.updateMany.mockResolvedValue({ count: 1 } as never);
     prismaMock.outboxEvent.findUnique.mockResolvedValue(row as never);
-    prismaMock.notification.create.mockResolvedValue({} as never);
+    vi.mocked(emailQueueMock.enqueue).mockResolvedValue(undefined as never);
     prismaMock.outboxEvent.update.mockResolvedValue({} as never);
 
-    const stats = await drainOutbox({ prisma: prismaMock });
+    const stats = await drainOutbox({ prisma: prismaMock, emailQueue: emailQueueMock });
 
     expect(stats.succeeded).toBe(1);
     const finalUpdate = prismaMock.outboxEvent.update.mock.calls[0]?.[0];
@@ -78,13 +87,13 @@ describe('drainOutbox (TEST-02)', () => {
     prismaMock.outboxEvent.findMany.mockResolvedValue([{ id: 'oe_1' }] as never);
     prismaMock.outboxEvent.updateMany.mockResolvedValue({ count: 1 } as never);
     prismaMock.outboxEvent.findUnique.mockResolvedValue(row as never);
-    // Force the dispatch path to throw — createNotification rejects.
-    prismaMock.notification.create.mockRejectedValueOnce(
+    // Force the dispatch path to throw — enqueue rejects.
+    vi.mocked(emailQueueMock.enqueue).mockRejectedValueOnce(
       new Error('notification provider down') as never,
     );
     prismaMock.outboxEvent.update.mockResolvedValue({} as never);
 
-    const stats = await drainOutbox({ prisma: prismaMock });
+    const stats = await drainOutbox({ prisma: prismaMock, emailQueue: emailQueueMock });
 
     expect(stats.failed).toBe(1);
     expect(stats.dead).toBe(0);
@@ -105,10 +114,10 @@ describe('drainOutbox (TEST-02)', () => {
     prismaMock.outboxEvent.findMany.mockResolvedValue([{ id: 'oe_1' }] as never);
     prismaMock.outboxEvent.updateMany.mockResolvedValue({ count: 1 } as never);
     prismaMock.outboxEvent.findUnique.mockResolvedValue(row as never);
-    prismaMock.notification.create.mockRejectedValueOnce(new Error('still down') as never);
+    vi.mocked(emailQueueMock.enqueue).mockRejectedValueOnce(new Error('still down') as never);
     prismaMock.outboxEvent.update.mockResolvedValue({} as never);
 
-    const stats = await drainOutbox({ prisma: prismaMock });
+    const stats = await drainOutbox({ prisma: prismaMock, emailQueue: emailQueueMock });
 
     expect(stats.dead).toBe(1);
     expect(stats.failed).toBe(0);
@@ -141,5 +150,66 @@ describe('drainOutbox (TEST-02)', () => {
 
     expect(stats).toEqual({ processed: 0, succeeded: 0, failed: 0, dead: 0 });
     expect(prismaMock.outboxEvent.updateMany).not.toHaveBeenCalled();
+  });
+
+  // Phase 2 — kind-specific coverage for the two event types the Stripe
+  // webhook's onPaid handler emits.
+  it('dispatches notification.order_paid via createNotification (not prisma.notification.create directly)', async () => {
+    const row = makeRow({
+      kind: 'notification.order_paid',
+      payload: { userId: 'seller-1', orderId: 'order-1', amount: 3600, currency: 'USD' },
+    });
+    prismaMock.outboxEvent.findMany.mockResolvedValue([{ id: 'oe_1' }] as never);
+    prismaMock.outboxEvent.updateMany.mockResolvedValue({ count: 1 } as never);
+    prismaMock.outboxEvent.findUnique.mockResolvedValue(row as never);
+    prismaMock.notification.create.mockResolvedValue({ id: 'n1' } as never);
+    prismaMock.outboxEvent.update.mockResolvedValue({} as never);
+
+    const stats = await drainOutbox({ prisma: prismaMock });
+
+    expect(stats.succeeded).toBe(1);
+    const createArgs = prismaMock.notification.create.mock.calls[0]?.[0];
+    expect(createArgs?.data).toMatchObject({
+      userId: 'seller-1',
+      type: 'ORDER_PAID',
+      dedupeKey: 'order-paid:order-1',
+    });
+  });
+
+  it('dispatches email.order_confirmation via the EmailQueue addressed to the buyer', async () => {
+    const row = makeRow({
+      kind: 'email.order_confirmation',
+      payload: { to: 'buyer@example.com', orderId: 'order-1', amount: 3600, currency: 'USD' },
+    });
+    prismaMock.outboxEvent.findMany.mockResolvedValue([{ id: 'oe_1' }] as never);
+    prismaMock.outboxEvent.updateMany.mockResolvedValue({ count: 1 } as never);
+    prismaMock.outboxEvent.findUnique.mockResolvedValue(row as never);
+    vi.mocked(emailQueueMock.enqueue).mockResolvedValue(undefined as never);
+    prismaMock.outboxEvent.update.mockResolvedValue({} as never);
+
+    const stats = await drainOutbox({ prisma: prismaMock, emailQueue: emailQueueMock });
+
+    expect(stats.succeeded).toBe(1);
+    const enqueueArgs = vi.mocked(emailQueueMock.enqueue).mock.calls[0]?.[0];
+    expect(enqueueArgs).toMatchObject({ to: 'buyer@example.com' });
+    expect(enqueueArgs?.html).toContain('order-1');
+  });
+
+  it('email.order_confirmation throws (retried) when no EmailQueue is configured', async () => {
+    const row = makeRow({
+      kind: 'email.order_confirmation',
+      payload: { to: 'buyer@example.com', orderId: 'order-1', amount: 3600, currency: 'USD' },
+      attempts: 1,
+    });
+    prismaMock.outboxEvent.findMany.mockResolvedValue([{ id: 'oe_1' }] as never);
+    prismaMock.outboxEvent.updateMany.mockResolvedValue({ count: 1 } as never);
+    prismaMock.outboxEvent.findUnique.mockResolvedValue(row as never);
+    prismaMock.outboxEvent.update.mockResolvedValue({} as never);
+
+    const stats = await drainOutbox({ prisma: prismaMock }); // no emailQueue
+
+    expect(stats.failed).toBe(1);
+    const finalUpdate = prismaMock.outboxEvent.update.mock.calls[0]?.[0];
+    expect(finalUpdate?.data).toMatchObject({ lastError: 'email queue not configured' });
   });
 });

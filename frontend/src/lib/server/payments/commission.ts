@@ -49,3 +49,30 @@ export function computeCommission(gross: number, rateBp: number): CommissionResu
 
   return { commission, net };
 }
+
+export interface ResolveCommissionRateBpInput {
+  /** The store's Store.plan value ("FREE" | "PRO"). */
+  plan: string;
+  /** COMMISSION_RATE_BP — the standard rate applied to every store. */
+  baseRateBp: number;
+  /**
+   * COMMISSION_RATE_BP_PRO parsed as a number, or `null` when the env var is
+   * unset/empty. `null` means "no PRO discount configured yet" — PRO stores
+   * fall back to the base rate rather than silently getting 0% commission.
+   */
+  proRateBp: number | null;
+}
+
+/**
+ * Phase 12 — the one Free/Pro benefit branchable without new infra: PRO
+ * stores can get a reduced marketplace commission. Pure function so the
+ * discount logic is testable without a DB round-trip.
+ */
+export function resolveCommissionRateBp({
+  plan,
+  baseRateBp,
+  proRateBp,
+}: ResolveCommissionRateBpInput): number {
+  if (plan === 'PRO' && proRateBp !== null) return proRateBp;
+  return baseRateBp;
+}

@@ -32,10 +32,11 @@ export function welcomeNotification(userId: string, email: string): CreateNotifi
 }
 
 /**
- * Example: notification dispatched after a successful payment.
- * Called from the Bictorys webhook handler's `onPaid` post-commit hook.
+ * Phase 2 — notifies the store owner (not the buyer) after a Stripe
+ * checkout completes. Dispatched from the Stripe webhook's onPaid handler
+ * via the outbox.
  */
-export function paymentReceived(
+export function orderPaid(
   userId: string,
   orderId: string,
   amount: number,
@@ -43,10 +44,45 @@ export function paymentReceived(
 ): CreateNotificationInput {
   return {
     userId,
-    type: 'PAYMENT_RECEIVED',
-    title: 'Payment received',
-    body: `Order ${orderId} for ${amount} ${currency} confirmed.`,
+    type: 'ORDER_PAID',
+    title: 'New order paid',
+    body: `Order ${orderId} for ${(amount / 100).toFixed(2)} ${currency} was just paid.`,
     data: { orderId, amount, currency },
-    dedupeKey: `payment-received:${orderId}`,
+    dedupeKey: `order-paid:${orderId}`,
+  };
+}
+
+/**
+ * Uber Direct — notifies the store owner once a courier confirms drop-off.
+ * Dispatched from the Uber Direct webhook via the outbox.
+ */
+export function deliveryCompleted(userId: string, orderId: string): CreateNotificationInput {
+  return {
+    userId,
+    type: 'DELIVERY_COMPLETED',
+    title: 'Delivery completed',
+    body: `Order ${orderId} was delivered by the courier.`,
+    data: { orderId },
+    dedupeKey: `delivery-completed:${orderId}`,
+  };
+}
+
+/**
+ * Uber Direct — notifies the store owner when the courier cancels or
+ * returns a delivery, so the seller can follow up with the buyer. Does not
+ * imply the order itself was cancelled.
+ */
+export function deliveryFailed(
+  userId: string,
+  orderId: string,
+  status: string,
+): CreateNotificationInput {
+  return {
+    userId,
+    type: 'DELIVERY_FAILED',
+    title: 'Delivery needs attention',
+    body: `Order ${orderId}'s Uber Direct delivery was ${status} — follow up with the customer.`,
+    data: { orderId, status },
+    dedupeKey: `delivery-failed:${orderId}:${status}`,
   };
 }

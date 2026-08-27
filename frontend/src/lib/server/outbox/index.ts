@@ -2,13 +2,13 @@
  * Outbox writer — call from inside a transaction to enqueue a side-effect
  * that should run AFTER the tx commits.
  *
- * Pattern (as used by routes/webhooks.ts onPaid):
+ * Pattern:
  *
  *   await prisma.$transaction(async (tx) => {
- *     await tx.order.update({ ... });
+ *     await tx.user.update({ ... });
  *     await enqueueOutbox(tx, {
- *       kind: 'notification.payment_received',
- *       payload: { userId, orderId, amount, currency },
+ *       kind: 'email.verification_code',
+ *       payload: { to, code, expiresAt },
  *     });
  *   });
  *

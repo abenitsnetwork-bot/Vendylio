@@ -10,30 +10,12 @@
  */
 
 export type OutboxEvent =
-  | NotificationPaymentReceivedEvent
-  | EmailPaymentConfirmationEvent
   | EmailVerificationCodeEvent
-  | EmailPasswordResetEvent;
-
-export interface NotificationPaymentReceivedEvent {
-  kind: 'notification.payment_received';
-  payload: {
-    userId: string;
-    orderId: string;
-    amount: number;
-    currency: string;
-  };
-}
-
-export interface EmailPaymentConfirmationEvent {
-  kind: 'email.payment_confirmation';
-  payload: {
-    to: string;
-    orderId: string;
-    amount: number;
-    currency: string;
-  };
-}
+  | EmailPasswordResetEvent
+  | NotificationOrderPaidEvent
+  | EmailOrderConfirmationEvent
+  | NotificationDeliveryCompletedEvent
+  | NotificationDeliveryFailedEvent;
 
 /**
  * Phase 1 — emitted by signup + resend-verification routes; consumed by the
@@ -58,6 +40,65 @@ export interface EmailPasswordResetEvent {
     to: string;
     code: string;
     expiresAt: string;
+  };
+}
+
+/**
+ * Phase 2 — emitted by the Stripe webhook's onPaid handler, targeting the
+ * store owner (not the buyer). Consumed by the outbox dispatcher, which
+ * routes it through `createNotification` (CLAUDE.md: never
+ * `prisma.notification.create` directly).
+ */
+export interface NotificationOrderPaidEvent {
+  kind: 'notification.order_paid';
+  payload: {
+    userId: string;
+    orderId: string;
+    amount: number;
+    currency: string;
+  };
+}
+
+/**
+ * Phase 2 — emitted by the Stripe webhook's onPaid handler, targeting the
+ * guest buyer's `customerEmail` (skipped if the buyer didn't provide one).
+ */
+export interface EmailOrderConfirmationEvent {
+  kind: 'email.order_confirmation';
+  payload: {
+    to: string;
+    orderId: string;
+    amount: number;
+    currency: string;
+  };
+}
+
+/**
+ * Uber Direct — emitted by the Uber Direct webhook's onPaid handler (the
+ * "paid" slot reused for "delivery completed" since the generic webhook
+ * factory has no dedicated slot for it — same precedent as Stripe Connect's
+ * account.updated handler).
+ */
+export interface NotificationDeliveryCompletedEvent {
+  kind: 'notification.delivery_completed';
+  payload: {
+    userId: string;
+    orderId: string;
+  };
+}
+
+/**
+ * Uber Direct — emitted by the webhook's onFailed handler when the courier
+ * cancels or returns a delivery. Deliberately does NOT cancel the Order
+ * itself (a courier cancellation isn't proof the sale should be voided) —
+ * this just alerts the seller to follow up manually.
+ */
+export interface NotificationDeliveryFailedEvent {
+  kind: 'notification.delivery_failed';
+  payload: {
+    userId: string;
+    orderId: string;
+    status: string;
   };
 }
 

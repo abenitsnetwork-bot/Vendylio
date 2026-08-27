@@ -84,11 +84,7 @@ function configureOnce(): void {
  * `publicId` is supplied by the caller (the upload route builds a path-like
  * key, `{userId}/{cuid}`) so we don't depend on Cloudinary's random ID.
  */
-export async function uploadBuffer(
-  publicId: string,
-  body: Buffer,
-  contentType: string,
-): Promise<UploadResult> {
+export async function uploadBuffer(publicId: string, body: Buffer): Promise<UploadResult> {
   configureOnce();
 
   // resource_type 'auto' lets Cloudinary pick image/video/raw from the bytes,
@@ -99,8 +95,6 @@ export async function uploadBuffer(
     resource_type: 'auto',
   };
   if (_preset) options.upload_preset = _preset;
-  // Surface the validated MIME so transformations/CDN behave sensibly.
-  if (contentType) options.metadata = `mime=${contentType}`;
 
   const res = await new Promise<UploadApiResponse>((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(options, (err, response) => {

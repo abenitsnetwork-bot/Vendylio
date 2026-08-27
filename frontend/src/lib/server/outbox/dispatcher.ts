@@ -21,7 +21,7 @@
  */
 import type { PrismaClient } from '@prisma/client';
 import { createNotification } from '../notifications/index';
-import { paymentReceived } from '../notifications/templates';
+import { orderPaid, deliveryCompleted, deliveryFailed } from '../notifications/templates';
 import type { EmailQueue } from '../queues/email-queue';
 import { createLogger } from '../logger';
 import type { OutboxEvent } from './types';
@@ -125,25 +125,6 @@ export async function drainOutbox(
 /** Route a single event to the correct handler. */
 async function dispatchEvent(deps: OutboxDispatcherDeps, event: OutboxEvent): Promise<void> {
   switch (event.kind) {
-    case 'notification.payment_received': {
-      const { userId, orderId, amount, currency } = event.payload;
-      await createNotification(deps.prisma, paymentReceived(userId, orderId, amount, currency));
-      return;
-    }
-    case 'email.payment_confirmation': {
-      if (!deps.emailQueue) {
-        // No mailer configured — skip silently. This event will be retried;
-        // for permanent skips, ops should mark it DEAD manually.
-        throw new Error('email queue not configured');
-      }
-      const { to, orderId, amount, currency } = event.payload;
-      await deps.emailQueue.enqueue({
-        to,
-        subject: 'Payment received',
-        html: `<p>Your order <strong>${orderId}</strong> for ${amount} ${currency} is confirmed. Thank you!</p>`,
-      });
-      return;
-    }
     case 'email.verification_code': {
       // Phase 1 — emitted by signup + resend-verification routes. Phase 5's
       // email-queue cron will render via verificationEmail() and call enqueue.
@@ -164,6 +145,36 @@ async function dispatchEvent(deps: OutboxDispatcherDeps, event: OutboxEvent): Pr
       const { to, code, expiresAt } = event.payload;
       const tpl = resetPasswordEmail({ code, email: to, expiresAt });
       await deps.emailQueue.enqueue({ to, subject: tpl.subject, html: tpl.html });
+      return;
+    }
+    case 'notification.order_paid': {
+      // Phase 2 — emitted by the Stripe webhook's onPaid handler.
+      const { userId, orderId, amount, currency } = event.payload;
+      await createNotification(deps.prisma, orderPaid(userId, orderId, amount, currency));
+      return;
+    }
+    case 'email.order_confirmation': {
+      // Phase 2 — emitted by the Stripe webhook's onPaid handler, addressed
+      // to the guest buyer's customerEmail.
+      if (!deps.emailQueue) throw new Error('email queue not configured');
+      const { to, orderId, amount, currency } = event.payload;
+      await deps.emailQueue.enqueue({
+        to,
+        subject: 'Your order is confirmed',
+        html: `<p>Your order <strong>${orderId}</strong> for $${(amount / 100).toFixed(2)} ${currency} is confirmed. Thank you!</p>`,
+      });
+      return;
+    }
+    case 'notification.delivery_completed': {
+      // Uber Direct — emitted by the delivery webhook's onPaid handler.
+      const { userId, orderId } = event.payload;
+      await createNotification(deps.prisma, deliveryCompleted(userId, orderId));
+      return;
+    }
+    case 'notification.delivery_failed': {
+      // Uber Direct — emitted by the delivery webhook's onFailed handler.
+      const { userId, orderId, status } = event.payload;
+      await createNotification(deps.prisma, deliveryFailed(userId, orderId, status));
       return;
     }
     default: {

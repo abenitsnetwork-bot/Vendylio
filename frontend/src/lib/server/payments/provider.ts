@@ -27,7 +27,7 @@ export interface ChargeInput {
   /** ISO 4217 currency code (e.g. "XOF", "USD"). */
   currency: string;
   customer: ChargeCustomer;
-  /** App-specific bag stored as Order.metadata. */
+  /** App-specific bag — passed through to the provider's own metadata field when supported. */
   metadata?: Record<string, unknown>;
   successUrl: string;
   failureUrl: string;
