@@ -61,22 +61,34 @@ import { makeRequestContext, withRequestContext } from '@/lib/server/observabili
 //
 // amount: integer, positive — decimals are a financial-safety regression
 //   per CLAUDE.md ("Payment amounts are integer in smallest currency unit").
-// destination.method: enum WAVE | ORANGE_MONEY | MTN_MOMO (Senegal mobile-money
-//   providers; new providers added per-project, not in the starter).
-// destination.phone: E.164 (+countrycode + 10–15 digits).
+//   For Vendylio (USD) this is cents, not FCFA.
+// destination: CASH_APP ($cashtag) | ZELLE (email or phone contact) — Vendylio
+//   sellers are US-based, so the starter's Wave/Orange Money/MTN Momo payout
+//   methods (West African mobile money, routed through Bictorys) don't apply.
+//   There is no automated payout API for Cash App/Zelle disbursement, so
+//   `provider` below is 'manual': the withdrawal lands PENDING and an
+//   operator fulfills it by hand via the existing /api/admin/withdrawals
+//   tooling, then marks it processed.
 // pin: optional in body — only required when WITHDRAWAL_REQUIRE_PIN=1. The
 //   guard chain returns PIN_REQUIRED / PIN_NOT_SET / PIN_INVALID as needed.
 //
 // Pitfall 1 (RESEARCH): PIN goes in the body, NOT a header. Headers are
 // preserved by intermediaries and may end up in proxy logs.
+const Destination = z.discriminatedUnion('method', [
+  z.object({
+    method: z.literal('CASH_APP'),
+    cashtag: z.string().regex(/^\$[A-Za-z0-9_]{1,20}$/, 'Cash App tag must look like $YourTag'),
+  }),
+  z.object({
+    method: z.literal('ZELLE'),
+    contact: z.string().trim().min(3).max(120),
+  }),
+]);
+
 const Body = z.object({
   amount: z.number().int().positive(),
-  currency: z.literal('XOF').default('XOF'),
-  destination: z.object({
-    method: z.enum(['WAVE', 'ORANGE_MONEY', 'MTN_MOMO']),
-    phone: z.string().regex(/^\+\d{10,15}$/, 'phone must be E.164 (e.g. +221XXXXXXXX)'),
-    accountName: z.string().max(120).optional(),
-  }),
+  currency: z.literal('USD').default('USD'),
+  destination: Destination,
   pin: z.string().min(4).max(12).optional(),
 });
 
@@ -149,7 +161,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               currency,
               status: 'PENDING',
               destination: destination as Prisma.InputJsonValue,
-              provider: 'bictorys',
+              provider: 'manual',
             },
             select: {
               id: true,

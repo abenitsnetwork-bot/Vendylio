@@ -76,7 +76,7 @@ const txWithdrawal = {
     userId: 'user-1',
     status: 'PENDING',
     amount: 1000,
-    currency: 'XOF',
+    currency: 'USD',
     requestedAt: new Date('2026-05-08T12:00:00Z'),
   })),
   findMany: vi.fn(),
@@ -121,7 +121,7 @@ afterEach(() => {
 interface PostBody {
   amount: number;
   currency?: string;
-  destination?: { method: string; phone: string };
+  destination?: Record<string, unknown>;
   pin?: string;
 }
 
@@ -144,8 +144,8 @@ function makeGetReq(query: string = '') {
 
 const validBody: PostBody = {
   amount: 1000,
-  currency: 'XOF',
-  destination: { method: 'WAVE', phone: '+221770000001' },
+  currency: 'USD',
+  destination: { method: 'CASH_APP', cashtag: '$adaeze_shop' },
   pin: '1234',
 };
 
@@ -206,8 +206,8 @@ describe('POST /api/withdrawals (RED — Wave 1 will turn these green)', () => {
     const { POST } = await import('./route');
     const res = await POST(
       makePostReq({
-        currency: 'XOF',
-        destination: { method: 'WAVE', phone: '+221770000001' },
+        currency: 'USD',
+        destination: { method: 'CASH_APP', cashtag: '$adaeze_shop' },
         pin: '1234',
       } as Partial<PostBody>) as never,
     );
@@ -216,13 +216,13 @@ describe('POST /api/withdrawals (RED — Wave 1 will turn these green)', () => {
     expect(body.code).toBe('INVALID_BODY');
   });
 
-  it('invalid body — bad phone returns 400', async () => {
+  it('invalid body — bad cashtag returns 400', async () => {
     const { POST } = await import('./route');
     const res = await POST(
       makePostReq({
         amount: 1000,
-        currency: 'XOF',
-        destination: { method: 'WAVE', phone: '+0' },
+        currency: 'USD',
+        destination: { method: 'CASH_APP', cashtag: 'no-dollar-sign' },
         pin: '1234',
       }) as never,
     );
@@ -236,8 +236,8 @@ describe('POST /api/withdrawals (RED — Wave 1 will turn these green)', () => {
     const res = await POST(
       makePostReq({
         amount: 1000,
-        currency: 'XOF',
-        destination: { method: 'NOT_A_METHOD', phone: '+221770000001' },
+        currency: 'USD',
+        destination: { method: 'NOT_A_METHOD', cashtag: '$adaeze_shop' },
         pin: '1234',
       }) as never,
     );
@@ -308,10 +308,10 @@ describe('GET /api/withdrawals (RED — Wave 1 will turn these green)', () => {
         id: 'w-2',
         userId: 'user-1',
         amount: 2000,
-        currency: 'XOF',
+        currency: 'USD',
         status: 'PENDING',
-        destination: { method: 'WAVE', phone: '+221770000001' },
-        provider: 'bictorys',
+        destination: { method: 'CASH_APP', cashtag: '$adaeze_shop' },
+        provider: 'manual',
         providerPayoutId: null,
         failureReason: null,
         requestedAt: new Date('2026-05-08T12:00:00Z'),
@@ -322,10 +322,10 @@ describe('GET /api/withdrawals (RED — Wave 1 will turn these green)', () => {
         id: 'w-1',
         userId: 'user-1',
         amount: 1000,
-        currency: 'XOF',
+        currency: 'USD',
         status: 'COMPLETED',
-        destination: { method: 'WAVE', phone: '+221770000001' },
-        provider: 'bictorys',
+        destination: { method: 'CASH_APP', cashtag: '$adaeze_shop' },
+        provider: 'manual',
         providerPayoutId: 'p-1',
         failureReason: null,
         requestedAt: new Date('2026-05-07T12:00:00Z'),

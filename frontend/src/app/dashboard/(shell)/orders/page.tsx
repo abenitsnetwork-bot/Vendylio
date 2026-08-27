@@ -1,0 +1,140 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { sellerFirstName } from '@/lib/utils';
+import { useAuth, useUser } from '@/contexts/AuthContext';
+import { api, ApiError } from '@/lib/api';
+import { Icon } from '@/components/ui/Icon';
+import { SellerHeader } from '@/components/seller/SellerHeader';
+import { OrdersTable, type SellerOrder } from '@/components/seller/OrdersTable';
+
+const STATUS_FILTERS = [
+  { label: 'All', value: '' },
+  { label: 'Paid', value: 'PAID' },
+  { label: 'Preparing', value: 'PREPARING' },
+  { label: 'Ready', value: 'READY' },
+  { label: 'Out for Delivery', value: 'OUT_FOR_DELIVERY' },
+  { label: 'Delivered', value: 'DELIVERED' },
+  { label: 'Cancelled', value: 'CANCELLED' },
+  { label: 'Pending Payment', value: 'PENDING' },
+];
+
+export default function OrdersPage() {
+  const user = useUser();
+  const { logout } = useAuth();
+  const [status, setStatus] = useState('');
+  const [orders, setOrders] = useState<SellerOrder[] | null>(null);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback((filterStatus: string) => {
+    setOrders(null);
+    setCursor(null);
+    setError(null);
+    const qs = filterStatus ? `?status=${filterStatus}` : '';
+    api<{ items: SellerOrder[]; nextCursor: string | null }>(`/api/orders${qs}`)
+      .then((res) => {
+        setOrders(res.items);
+        setCursor(res.nextCursor);
+      })
+      .catch((err) => {
+        setError(err instanceof ApiError ? err.message : 'Could not load orders.');
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    load(status);
+  }, [user, status, load]);
+
+  async function loadMore() {
+    if (!cursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const qs = new URLSearchParams({ cursor });
+      if (status) qs.set('status', status);
+      const res = await api<{ items: SellerOrder[]; nextCursor: string | null }>(
+        `/api/orders?${qs.toString()}`,
+      );
+      setOrders((prev) => [...(prev ?? []), ...res.items]);
+      setCursor(res.nextCursor);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not load more orders.');
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  if (!user) return null;
+
+  return (
+    <div className="min-h-screen bg-background font-body">
+      <SellerHeader
+        userName={sellerFirstName(user)}
+        userEmail={user.email}
+        onSignOut={async () => {
+          await logout();
+        }}
+      />
+      <div className="px-4 py-12 lg:px-14">
+        <div className="mx-auto max-w-5xl">
+          <div className="mb-10">
+            <Link
+              href="/dashboard"
+              className="mb-6 flex items-center gap-2 text-sm font-medium text-primary"
+            >
+              <Icon i="arrow-left" size={16} />
+              Back to Dashboard
+            </Link>
+            <h1
+              className="mb-2 font-headings font-bold text-foreground"
+              style={{ fontSize: 'clamp(26px, 5vw, 36px)', letterSpacing: '-0.8px' }}
+            >
+              Orders
+            </h1>
+            <p className="text-base text-muted-foreground">
+              Track and fulfill orders from your storefront.
+            </p>
+          </div>
+
+          <div className="mb-6 flex flex-wrap gap-2">
+            {STATUS_FILTERS.map((f) => (
+              <button
+                key={f.value}
+                type="button"
+                onClick={() => setStatus(f.value)}
+                className={`rounded-full border px-4 py-1.5 text-xs font-semibold ${
+                  status === f.value
+                    ? 'border-primary bg-primary text-primary-foreground'
+                    : 'border-border bg-card text-foreground hover:bg-secondary'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          {!error && orders === null && <p className="text-sm text-muted-foreground">Loading…</p>}
+          {!error && orders !== null && (
+            <>
+              <OrdersTable orders={orders} />
+              {cursor && (
+                <button
+                  type="button"
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className="mt-6 w-full rounded-lg border border-border bg-card py-3 text-sm font-semibold text-foreground hover:bg-secondary disabled:opacity-50"
+                >
+                  {loadingMore ? 'Loading…' : 'Load more'}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

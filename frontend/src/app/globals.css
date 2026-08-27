@@ -1,1 +1,31 @@
 @import 'tailwindcss';
+
+/* Vendylio design tokens — sage / forest teal / coral theme. */
+@theme {
+  --color-background: #edf1ea;
+  --color-foreground: #14201d;
+  --color-border: #dbe2d6;
+  --color-input: #f6f8f4;
+  --color-primary: #14201d;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #e3e9dd;
+  --color-secondary-foreground: #14201d;
+  --color-muted: #ece2cf;
+  --color-muted-foreground: #756f5e;
+  --color-accent: #dd5b2e;
+  --color-accent-foreground: #ffffff;
+  --color-card: #ffffff;
+  --color-card-foreground: #14201d;
+
+  /* Dark forest-teal panel — the hero's split-screen half, CTA bands. */
+  --color-panel: #16322d;
+  --color-panel-foreground: #f3f1ea;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+
+  --font-body: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-headings: var(--font-fraunces), ui-serif, Georgia, serif;
+}

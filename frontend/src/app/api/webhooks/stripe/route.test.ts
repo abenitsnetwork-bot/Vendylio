@@ -1,0 +1,398 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { Prisma } from '@prisma/client';
+import { stripeFixtureRequest } from '@/test-utils/stripe-mock';
+
+const webhookLogFindUnique = vi.fn();
+const webhookLogCreate = vi.fn();
+const webhookLogUpdate = vi.fn();
+const orderFindFirst = vi.fn();
+const orderUpdate = vi.fn();
+const productFindUnique = vi.fn();
+const productUpdate = vi.fn();
+const storeFindUnique = vi.fn();
+const outboxCreate = vi.fn();
+const orderStatusEventCreate = vi.fn();
+const customerFindUnique = vi.fn();
+const customerCreate = vi.fn();
+const customerUpdate = vi.fn();
+const productVariantFindUnique = vi.fn();
+const productVariantUpdate = vi.fn();
+
+const $transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>, _opts?: unknown) =>
+  fn({
+    webhookLog: {
+      findUnique: webhookLogFindUnique,
+      create: webhookLogCreate,
+      update: webhookLogUpdate,
+    },
+    order: { findFirst: orderFindFirst, update: orderUpdate },
+    product: { findUnique: productFindUnique, update: productUpdate },
+    productVariant: { findUnique: productVariantFindUnique, update: productVariantUpdate },
+    store: { findUnique: storeFindUnique },
+    outboxEvent: { create: outboxCreate },
+    orderStatusEvent: { create: orderStatusEventCreate },
+    customer: { findUnique: customerFindUnique, create: customerCreate, update: customerUpdate },
+  }),
+);
+
+vi.mock('@/lib/server/prisma', () => ({
+  prisma: { $transaction },
+}));
+
+beforeEach(() => {
+  vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test_fixture_only');
+  vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'test-webhook-secret');
+  vi.stubEnv('COMMISSION_RATE_BP', '');
+  webhookLogFindUnique.mockReset().mockResolvedValue(null);
+  webhookLogCreate.mockReset();
+  webhookLogUpdate.mockReset();
+  orderFindFirst.mockReset();
+  orderUpdate.mockReset();
+  productFindUnique.mockReset();
+  productUpdate.mockReset();
+  storeFindUnique.mockReset();
+  outboxCreate.mockReset();
+  orderStatusEventCreate.mockReset();
+  customerFindUnique.mockReset().mockResolvedValue(null);
+  customerCreate.mockReset();
+  customerUpdate.mockReset();
+  productVariantFindUnique.mockReset();
+  productVariantUpdate.mockReset();
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.clearAllMocks();
+});
+
+const PAID_ORDER = {
+  id: 'order-1',
+  storeId: 'store-1',
+  status: 'PENDING',
+  amount: 3600,
+  currency: 'USD',
+  customerEmail: 'buyer@example.com',
+  lineItems: [{ productId: 'prod-a', name: 'Shea Butter', priceCents: 1800, quantity: 2 }],
+};
+
+describe('POST /api/webhooks/stripe', () => {
+  it('valid signature + first delivery returns 200 deduped:false', async () => {
+    orderFindFirst.mockResolvedValueOnce(null); // unknown session — onPaid drops
+    const { POST } = await import('./route');
+    const { req } = stripeFixtureRequest();
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, deduped: false });
+    expect(webhookLogCreate).toHaveBeenCalled();
+  });
+
+  it('replay of the same event id returns deduped:true', async () => {
+    webhookLogFindUnique.mockResolvedValueOnce({ id: 'wl1', processedAt: new Date() });
+    const { POST } = await import('./route');
+    const { req } = stripeFixtureRequest();
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, deduped: true });
+    expect(webhookLogCreate).not.toHaveBeenCalled();
+  });
+
+  it('tampered body returns 401', async () => {
+    const { stripeFixture } = await import('@/test-utils/stripe-mock');
+    const { rawBody, headers } = stripeFixture();
+    const tampered = Buffer.from(rawBody.toString('utf8').replace('paid', 'unpaid'));
+    const { POST } = await import('./route');
+    const { NextRequest } = await import('next/server');
+    const req = new NextRequest('http://localhost/api/webhooks/stripe', {
+      method: 'POST',
+      headers,
+      body: tampered as unknown as BodyInit,
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(401);
+  });
+
+  it('marks the Order PAID, computes commission, decrements stock, and enqueues both outbox events', async () => {
+    orderFindFirst.mockResolvedValueOnce(PAID_ORDER);
+    productFindUnique.mockResolvedValueOnce({ quantity: 10 });
+    storeFindUnique.mockResolvedValueOnce({ organization: { ownerId: 'seller-1' } });
+    outboxCreate.mockResolvedValue({ id: 'ob1' });
+    vi.stubEnv('COMMISSION_RATE_BP', '600'); // 6%
+
+    const { POST } = await import('./route');
+    const { req } = stripeFixtureRequest();
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+    expect(orderUpdate).toHaveBeenCalledWith({
+      where: { id: 'order-1' },
+      data: expect.objectContaining({
+        status: 'PAID',
+        commissionAmount: 216, // floor(3600 * 600 / 10000)
+        netAmount: 3384,
+        paymentMethod: 'card',
+      }),
+    });
+
+    expect(productUpdate).toHaveBeenCalledWith({
+      where: { id: 'prod-a' },
+      data: { quantity: 8 }, // 10 - 2
+    });
+
+    expect(orderStatusEventCreate).toHaveBeenCalledWith({
+      data: { orderId: 'order-1', status: 'PAID', actorType: 'SYSTEM' },
+    });
+
+    const kinds = outboxCreate.mock.calls.map(
+      (c) => (c[0] as { data: { kind: string } }).data.kind,
+    );
+    expect(kinds).toContain('notification.order_paid');
+    expect(kinds).toContain('email.order_confirmation');
+
+    const notifPayloadCall = outboxCreate.mock.calls.find(
+      (c) => (c[0] as { data: { kind: string } }).data.kind === 'notification.order_paid',
+    );
+    const notifPayload = (notifPayloadCall![0] as { data: { payload: { userId: string } } }).data
+      .payload;
+    expect(notifPayload.userId).toBe('seller-1');
+  });
+
+  it('Phase 12 — a PRO store gets the discounted COMMISSION_RATE_BP_PRO rate', async () => {
+    orderFindFirst.mockResolvedValueOnce(PAID_ORDER);
+    productFindUnique.mockResolvedValueOnce({ quantity: 10 });
+    storeFindUnique.mockResolvedValueOnce({ plan: 'PRO', organization: { ownerId: 'seller-1' } });
+    outboxCreate.mockResolvedValue({ id: 'ob1' });
+    vi.stubEnv('COMMISSION_RATE_BP', '600'); // 6% base
+    vi.stubEnv('COMMISSION_RATE_BP_PRO', '300'); // 3% for PRO
+
+    const { POST } = await import('./route');
+    const { req } = stripeFixtureRequest();
+    await POST(req);
+
+    expect(orderUpdate).toHaveBeenCalledWith({
+      where: { id: 'order-1' },
+      data: expect.objectContaining({
+        commissionAmount: 108, // floor(3600 * 300 / 10000)
+        netAmount: 3492,
+      }),
+    });
+  });
+
+  it('Phase 12 — a PRO store falls back to the base rate when COMMISSION_RATE_BP_PRO is unset', async () => {
+    orderFindFirst.mockResolvedValueOnce(PAID_ORDER);
+    productFindUnique.mockResolvedValueOnce({ quantity: 10 });
+    storeFindUnique.mockResolvedValueOnce({ plan: 'PRO', organization: { ownerId: 'seller-1' } });
+    outboxCreate.mockResolvedValue({ id: 'ob1' });
+    vi.stubEnv('COMMISSION_RATE_BP', '600');
+
+    const { POST } = await import('./route');
+    const { req } = stripeFixtureRequest();
+    await POST(req);
+
+    expect(orderUpdate).toHaveBeenCalledWith({
+      where: { id: 'order-1' },
+      data: expect.objectContaining({
+        commissionAmount: 216, // same as a FREE store — no discount configured
+        netAmount: 3384,
+      }),
+    });
+  });
+
+  it('floors stock at 0 instead of going negative', async () => {
+    orderFindFirst.mockResolvedValueOnce(PAID_ORDER);
+    productFindUnique.mockResolvedValueOnce({ quantity: 1 }); // less than the 2 requested
+    storeFindUnique.mockResolvedValueOnce({ organization: { ownerId: 'seller-1' } });
+
+    const { POST } = await import('./route');
+    const { req } = stripeFixtureRequest();
+    await POST(req);
+
+    expect(productUpdate).toHaveBeenCalledWith({
+      where: { id: 'prod-a' },
+      data: { quantity: 0 },
+    });
+  });
+
+  it('decrements the ProductVariant quantity (not Product) when a lineItem carries a variantId (Phase 7)', async () => {
+    orderFindFirst.mockResolvedValueOnce({
+      ...PAID_ORDER,
+      lineItems: [
+        {
+          productId: 'prod-a',
+          name: 'Shea Butter',
+          priceCents: 2000,
+          quantity: 2,
+          variantId: 'var-1',
+        },
+      ],
+    });
+    productVariantFindUnique.mockResolvedValueOnce({ quantity: 5 });
+    storeFindUnique.mockResolvedValueOnce({ organization: { ownerId: 'seller-1' } });
+
+    const { POST } = await import('./route');
+    const { req } = stripeFixtureRequest();
+    await POST(req);
+
+    expect(productVariantUpdate).toHaveBeenCalledWith({
+      where: { id: 'var-1' },
+      data: { quantity: 3 }, // 5 - 2
+    });
+    expect(productFindUnique).not.toHaveBeenCalled();
+    expect(productUpdate).not.toHaveBeenCalled();
+  });
+
+  it('decrements a fractional Product quantity (weight unit) and rounds off float drift', async () => {
+    orderFindFirst.mockResolvedValueOnce({
+      ...PAID_ORDER,
+      lineItems: [{ productId: 'prod-a', name: 'Ground Pepper', priceCents: 500, quantity: 12.09 }],
+    });
+    productFindUnique.mockResolvedValueOnce({ quantity: 20 });
+    storeFindUnique.mockResolvedValueOnce({ organization: { ownerId: 'seller-1' } });
+
+    const { POST } = await import('./route');
+    const { req } = stripeFixtureRequest();
+    await POST(req);
+
+    expect(productUpdate).toHaveBeenCalledWith({
+      where: { id: 'prod-a' },
+      data: { quantity: 7.91 }, // 20 - 12.09, rounded to 2 decimals
+    });
+  });
+
+  it('is a no-op when the Order is already past PENDING (defense-in-depth alongside WebhookLog dedup)', async () => {
+    orderFindFirst.mockResolvedValueOnce({ ...PAID_ORDER, status: 'PAID' });
+    const { POST } = await import('./route');
+    const { req } = stripeFixtureRequest();
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(orderUpdate).not.toHaveBeenCalled();
+    expect(outboxCreate).not.toHaveBeenCalled();
+  });
+
+  it('skips the email.order_confirmation event when the order has no customerEmail', async () => {
+    orderFindFirst.mockResolvedValueOnce({ ...PAID_ORDER, customerEmail: null });
+    productFindUnique.mockResolvedValueOnce({ quantity: 10 });
+    storeFindUnique.mockResolvedValueOnce({ organization: { ownerId: 'seller-1' } });
+
+    const { POST } = await import('./route');
+    const { req } = stripeFixtureRequest();
+    await POST(req);
+
+    const kinds = outboxCreate.mock.calls.map(
+      (c) => (c[0] as { data: { kind: string } }).data.kind,
+    );
+    expect(kinds).toContain('notification.order_paid');
+    expect(kinds).not.toContain('email.order_confirmation');
+  });
+
+  it('exports runtime=nodejs and dynamic=force-dynamic', async () => {
+    const mod = (await import('./route')) as { runtime?: string; dynamic?: string };
+    expect(mod.runtime).toBe('nodejs');
+    expect(mod.dynamic).toBe('force-dynamic');
+  });
+
+  describe('Customer directory upsert (Phase 6)', () => {
+    const PAID_ORDER_WITH_PHONE = {
+      ...PAID_ORDER,
+      customerName: 'Amara',
+      customerPhone: '+15551234567',
+      deliveryAddress: { city: 'Baltimore' },
+    };
+
+    it('creates a new Customer on a first-time phone number', async () => {
+      orderFindFirst.mockResolvedValueOnce(PAID_ORDER_WITH_PHONE);
+      productFindUnique.mockResolvedValueOnce({ quantity: 10 });
+      storeFindUnique.mockResolvedValueOnce({ organization: { ownerId: 'seller-1' } });
+
+      const { POST } = await import('./route');
+      const { req } = stripeFixtureRequest();
+      await POST(req);
+
+      expect(customerCreate).toHaveBeenCalledWith({
+        data: {
+          storeId: 'store-1',
+          phone: '+15551234567',
+          ordersCount: 1,
+          totalSpentCents: 3600,
+          name: 'Amara',
+          email: 'buyer@example.com',
+          address: { city: 'Baltimore' },
+        },
+      });
+      expect(customerUpdate).not.toHaveBeenCalled();
+    });
+
+    it('increments ordersCount/totalSpentCents on a repeat phone number', async () => {
+      orderFindFirst.mockResolvedValueOnce(PAID_ORDER_WITH_PHONE);
+      productFindUnique.mockResolvedValueOnce({ quantity: 10 });
+      storeFindUnique.mockResolvedValueOnce({ organization: { ownerId: 'seller-1' } });
+      customerFindUnique.mockResolvedValueOnce({ id: 'cust-1' });
+
+      const { POST } = await import('./route');
+      const { req } = stripeFixtureRequest();
+      await POST(req);
+
+      expect(customerUpdate).toHaveBeenCalledWith({
+        where: { id: 'cust-1' },
+        data: {
+          name: 'Amara',
+          email: 'buyer@example.com',
+          address: { city: 'Baltimore' },
+          ordersCount: { increment: 1 },
+          totalSpentCents: { increment: 3600 },
+        },
+      });
+      expect(customerCreate).not.toHaveBeenCalled();
+    });
+
+    it('skips the Customer directory entirely when the order has no phone', async () => {
+      orderFindFirst.mockResolvedValueOnce(PAID_ORDER); // no customerPhone
+      productFindUnique.mockResolvedValueOnce({ quantity: 10 });
+      storeFindUnique.mockResolvedValueOnce({ organization: { ownerId: 'seller-1' } });
+
+      const { POST } = await import('./route');
+      const { req } = stripeFixtureRequest();
+      await POST(req);
+
+      expect(customerFindUnique).not.toHaveBeenCalled();
+      expect(customerCreate).not.toHaveBeenCalled();
+      expect(customerUpdate).not.toHaveBeenCalled();
+    });
+
+    it('swallows a P2002 (email already used by a different phone) without failing the webhook', async () => {
+      orderFindFirst.mockResolvedValueOnce(PAID_ORDER_WITH_PHONE);
+      productFindUnique.mockResolvedValueOnce({ quantity: 10 });
+      storeFindUnique.mockResolvedValueOnce({ organization: { ownerId: 'seller-1' } });
+      customerCreate.mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+          code: 'P2002',
+          clientVersion: '5.22.0',
+        }),
+      );
+
+      const { POST } = await import('./route');
+      const { req } = stripeFixtureRequest();
+      const res = await POST(req);
+
+      expect(res.status).toBe(200);
+      expect(orderUpdate).toHaveBeenCalled(); // the payment itself still succeeded
+    });
+
+    it('fails the whole webhook transaction on a non-P2002 error from the Customer upsert', async () => {
+      orderFindFirst.mockResolvedValueOnce(PAID_ORDER_WITH_PHONE);
+      productFindUnique.mockResolvedValueOnce({ quantity: 10 });
+      storeFindUnique.mockResolvedValueOnce({ organization: { ownerId: 'seller-1' } });
+      customerCreate.mockRejectedValueOnce(new Error('connection reset'));
+
+      const { POST } = await import('./route');
+      const { req } = stripeFixtureRequest();
+      const res = await POST(req);
+
+      // The factory's outer try/catch (lib/server/webhook/handler.ts, PROTECTED)
+      // turns any error propagating out of the Serializable transaction into a
+      // 500 — an unexpected DB error here must not silently mark the webhook
+      // processed, so the whole attempt (including the Order PAID write) rolls
+      // back and Stripe will retry.
+      expect(res.status).toBe(500);
+    });
+  });
+});

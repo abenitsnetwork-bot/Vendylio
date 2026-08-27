@@ -146,7 +146,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     let uploaded;
     try {
-      uploaded = await uploadBuffer(publicId, buf, storedMime);
+      uploaded = await uploadBuffer(publicId, buf);
     } catch (e) {
       if (e instanceof StorageNotConfiguredError) {
         return NextResponse.json(
