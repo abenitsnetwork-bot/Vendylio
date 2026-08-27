@@ -1,4 +1,8 @@
-// Sentry client (browser) config — Next.js auto-loads this file.
+// Sentry client (browser) config. Historically Next.js auto-loaded this file
+// via `withSentryConfig`'s Webpack plugin — that auto-injection does NOT
+// happen under Turbopack (the default bundler as of Next.js 16, including
+// for `next build`), so this file is now dynamically imported from
+// `src/components/SentryClientInit.tsx`, mounted once in the root layout.
 // Boots only when NEXT_PUBLIC_SENTRY_DSN is set; otherwise the SDK
 // becomes a no-op so dev / unconfigured forks don't ship a noisy DSN.
 import * as Sentry from '@sentry/nextjs';
