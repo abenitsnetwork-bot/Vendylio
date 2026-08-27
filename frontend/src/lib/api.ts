@@ -179,7 +179,8 @@ export async function api<T = unknown>(path: string, options: ApiOptions = {}): 
           try {
             const json = JSON.parse(text);
             errorBody = json as Record<string, unknown>;
-            errorMessage = (json as { error?: string }).error || errorMessage;
+            const parsed = json as { message?: string; error?: string };
+            errorMessage = parsed.message || parsed.error || errorMessage;
           } catch {
             errorMessage =
               response.status >= 500
