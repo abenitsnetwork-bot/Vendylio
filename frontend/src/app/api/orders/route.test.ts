@@ -13,11 +13,16 @@ import { createHash } from 'node:crypto';
 function fingerprintBody(input: {
   storeId: string;
   items: { productId: string; quantity: number; variantId?: string }[];
+  fulfillmentMethod?: string;
 }) {
   const sortedItems = [...input.items]
     .map((i) => ({ productId: i.productId, quantity: i.quantity, variantId: i.variantId ?? null }))
     .sort((a, b) => a.productId.localeCompare(b.productId));
-  const canonical = JSON.stringify({ storeId: input.storeId, items: sortedItems });
+  const canonical = JSON.stringify({
+    storeId: input.storeId,
+    items: sortedItems,
+    fulfillmentMethod: input.fulfillmentMethod ?? 'delivery',
+  });
   return createHash('sha256').update(canonical).digest('hex');
 }
 
@@ -433,6 +438,59 @@ describe('POST /api/orders — happy path', () => {
 
     const createArgs = prismaMock.order.create.mock.calls[0]?.[0];
     expect(createArgs?.data?.userId).toBe('user-1');
+  });
+});
+
+describe('POST /api/orders — fulfillmentMethod (Pickup vs Delivery)', () => {
+  it('defaults to DELIVERY and applies the store fee when the field is omitted', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({ ...STORE, deliveryFeeCents: 500 } as never);
+    prismaMock.order.create.mockResolvedValue(seededOrder() as never);
+    prismaMock.order.update.mockResolvedValue(seededOrder() as never);
+
+    await POST(makePost(validBody));
+
+    const createArgs = prismaMock.order.create.mock.calls[0]?.[0];
+    expect(createArgs?.data).toMatchObject({
+      fulfillmentMethod: 'DELIVERY',
+      deliveryFeeCents: 500,
+      amount: 4100,
+    });
+  });
+
+  it('zeroes the delivery fee for a pickup order, regardless of the store-configured fee', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({ ...STORE, deliveryFeeCents: 500 } as never);
+    prismaMock.order.create.mockResolvedValue(seededOrder() as never);
+    prismaMock.order.update.mockResolvedValue(seededOrder() as never);
+
+    await POST(makePost({ ...validBody, fulfillmentMethod: 'pickup' }));
+
+    const createArgs = prismaMock.order.create.mock.calls[0]?.[0];
+    expect(createArgs?.data).toMatchObject({
+      fulfillmentMethod: 'PICKUP',
+      deliveryFeeCents: 0,
+      amount: 3600,
+    });
+  });
+
+  it('treats pickup and delivery as different logical attempts under the same Idempotency-Key (CR-02)', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({ ...STORE, deliveryFeeCents: 500 } as never);
+    prismaMock.order.findUnique.mockResolvedValue(
+      seededOrder({
+        idempotencyBodyHash: fingerprintBody({
+          storeId: 'store-1',
+          items: [{ productId: 'prod-a', quantity: 2 }],
+          fulfillmentMethod: 'delivery',
+        }),
+      }) as never,
+    );
+
+    const res = await POST(
+      makePost({ ...validBody, fulfillmentMethod: 'pickup' }, { idempotencyKey: 'idem-key-1' }),
+    );
+
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.error).toBe('IDEMPOTENCY_KEY_BODY_MISMATCH');
   });
 });
 

@@ -48,6 +48,21 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       );
     }
 
+    // A PICKUP order has no courier involved — dispatching one here would be
+    // a real (possibly billable) Uber Direct request for an order the buyer
+    // is collecting in person. Use the generic PATCH /api/orders/[id]
+    // (READY→DELIVERED) for pickup instead.
+    if (order.fulfillmentMethod === 'PICKUP') {
+      return NextResponse.json(
+        {
+          error: 'FULFILLMENT_METHOD_MISMATCH',
+          message:
+            'This order is a pickup — mark it delivered directly instead of requesting a courier.',
+        },
+        { status: 422, headers: { 'x-request-id': reqCtx.requestId } },
+      );
+    }
+
     const existing = await prisma.delivery.findUnique({ where: { orderId: order.id } });
     if (existing) {
       return NextResponse.json(

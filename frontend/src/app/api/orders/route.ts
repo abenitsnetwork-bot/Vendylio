@@ -61,17 +61,28 @@ interface CartLine {
   variantId?: string | undefined;
 }
 
-// CR-02 — SHA-256 of the canonicalized (storeId, sorted lineItems). Only the
-// fields that affect what's charged are included (Phase 7: variantId now
-// too — a re-submit that swaps variants must not be treated as the same
-// logical attempt); customer contact details are excluded so a cosmetic
-// re-submit (e.g. fixed typo in phone number) with the *same*
-// Idempotency-Key still counts as the same logical attempt.
-function fingerprintBody(input: { storeId: string; items: CartLine[] }): string {
+// CR-02 — SHA-256 of the canonicalized (storeId, sorted lineItems,
+// fulfillmentMethod). Only the fields that affect what's charged are
+// included (Phase 7: variantId too — a re-submit that swaps variants must
+// not be treated as the same logical attempt; fulfillmentMethod too — it
+// changes whether deliveryFeeCents applies, so a re-submit that switches
+// Pickup↔Delivery under the same key must not silently reuse the old
+// amount); customer contact details are excluded so a cosmetic re-submit
+// (e.g. fixed typo in phone number) with the *same* Idempotency-Key still
+// counts as the same logical attempt.
+function fingerprintBody(input: {
+  storeId: string;
+  items: CartLine[];
+  fulfillmentMethod: string;
+}): string {
   const sortedItems = [...input.items]
     .map((i) => ({ productId: i.productId, quantity: i.quantity, variantId: i.variantId ?? null }))
     .sort((a, b) => a.productId.localeCompare(b.productId));
-  const canonical = JSON.stringify({ storeId: input.storeId, items: sortedItems });
+  const canonical = JSON.stringify({
+    storeId: input.storeId,
+    items: sortedItems,
+    fulfillmentMethod: input.fulfillmentMethod,
+  });
   return createHash('sha256').update(canonical).digest('hex');
 }
 
@@ -98,6 +109,11 @@ const Body = z.object({
   // Defaults to 'card' so every pre-existing checkout call (no payment
   // method field at all) keeps behaving exactly as before.
   paymentMethod: z.enum(['card', 'cashapp', 'zelle']).default('card'),
+  // Buyer's fulfillment choice. Defaults to 'delivery' so every pre-existing
+  // checkout call (no field at all) keeps behaving exactly as before —
+  // deliveryFeeCents applies. 'pickup' zeroes the fee regardless of the
+  // store's configured deliveryFeeCents.
+  fulfillmentMethod: z.enum(['pickup', 'delivery']).default('delivery'),
 });
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -147,6 +163,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       customerEmail,
       deliveryAddress,
       paymentMethod,
+      fulfillmentMethod,
     } = parsed.data;
     // Round every incoming quantity before it touches the fingerprint, the
     // stock check, or the stored lineItem snapshot — a client sending
@@ -179,7 +196,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const bodyHash = fingerprintBody({ storeId: store.id, items });
+    const bodyHash = fingerprintBody({ storeId: store.id, items, fulfillmentMethod });
 
     // 6. Replay (echo the outcome, not a re-derivation of the row)
     const existing = await prisma.order.findUnique({ where: { idempotencyKey: idemKey } });
@@ -293,7 +310,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       (sum, li) => sum + Math.round(li.priceCents * li.quantity),
       0,
     );
-    const deliveryFeeCents = store.deliveryFeeCents; // Phase 5 — seller-configured flat fee
+    // Pickup zeroes the fee regardless of the store's configured flat fee —
+    // no courier is ever involved, the buyer collects the order in person.
+    const deliveryFeeCents = fulfillmentMethod === 'pickup' ? 0 : store.deliveryFeeCents;
     const taxCents = 0; // no tax engine in the MVP
     const amount = subtotalCents + deliveryFeeCents + taxCents;
 
@@ -308,6 +327,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       subtotalCents,
       deliveryFeeCents,
       taxCents,
+      fulfillmentMethod: fulfillmentMethod.toUpperCase(),
       customerName,
       customerPhone,
       ...(customerEmail ? { customerEmail } : {}),
@@ -440,6 +460,7 @@ const SELLER_ORDER_SELECT = {
   subtotalCents: true,
   deliveryFeeCents: true,
   taxCents: true,
+  fulfillmentMethod: true,
   customerName: true,
   customerPhone: true,
   customerEmail: true,

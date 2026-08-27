@@ -116,6 +116,7 @@ describe('PATCH /api/orders/[id] — status transitions', () => {
     ['PAID', 'PREPARING'],
     ['PREPARING', 'READY'],
     ['READY', 'OUT_FOR_DELIVERY'],
+    ['READY', 'DELIVERED'], // Phase — pickup orders skip straight through
     ['OUT_FOR_DELIVERY', 'DELIVERED'],
     ['PAID', 'CANCELLED'],
     ['PREPARING', 'CANCELLED'],

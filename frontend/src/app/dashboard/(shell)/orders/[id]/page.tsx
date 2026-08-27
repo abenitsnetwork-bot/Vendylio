@@ -175,7 +175,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   >
                     Order #{order.id.slice(-8)}
                   </h1>
-                  <StatusBadge status={order.status} />
+                  <div className="flex items-center gap-2">
+                    <StatusBadge status={order.status} />
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {order.fulfillmentMethod === 'PICKUP' ? 'Pickup' : 'Delivery'}
+                    </span>
+                  </div>
                 </div>
                 <p className="font-headings text-2xl font-bold text-foreground">
                   {formatUsd(order.amount)}
@@ -233,14 +238,25 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 <Card className="mb-6">
                   <p className="mb-4 text-sm font-semibold text-foreground">Update status</p>
                   <div className="flex flex-wrap gap-3">
-                    <button
-                      type="button"
-                      disabled={updating}
-                      onClick={requestDelivery}
-                      className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
-                    >
-                      Request Delivery
-                    </button>
+                    {order.fulfillmentMethod === 'PICKUP' ? (
+                      <button
+                        type="button"
+                        disabled={updating}
+                        onClick={() => advance('DELIVERED')}
+                        className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                      >
+                        Mark Picked Up
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={updating}
+                        onClick={requestDelivery}
+                        className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                      >
+                        Request Delivery
+                      </button>
+                    )}
                     <button
                       type="button"
                       disabled={updating}

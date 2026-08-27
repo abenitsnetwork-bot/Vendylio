@@ -89,8 +89,11 @@ export default function DeliveryPage() {
         setFeeInput((storeRes.store.deliveryFeeCents / 100).toFixed(2));
         setProviderInput(storeRes.store.deliveryProvider);
         setPickupAddressInput(storeRes.store.pickupAddress ?? '');
-        setNeedsDelivery(readyRes.items);
-        setOutForDelivery(outRes.items);
+        // PICKUP orders never involve a courier — they don't belong in this
+        // page's queues at all (they're managed from the generic Orders
+        // list/detail instead, via "Mark Picked Up").
+        setNeedsDelivery(readyRes.items.filter((o) => o.fulfillmentMethod !== 'PICKUP'));
+        setOutForDelivery(outRes.items.filter((o) => o.fulfillmentMethod !== 'PICKUP'));
       })
       .catch((err) => {
         setError(err instanceof ApiError ? err.message : 'Could not load delivery data.');

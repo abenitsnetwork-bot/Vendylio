@@ -34,7 +34,10 @@ const TRACK_SELECT = {
   // a leak: a store only sets these fields for the express purpose of
   // showing them to a paying customer.
   provider: true,
-  store: { select: { cashAppCashtag: true, zelleContact: true } },
+  // Pickup vs Delivery — drives whether this page shows a pickup location
+  // (store.pickupAddress) or delivery-in-progress copy.
+  fulfillmentMethod: true,
+  store: { select: { cashAppCashtag: true, zelleContact: true, pickupAddress: true } },
 } as const satisfies Prisma.OrderSelect;
 
 export async function GET(req: NextRequest, ctx: RouteCtx): Promise<NextResponse> {

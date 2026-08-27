@@ -30,10 +30,18 @@ interface RouteCtx {
 // sub-resource is an additive, richer path (creates a Delivery row with
 // tracking info) for sellers who want it; this generic PATCH is the
 // always-available fallback.
+//
+// READY→DELIVERED (direct, skipping OUT_FOR_DELIVERY) is for
+// Order.fulfillmentMethod === 'PICKUP' — nothing is ever "out for delivery"
+// when the buyer collects in person, so the seller just marks it handed
+// over. Nothing stops a DELIVERY order from using this same direct jump too
+// (the transition table isn't fulfillmentMethod-aware) — the dashboard UI
+// only offers it for PICKUP orders, but the API itself doesn't forbid it for
+// a seller who genuinely handed a delivery order over without a courier.
 const TRANSITIONS: Record<string, readonly string[]> = {
   PAID: ['PREPARING', 'CANCELLED'],
   PREPARING: ['READY', 'CANCELLED'],
-  READY: ['OUT_FOR_DELIVERY', 'CANCELLED'],
+  READY: ['OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'],
   OUT_FOR_DELIVERY: ['DELIVERED', 'CANCELLED'],
 };
 

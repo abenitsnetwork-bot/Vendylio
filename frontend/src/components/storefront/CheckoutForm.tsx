@@ -20,17 +20,22 @@ interface OrderErrorBody {
 }
 
 type PaymentMethod = 'card' | 'cashapp' | 'zelle';
+type FulfillmentMethod = 'pickup' | 'delivery';
 
 function CheckoutFormInner({
   storeSlug,
   storeName,
   cashAppCashtag,
   zelleContact,
+  deliveryFeeCents,
+  pickupAddress,
 }: {
   storeSlug: string;
   storeName: string;
   cashAppCashtag: string | null;
   zelleContact: string | null;
+  deliveryFeeCents: number;
+  pickupAddress: string | null;
 }) {
   const router = useRouter();
   const { items, subtotalCents, clear } = useCart();
@@ -39,6 +44,7 @@ function CheckoutFormInner({
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
+  const [fulfillmentMethod, setFulfillmentMethod] = useState<FulfillmentMethod>('delivery');
   const [street, setStreet] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
@@ -51,6 +57,8 @@ function CheckoutFormInner({
     () => (street || city || state || zip ? { street, city, state, zip } : undefined),
     [street, city, state, zip],
   );
+  const appliedDeliveryFeeCents = fulfillmentMethod === 'delivery' ? deliveryFeeCents : 0;
+  const totalCents = subtotalCents + appliedDeliveryFeeCents;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -58,6 +66,10 @@ function CheckoutFormInner({
 
     if (!customerName.trim() || !customerPhone.trim()) {
       setError('Name and phone are required.');
+      return;
+    }
+    if (fulfillmentMethod === 'delivery' && !deliveryAddress) {
+      setError('A delivery address is required, or choose Pickup instead.');
       return;
     }
 
@@ -81,7 +93,8 @@ function CheckoutFormInner({
           customerName: customerName.trim(),
           customerPhone: customerPhone.trim(),
           ...(customerEmail.trim() ? { customerEmail: customerEmail.trim() } : {}),
-          ...(deliveryAddress ? { deliveryAddress } : {}),
+          fulfillmentMethod,
+          ...(fulfillmentMethod === 'delivery' && deliveryAddress ? { deliveryAddress } : {}),
           paymentMethod,
         }),
       });
@@ -189,40 +202,76 @@ function CheckoutFormInner({
           </Field>
 
           <div>
-            <p className="mb-3 text-sm font-medium text-foreground">Delivery Address (optional)</p>
-            <div className="space-y-4">
-              <input
-                aria-label="Street address"
-                placeholder="Street address"
-                className={inputClass}
-                value={street}
-                onChange={(e) => setStreet(e.target.value)}
-              />
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <p className="mb-3 text-sm font-medium text-foreground">Fulfillment</p>
+            <div className="space-y-2">
+              <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-border p-3 has-[:checked]:border-primary has-[:checked]:bg-secondary">
                 <input
-                  aria-label="City"
-                  placeholder="City"
+                  type="radio"
+                  name="fulfillmentMethod"
+                  checked={fulfillmentMethod === 'delivery'}
+                  onChange={() => setFulfillmentMethod('delivery')}
+                />
+                <Icon i="truck" size={16} className="text-muted-foreground" />
+                <span className="text-sm text-foreground">
+                  Delivery
+                  {deliveryFeeCents > 0 && (
+                    <span className="text-muted-foreground"> — {formatUsd(deliveryFeeCents)}</span>
+                  )}
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-border p-3 has-[:checked]:border-primary has-[:checked]:bg-secondary">
+                <input
+                  type="radio"
+                  name="fulfillmentMethod"
+                  checked={fulfillmentMethod === 'pickup'}
+                  onChange={() => setFulfillmentMethod('pickup')}
+                />
+                <Icon i="shopping-bag" size={16} className="text-muted-foreground" />
+                <span className="text-sm text-foreground">Pickup — Free</span>
+              </label>
+            </div>
+            {fulfillmentMethod === 'pickup' && pickupAddress && (
+              <p className="mt-2 text-xs text-muted-foreground">Pickup at: {pickupAddress}</p>
+            )}
+          </div>
+
+          {fulfillmentMethod === 'delivery' && (
+            <div>
+              <p className="mb-3 text-sm font-medium text-foreground">Delivery Address</p>
+              <div className="space-y-4">
+                <input
+                  aria-label="Street address"
+                  placeholder="Street address"
                   className={inputClass}
-                  value={city}
-                  onChange={(e) => setCity(e.target.value)}
+                  value={street}
+                  onChange={(e) => setStreet(e.target.value)}
                 />
-                <input
-                  aria-label="State"
-                  placeholder="State"
-                  className={inputClass}
-                  value={state}
-                  onChange={(e) => setState(e.target.value)}
-                />
-                <input
-                  aria-label="ZIP code"
-                  placeholder="ZIP"
-                  className={`${inputClass} col-span-2 sm:col-span-1`}
-                  value={zip}
-                  onChange={(e) => setZip(e.target.value)}
-                />
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                  <input
+                    aria-label="City"
+                    placeholder="City"
+                    className={inputClass}
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                  />
+                  <input
+                    aria-label="State"
+                    placeholder="State"
+                    className={inputClass}
+                    value={state}
+                    onChange={(e) => setState(e.target.value)}
+                  />
+                  <input
+                    aria-label="ZIP code"
+                    placeholder="ZIP"
+                    className={`${inputClass} col-span-2 sm:col-span-1`}
+                    value={zip}
+                    onChange={(e) => setZip(e.target.value)}
+                  />
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           <div>
             <p className="mb-3 text-sm font-medium text-foreground">Payment Method</p>
@@ -281,8 +330,8 @@ function CheckoutFormInner({
             {submitting
               ? 'Please wait…'
               : paymentMethod === 'card'
-                ? `Pay ${formatUsd(subtotalCents)}`
-                : `Continue — ${formatUsd(subtotalCents)}`}
+                ? `Pay ${formatUsd(totalCents)}`
+                : `Continue — ${formatUsd(totalCents)}`}
           </Button>
         </form>
 
@@ -318,12 +367,14 @@ function CheckoutFormInner({
                 <span>{formatUsd(subtotalCents)}</span>
               </div>
               <div className="flex justify-between text-muted-foreground">
-                <span>Delivery</span>
-                <span>Free</span>
+                <span>{fulfillmentMethod === 'pickup' ? 'Pickup' : 'Delivery'}</span>
+                <span>
+                  {appliedDeliveryFeeCents > 0 ? formatUsd(appliedDeliveryFeeCents) : 'Free'}
+                </span>
               </div>
               <div className="flex justify-between font-semibold text-foreground">
                 <span>Total</span>
-                <span>{formatUsd(subtotalCents)}</span>
+                <span>{formatUsd(totalCents)}</span>
               </div>
             </div>
           </div>
@@ -338,11 +389,15 @@ export function CheckoutForm({
   storeName,
   cashAppCashtag = null,
   zelleContact = null,
+  deliveryFeeCents = 0,
+  pickupAddress = null,
 }: {
   storeSlug: string;
   storeName: string;
   cashAppCashtag?: string | null;
   zelleContact?: string | null;
+  deliveryFeeCents?: number;
+  pickupAddress?: string | null;
 }) {
   return (
     <CartProvider storeSlug={storeSlug}>
@@ -352,6 +407,8 @@ export function CheckoutForm({
           storeName={storeName}
           cashAppCashtag={cashAppCashtag}
           zelleContact={zelleContact}
+          deliveryFeeCents={deliveryFeeCents}
+          pickupAddress={pickupAddress}
         />
       </div>
     </CartProvider>

@@ -35,6 +35,7 @@ const READY_ORDER = {
   storeId: 'store-1',
   status: 'READY',
   amount: 4500,
+  fulfillmentMethod: 'DELIVERY',
   customerName: 'Amara',
   customerPhone: '+15551234567',
   deliveryAddress: null,
@@ -87,6 +88,18 @@ describe('POST /api/orders/[id]/delivery', () => {
     expect(res.status).toBe(404);
     const body = await res.json();
     expect(body.error).toBe('ORDER_NOT_FOUND');
+  });
+
+  it('422s FULFILLMENT_METHOD_MISMATCH when the order is a pickup (no courier)', async () => {
+    mockFindOwnedOrder.mockResolvedValue({
+      store: STORE,
+      order: { ...READY_ORDER, fulfillmentMethod: 'PICKUP' },
+    } as never);
+    const res = await POST(makeReq('POST'), ctx);
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.error).toBe('FULFILLMENT_METHOD_MISMATCH');
+    expect(mockRequestDelivery).not.toHaveBeenCalled();
   });
 
   it('422s when the order is not READY', async () => {

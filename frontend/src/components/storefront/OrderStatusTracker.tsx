@@ -17,7 +17,12 @@ interface TrackedOrder {
   createdAt: string;
   paidAt: string | null;
   provider: string;
-  store: { cashAppCashtag: string | null; zelleContact: string | null };
+  fulfillmentMethod: string;
+  store: {
+    cashAppCashtag: string | null;
+    zelleContact: string | null;
+    pickupAddress: string | null;
+  };
 }
 
 const MANUAL_POLL_INTERVAL_MS = 5000;
@@ -38,6 +43,14 @@ const STATUS_COPY: Record<string, { title: string; body: string }> = {
   CANCELLED: { title: 'Cancelled', body: 'This order was cancelled.' },
   EXPIRED: { title: 'Expired', body: 'This order was never paid and has expired.' },
   FAILED: { title: 'Payment failed', body: 'This order could not be paid for.' },
+};
+
+// Overrides for the subset of statuses that read differently when the buyer
+// chose Pickup — nothing is ever "out for delivery" or couriered, so those
+// two need their own copy rather than the DELIVERY-flavored defaults above.
+const PICKUP_STATUS_COPY: Partial<Record<string, { title: string; body: string }>> = {
+  READY: { title: 'Ready for pickup', body: 'Your order is ready — come by whenever works.' },
+  DELIVERED: { title: 'Picked up', body: 'Order collected. We hope you loved it!' },
 };
 
 /**
@@ -125,17 +138,26 @@ export function OrderStatusTracker({ orderId }: { orderId: string }) {
   const isManualPending =
     order.status === 'PENDING' &&
     (order.provider === 'cashapp_manual' || order.provider === 'zelle_manual');
+  const isPickup = order.fulfillmentMethod === 'PICKUP';
   const copy = isManualPending
     ? {
         title: 'Awaiting payment',
         body: 'Complete the payment below, then the seller will confirm it — this page updates on its own once they do.',
       }
-    : (STATUS_COPY[order.status] ?? STATUS_COPY.PAID!);
+    : ((isPickup ? PICKUP_STATUS_COPY[order.status] : undefined) ??
+      STATUS_COPY[order.status] ??
+      STATUS_COPY.PAID!);
 
   return (
     <div className="mt-2 w-full">
       <p className="mb-1 text-sm font-semibold text-foreground">{copy.title}</p>
       <p className="mb-6 text-xs text-muted-foreground">{copy.body}</p>
+
+      {isPickup && order.store.pickupAddress && ['READY', 'DELIVERED'].includes(order.status) && (
+        <p className="mb-6 text-xs text-muted-foreground">
+          Pickup location: {order.store.pickupAddress}
+        </p>
+      )}
 
       {isManualPending && order.provider === 'cashapp_manual' && order.store.cashAppCashtag && (
         <CashAppQRCode cashtag={order.store.cashAppCashtag} amountCents={order.amount} />

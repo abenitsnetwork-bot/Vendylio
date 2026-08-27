@@ -19,6 +19,7 @@ export interface SellerOrder {
   subtotalCents: number;
   deliveryFeeCents: number;
   taxCents: number;
+  fulfillmentMethod: string;
   customerName: string | null;
   customerPhone: string | null;
   customerEmail: string | null;
@@ -84,6 +85,11 @@ export function OrdersTable({ orders }: { orders: SellerOrder[] }) {
               {order.customerName ?? 'Guest'}
             </p>
             <p className="text-xs text-muted-foreground">
+              {order.fulfillmentMethod === 'PICKUP' && (
+                <span className="mr-1 rounded bg-secondary px-1.5 py-0.5 text-[10px] font-semibold uppercase text-foreground">
+                  Pickup
+                </span>
+              )}
               {order.lineItems.length} item{order.lineItems.length === 1 ? '' : 's'} ·{' '}
               {new Date(order.createdAt).toLocaleString()}
               {order.status === 'PENDING' &&

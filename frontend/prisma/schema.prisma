@@ -326,11 +326,16 @@ model Order {
   subtotalCents    Int
   deliveryFeeCents Int  @default(0)
   taxCents         Int  @default(0) // column ready; MVP always computes 0 (no tax engine)
-  customerEmail    String?
-  customerPhone    String?
-  customerName     String?
-  deliveryAddress  Json?
-  lineItems        Json // snapshot at checkout time: [{ productId, name, priceCents, quantity }]
+  // Buyer's checkout choice — PICKUP: deliveryFeeCents forced to 0 and no
+  // courier is ever involved (seller hands the order over in person, marked
+  // done via the generic READY→DELIVERED transition). DELIVERY: existing
+  // behavior — store's flat fee applies, self_manual/uber_direct handle it.
+  fulfillmentMethod String  @default("DELIVERY") // PICKUP|DELIVERY
+  customerEmail     String?
+  customerPhone     String?
+  customerName      String?
+  deliveryAddress   Json?
+  lineItems         Json // snapshot at checkout time: [{ productId, name, priceCents, quantity }]
 
   // Stripe-grade idempotency (CR-02). Required header on POST /api/orders;
   // replay with the same value returns the original outcome instead of
