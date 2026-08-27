@@ -47,6 +47,10 @@ vi.mock('@/lib/server/payments/provider-singleton', () => ({
   __resetProviderSingleton: vi.fn(),
 }));
 
+vi.mock('@/lib/server/delivery/uber-direct', () => ({
+  getUberDirectDeliveryFeeCents: vi.fn(),
+}));
+
 import { optionalAuth, requireAuth } from '@/lib/server/middleware';
 import { resolveOwnStore } from '@/lib/server/org';
 import {
@@ -54,6 +58,7 @@ import {
   breaker,
   PaymentProviderUnconfiguredError,
 } from '@/lib/server/payments/provider-singleton';
+import { getUberDirectDeliveryFeeCents } from '@/lib/server/delivery/uber-direct';
 import { CircuitOpenError } from '@/lib/server/payments/circuit-breaker';
 import { POST, GET } from './route';
 
@@ -62,6 +67,7 @@ const mockRequireAuth = vi.mocked(requireAuth);
 const mockResolveOwnStore = vi.mocked(resolveOwnStore);
 const mockGetProvider = vi.mocked(getProvider);
 const mockExecute = vi.mocked(breaker.execute);
+const mockGetUberDirectDeliveryFeeCents = vi.mocked(getUberDirectDeliveryFeeCents);
 
 const STORE = {
   id: 'store-1',
@@ -165,6 +171,7 @@ beforeEach(() => {
     })),
   } as never);
   mockExecute.mockImplementation(async (fn) => fn());
+  mockGetUberDirectDeliveryFeeCents.mockResolvedValue(null);
 });
 
 describe('POST /api/orders — guards', () => {
@@ -470,6 +477,64 @@ describe('POST /api/orders — fulfillmentMethod (Pickup vs Delivery)', () => {
       deliveryFeeCents: 0,
       amount: 3600,
     });
+  });
+
+  it('charges the real Uber Direct quote instead of the flat fee when the store uses uber_direct', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({
+      ...STORE,
+      deliveryFeeCents: 500,
+      deliveryProvider: 'uber_direct',
+      pickupAddress: '1 Pickup Ave, Springfield, IL 62704',
+    } as never);
+    mockGetUberDirectDeliveryFeeCents.mockResolvedValue(1099);
+    prismaMock.order.create.mockResolvedValue(seededOrder() as never);
+    prismaMock.order.update.mockResolvedValue(seededOrder() as never);
+
+    await POST(
+      makePost({
+        ...validBody,
+        deliveryAddress: { street: '10 Main St', city: 'Springfield', state: 'IL', zip: '62704' },
+      }),
+    );
+
+    expect(mockGetUberDirectDeliveryFeeCents).toHaveBeenCalledWith({
+      pickupAddress: '1 Pickup Ave, Springfield, IL 62704',
+      deliveryAddress: { street: '10 Main St', city: 'Springfield', state: 'IL', zip: '62704' },
+      amountCents: 3600,
+    });
+    const createArgs = prismaMock.order.create.mock.calls[0]?.[0];
+    expect(createArgs?.data).toMatchObject({ deliveryFeeCents: 1099, amount: 4699 });
+  });
+
+  it('falls back to the flat fee when the Uber Direct quote comes back null', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({
+      ...STORE,
+      deliveryFeeCents: 500,
+      deliveryProvider: 'uber_direct',
+      pickupAddress: '1 Pickup Ave, Springfield, IL 62704',
+    } as never);
+    mockGetUberDirectDeliveryFeeCents.mockResolvedValue(null);
+    prismaMock.order.create.mockResolvedValue(seededOrder() as never);
+    prismaMock.order.update.mockResolvedValue(seededOrder() as never);
+
+    await POST(makePost(validBody));
+
+    const createArgs = prismaMock.order.create.mock.calls[0]?.[0];
+    expect(createArgs?.data).toMatchObject({ deliveryFeeCents: 500, amount: 4100 });
+  });
+
+  it('never fetches an Uber Direct quote for a pickup order', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({
+      ...STORE,
+      deliveryProvider: 'uber_direct',
+      pickupAddress: '1 Pickup Ave, Springfield, IL 62704',
+    } as never);
+    prismaMock.order.create.mockResolvedValue(seededOrder() as never);
+    prismaMock.order.update.mockResolvedValue(seededOrder() as never);
+
+    await POST(makePost({ ...validBody, fulfillmentMethod: 'pickup' }));
+
+    expect(mockGetUberDirectDeliveryFeeCents).not.toHaveBeenCalled();
   });
 
   it('treats pickup and delivery as different logical attempts under the same Idempotency-Key (CR-02)', async () => {

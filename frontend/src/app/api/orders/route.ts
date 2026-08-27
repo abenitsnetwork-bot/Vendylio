@@ -50,6 +50,7 @@ import {
 import { clampLimit, cursorWhere, buildPage, decodeCursor } from '@/lib/server/pagination/paginate';
 import { effectivePriceCents, variantLabel } from '@/lib/productVariants';
 import { roundQuantity } from '@/lib/quantity';
+import { getUberDirectDeliveryFeeCents } from '@/lib/server/delivery/uber-direct';
 
 const IDEM_KEY_MAX_LEN = 200;
 const ORDER_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24h PENDING window
@@ -312,7 +313,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
     // Pickup zeroes the fee regardless of the store's configured flat fee —
     // no courier is ever involved, the buyer collects the order in person.
-    const deliveryFeeCents = fulfillmentMethod === 'pickup' ? 0 : store.deliveryFeeCents;
+    // A Delivery order at an Uber Direct store gets a REAL, distance-based
+    // quote instead of the flat Store.deliveryFeeCents — falls back to the
+    // flat fee if the quote can't be fetched (not configured, bad address,
+    // Uber API error) so a checkout never fails just because a live quote
+    // didn't come back.
+    let deliveryFeeCents = 0;
+    if (fulfillmentMethod === 'delivery') {
+      deliveryFeeCents =
+        store.deliveryProvider === 'uber_direct'
+          ? ((await getUberDirectDeliveryFeeCents({
+              pickupAddress: store.pickupAddress,
+              deliveryAddress: deliveryAddress ?? null,
+              amountCents: subtotalCents,
+            })) ?? store.deliveryFeeCents)
+          : store.deliveryFeeCents;
+    }
     const taxCents = 0; // no tax engine in the MVP
     const amount = subtotalCents + deliveryFeeCents + taxCents;
 

@@ -23,6 +23,7 @@ export default async function CheckoutPage({ params }: Params) {
       cashAppCashtag={store.cashAppCashtag}
       zelleContact={store.zelleContact}
       deliveryFeeCents={store.deliveryFeeCents}
+      deliveryProvider={store.deliveryProvider}
       pickupAddress={store.pickupAddress}
     />
   );

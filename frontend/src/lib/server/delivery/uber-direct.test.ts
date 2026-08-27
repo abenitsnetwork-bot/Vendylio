@@ -2,7 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { DeliveryRequestInput } from './provider';
 
 const mockGetAccessToken = vi.fn(async () => 'access-token-123');
-const mockCreateQuote = vi.fn(async (_req: Record<string, unknown>) => ({ id: 'quote-1' }));
+const mockCreateQuote = vi.fn(
+  async (_req: Record<string, unknown>): Promise<{ id: string; fee?: number }> => ({
+    id: 'quote-1',
+  }),
+);
 const mockCreateDelivery = vi.fn(async (_req: Record<string, unknown>) => ({
   id: 'del-abc',
   tracking_url: 'https://track.example/del-abc',
@@ -176,5 +180,93 @@ describe('createUberDirectProvider', () => {
     await expect(provider.markDelivered('del-abc')).rejects.toThrow(
       UberDirectManualConfirmationNotSupportedError,
     );
+  });
+});
+
+describe('getUberDirectDeliveryFeeCents', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetAccessToken.mockResolvedValue('access-token-123');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('returns null when not configured — checkout falls back to the flat fee', async () => {
+    const { getUberDirectDeliveryFeeCents } = await freshProvider();
+    const fee = await getUberDirectDeliveryFeeCents({
+      pickupAddress: '1 Pickup Ave, Springfield, IL 62704',
+      deliveryAddress: { street: '10 Main St', city: 'Springfield', state: 'IL', zip: '62704' },
+      amountCents: 4500,
+    });
+    expect(fee).toBeNull();
+    expect(mockGetAccessToken).not.toHaveBeenCalled();
+  });
+
+  describe('once configured', () => {
+    beforeEach(() => {
+      vi.stubEnv('UBER_DIRECT_CLIENT_ID', 'client-id');
+      vi.stubEnv('UBER_DIRECT_CLIENT_SECRET', 'client-secret');
+      vi.stubEnv('UBER_DIRECT_CUSTOMER_ID', 'customer-id');
+    });
+
+    it('returns null when the store has no pickup address', async () => {
+      const { getUberDirectDeliveryFeeCents } = await freshProvider();
+      const fee = await getUberDirectDeliveryFeeCents({
+        pickupAddress: null,
+        deliveryAddress: { street: '10 Main St', city: 'Springfield', state: 'IL', zip: '62704' },
+        amountCents: 4500,
+      });
+      expect(fee).toBeNull();
+    });
+
+    it('returns null when the delivery address is unformattable', async () => {
+      const { getUberDirectDeliveryFeeCents } = await freshProvider();
+      const fee = await getUberDirectDeliveryFeeCents({
+        pickupAddress: '1 Pickup Ave, Springfield, IL 62704',
+        deliveryAddress: null,
+        amountCents: 4500,
+      });
+      expect(fee).toBeNull();
+    });
+
+    it('returns the real quoted fee on success', async () => {
+      mockCreateQuote.mockResolvedValueOnce({ id: 'quote-1', fee: 1099 });
+      const { getUberDirectDeliveryFeeCents } = await freshProvider();
+      const fee = await getUberDirectDeliveryFeeCents({
+        pickupAddress: '1 Pickup Ave, Springfield, IL 62704',
+        deliveryAddress: { street: '10 Main St', city: 'Springfield', state: 'IL', zip: '62704' },
+        amountCents: 4500,
+      });
+      expect(fee).toBe(1099);
+      expect(mockCreateQuote).toHaveBeenCalledWith({
+        pickup_address: '1 Pickup Ave, Springfield, IL 62704',
+        dropoff_address: '10 Main St, Springfield, IL, 62704',
+        manifest_total_value: 4500,
+      });
+    });
+
+    it('returns null (never throws) when the quote request fails', async () => {
+      mockCreateQuote.mockRejectedValueOnce(new Error('Uber API down'));
+      const { getUberDirectDeliveryFeeCents } = await freshProvider();
+      const fee = await getUberDirectDeliveryFeeCents({
+        pickupAddress: '1 Pickup Ave, Springfield, IL 62704',
+        deliveryAddress: { street: '10 Main St', city: 'Springfield', state: 'IL', zip: '62704' },
+        amountCents: 4500,
+      });
+      expect(fee).toBeNull();
+    });
+
+    it('returns null when the quote response has no numeric fee', async () => {
+      mockCreateQuote.mockResolvedValueOnce({ id: 'quote-1' });
+      const { getUberDirectDeliveryFeeCents } = await freshProvider();
+      const fee = await getUberDirectDeliveryFeeCents({
+        pickupAddress: '1 Pickup Ave, Springfield, IL 62704',
+        deliveryAddress: { street: '10 Main St', city: 'Springfield', state: 'IL', zip: '62704' },
+        amountCents: 4500,
+      });
+      expect(fee).toBeNull();
+    });
   });
 });

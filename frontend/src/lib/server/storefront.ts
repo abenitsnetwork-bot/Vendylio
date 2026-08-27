@@ -43,10 +43,12 @@ export interface PublicStore {
   // corresponding field is set.
   cashAppCashtag: string | null;
   zelleContact: string | null;
-  // Checkout's Pickup/Delivery choice reads these two — deliveryFeeCents is
-  // the flat fee charged when the buyer picks Delivery; pickupAddress (if
-  // set) is shown when they pick Pickup instead.
+  // Checkout's Pickup/Delivery choice reads these — deliveryFeeCents is the
+  // flat fee charged when the buyer picks Delivery (unless deliveryProvider
+  // is uber_direct, in which case checkout fetches a live quote instead);
+  // pickupAddress (if set) is shown when they pick Pickup.
   deliveryFeeCents: number;
+  deliveryProvider: string;
   pickupAddress: string | null;
   template: StoreTemplate;
   products: PublicProduct[];
@@ -85,6 +87,7 @@ export async function getPublicStore(slug: string): Promise<PublicStore | null> 
       cashAppCashtag: true,
       zelleContact: true,
       deliveryFeeCents: true,
+      deliveryProvider: true,
       pickupAddress: true,
       template: true,
       products: {

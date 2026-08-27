@@ -111,11 +111,50 @@ function errorMessage(err: unknown): string {
 
 interface UberDeliveryQuoteResponse {
   id?: string;
+  /** Uber's real, distance-based delivery price, smallest currency unit. */
+  fee?: number;
 }
 
 interface UberDeliveryResponse {
   id?: string;
   tracking_url?: string;
+}
+
+/**
+ * Real, distance-based delivery quote — used at CHECKOUT time (before any
+ * payment) so the buyer is charged something close to what the courier will
+ * actually cost, instead of the store's flat Store.deliveryFeeCents. Never
+ * throws: any failure (not configured, unparseable address, Uber API error)
+ * returns null, and the caller falls back to the store's flat fee — a
+ * checkout must never fail just because a live quote couldn't be fetched.
+ *
+ * This is a SEPARATE quote from the one `requestDelivery()` gets later when
+ * the seller actually dispatches the courier (at READY) — Uber quotes expire
+ * in minutes, long before a typical PAID→PREPARING→READY gap, so the two
+ * can legitimately differ. The seller absorbs that drift, same tradeoff any
+ * marketplace takes when charging at order time but fulfilling later.
+ */
+export async function getUberDirectDeliveryFeeCents(input: {
+  pickupAddress: string | null;
+  deliveryAddress: Record<string, unknown> | null;
+  amountCents: number;
+}): Promise<number | null> {
+  if (!isConfigured() || !input.pickupAddress) return null;
+  const dropoffAddress = formatDropoffAddress(input.deliveryAddress);
+  if (!dropoffAddress) return null;
+
+  try {
+    const token = await getCachedAccessToken();
+    const client = createDeliveriesClient(token, process.env.UBER_DIRECT_CUSTOMER_ID!);
+    const quote = (await client.createQuote({
+      pickup_address: input.pickupAddress,
+      dropoff_address: dropoffAddress,
+      manifest_total_value: input.amountCents,
+    })) as UberDeliveryQuoteResponse;
+    return typeof quote.fee === 'number' ? quote.fee : null;
+  } catch {
+    return null;
+  }
 }
 
 export function createUberDirectProvider(): DeliveryProvider {

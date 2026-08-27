@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Field, inputClass } from '@/components/ui/Field';
@@ -28,6 +28,7 @@ function CheckoutFormInner({
   cashAppCashtag,
   zelleContact,
   deliveryFeeCents,
+  deliveryProvider,
   pickupAddress,
 }: {
   storeSlug: string;
@@ -35,6 +36,7 @@ function CheckoutFormInner({
   cashAppCashtag: string | null;
   zelleContact: string | null;
   deliveryFeeCents: number;
+  deliveryProvider: string;
   pickupAddress: string | null;
 }) {
   const router = useRouter();
@@ -57,7 +59,66 @@ function CheckoutFormInner({
     () => (street || city || state || zip ? { street, city, state, zip } : undefined),
     [street, city, state, zip],
   );
-  const appliedDeliveryFeeCents = fulfillmentMethod === 'delivery' ? deliveryFeeCents : 0;
+  const addressComplete = Boolean(street.trim() && city.trim() && state.trim() && zip.trim());
+
+  const [liveDeliveryFeeCents, setLiveDeliveryFeeCents] = useState<number | null>(null);
+  const [quoting, setQuoting] = useState(false);
+
+  // Uber Direct prices by real distance — once the buyer finishes typing
+  // their address, fetch what delivery will actually cost so the total
+  // shown here matches what checkout will charge (rather than the store's
+  // flat Store.deliveryFeeCents, which self_manual stores still use as-is).
+  useEffect(() => {
+    if (
+      fulfillmentMethod !== 'delivery' ||
+      deliveryProvider !== 'uber_direct' ||
+      !addressComplete
+    ) {
+      setLiveDeliveryFeeCents(null);
+      return;
+    }
+    let cancelled = false;
+    setQuoting(true);
+    const timer = setTimeout(() => {
+      fetch(`/api/stores/${storeSlug}/delivery-quote`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-csrf-token': guestCsrfHeaderValue() },
+        body: JSON.stringify({
+          deliveryAddress: { street, city, state, zip },
+          amountCents: subtotalCents,
+        }),
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data: { feeCents?: number; isEstimate?: boolean } | null) => {
+          if (cancelled) return;
+          setLiveDeliveryFeeCents(data && !data.isEstimate ? (data.feeCents ?? null) : null);
+        })
+        .catch(() => {
+          if (!cancelled) setLiveDeliveryFeeCents(null);
+        })
+        .finally(() => {
+          if (!cancelled) setQuoting(false);
+        });
+    }, 600);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      setQuoting(false);
+    };
+  }, [
+    fulfillmentMethod,
+    deliveryProvider,
+    addressComplete,
+    street,
+    city,
+    state,
+    zip,
+    storeSlug,
+    subtotalCents,
+  ]);
+
+  const appliedDeliveryFeeCents =
+    fulfillmentMethod !== 'delivery' ? 0 : (liveDeliveryFeeCents ?? deliveryFeeCents);
   const totalCents = subtotalCents + appliedDeliveryFeeCents;
 
   async function onSubmit(e: FormEvent) {
@@ -214,8 +275,15 @@ function CheckoutFormInner({
                 <Icon i="truck" size={16} className="text-muted-foreground" />
                 <span className="text-sm text-foreground">
                   Delivery
-                  {deliveryFeeCents > 0 && (
-                    <span className="text-muted-foreground"> — {formatUsd(deliveryFeeCents)}</span>
+                  {deliveryProvider === 'uber_direct' ? (
+                    <span className="text-muted-foreground"> — priced by address</span>
+                  ) : (
+                    deliveryFeeCents > 0 && (
+                      <span className="text-muted-foreground">
+                        {' '}
+                        — {formatUsd(deliveryFeeCents)}
+                      </span>
+                    )
                   )}
                 </span>
               </label>
@@ -326,7 +394,7 @@ function CheckoutFormInner({
             </p>
           )}
 
-          <Button type="submit" disabled={submitting} className="w-full py-3.5">
+          <Button type="submit" disabled={submitting || quoting} className="w-full py-3.5">
             {submitting
               ? 'Please wait…'
               : paymentMethod === 'card'
@@ -369,7 +437,11 @@ function CheckoutFormInner({
               <div className="flex justify-between text-muted-foreground">
                 <span>{fulfillmentMethod === 'pickup' ? 'Pickup' : 'Delivery'}</span>
                 <span>
-                  {appliedDeliveryFeeCents > 0 ? formatUsd(appliedDeliveryFeeCents) : 'Free'}
+                  {fulfillmentMethod === 'delivery' && quoting
+                    ? 'Calculating…'
+                    : appliedDeliveryFeeCents > 0
+                      ? formatUsd(appliedDeliveryFeeCents)
+                      : 'Free'}
                 </span>
               </div>
               <div className="flex justify-between font-semibold text-foreground">
@@ -390,6 +462,7 @@ export function CheckoutForm({
   cashAppCashtag = null,
   zelleContact = null,
   deliveryFeeCents = 0,
+  deliveryProvider = 'self_manual',
   pickupAddress = null,
 }: {
   storeSlug: string;
@@ -397,6 +470,7 @@ export function CheckoutForm({
   cashAppCashtag?: string | null;
   zelleContact?: string | null;
   deliveryFeeCents?: number;
+  deliveryProvider?: string;
   pickupAddress?: string | null;
 }) {
   return (
@@ -408,6 +482,7 @@ export function CheckoutForm({
           cashAppCashtag={cashAppCashtag}
           zelleContact={zelleContact}
           deliveryFeeCents={deliveryFeeCents}
+          deliveryProvider={deliveryProvider}
           pickupAddress={pickupAddress}
         />
       </div>
