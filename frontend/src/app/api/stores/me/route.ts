@@ -23,6 +23,19 @@ function startOfUtcMonth(now: Date): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 }
 
+// Sales stats must count every order that was actually paid, not just ones
+// currently sitting in the PAID status — an order that has since progressed
+// to PREPARING/READY/OUT_FOR_DELIVERY/DELIVERED was still a real sale. An
+// exact `status: 'PAID'` match made revenue drop to $0 the moment a seller
+// advanced an order past that first post-payment status.
+const PAID_ORDER_STATUSES: string[] = [
+  'PAID',
+  'PREPARING',
+  'READY',
+  'OUT_FOR_DELIVERY',
+  'DELIVERED',
+];
+
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const ctx = makeRequestContext(req.headers);
   return withRequestContext(ctx, async () => {
@@ -45,12 +58,20 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const now = new Date();
     const [todayAgg, monthAgg] = await Promise.all([
       prisma.order.aggregate({
-        where: { storeId: store.id, status: 'PAID', paidAt: { gte: startOfUtcDay(now) } },
+        where: {
+          storeId: store.id,
+          status: { in: PAID_ORDER_STATUSES },
+          paidAt: { gte: startOfUtcDay(now) },
+        },
         _sum: { amount: true },
         _count: true,
       }),
       prisma.order.aggregate({
-        where: { storeId: store.id, status: 'PAID', paidAt: { gte: startOfUtcMonth(now) } },
+        where: {
+          storeId: store.id,
+          status: { in: PAID_ORDER_STATUSES },
+          paidAt: { gte: startOfUtcMonth(now) },
+        },
         _sum: { amount: true },
         _count: true,
       }),

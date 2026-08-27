@@ -106,8 +106,51 @@ describe('GET /api/stores/me', () => {
     });
 
     const [todayArgs, monthArgs] = prismaMock.order.aggregate.mock.calls;
-    expect(todayArgs?.[0]?.where).toMatchObject({ storeId: 'store-1', status: 'PAID' });
-    expect(monthArgs?.[0]?.where).toMatchObject({ storeId: 'store-1', status: 'PAID' });
+    expect(todayArgs?.[0]?.where).toMatchObject({
+      storeId: 'store-1',
+      status: { in: ['PAID', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED'] },
+    });
+    expect(monthArgs?.[0]?.where).toMatchObject({
+      storeId: 'store-1',
+      status: { in: ['PAID', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED'] },
+    });
+  });
+
+  it('still counts an order in sales after it progresses past PAID to DELIVERED', async () => {
+    // Regression: an exact `status: 'PAID'` match made revenue drop to $0 the
+    // moment a seller advanced an order past its first post-payment status.
+    mockResolveOwnStore.mockResolvedValue({ id: 'store-1', organizationId: 'org-1' } as never);
+    prismaMock.store.findUniqueOrThrow.mockResolvedValue({
+      id: 'store-1',
+      organizationId: 'org-1',
+      slug: 'shea-store',
+      name: 'Shea Store',
+      description: null,
+      city: null,
+      state: null,
+      logoUrl: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      _count: { products: 1 },
+    } as never);
+    prismaMock.order.aggregate
+      .mockResolvedValueOnce({ _sum: { amount: 10000 }, _count: 1 } as never) // today
+      .mockResolvedValueOnce({ _sum: { amount: 10000 }, _count: 1 } as never); // month
+
+    const res = await GET(makeGet());
+    const body = await res.json();
+    expect(body.stats).toMatchObject({
+      todaySalesCents: 10000,
+      todayOrdersCount: 1,
+      monthSalesCents: 10000,
+      monthOrdersCount: 1,
+    });
+
+    const [todayArgs] = prismaMock.order.aggregate.mock.calls;
+    const statusFilter = (todayArgs?.[0]?.where as { status?: { in?: string[] } })?.status;
+    expect(statusFilter?.in).toContain('DELIVERED');
+    expect(statusFilter?.in).not.toContain('CANCELLED');
+    expect(statusFilter?.in).not.toContain('PENDING');
   });
 });
 
