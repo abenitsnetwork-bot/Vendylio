@@ -42,6 +42,7 @@ import { makeRequestContext, withRequestContext } from '@/lib/server/observabili
 import { prisma } from '@/lib/server/prisma';
 import { CircuitOpenError } from '@/lib/server/payments/circuit-breaker';
 import { computeCommission } from '@/lib/server/payments/commission';
+import { getPlatformCommissionRates } from '@/lib/server/payments/platform-settings';
 import {
   breaker,
   getProvider,
@@ -415,10 +416,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         externalRef: order.id,
       };
 
-      const result = await breaker.execute(() => {
+      const result = await breaker.execute(async () => {
         if (isConnected) {
-          const rateBp = Number(process.env.COMMISSION_RATE_BP || 0) || 0;
-          const { commission } = computeCommission(amount, rateBp);
+          const { baseRateBp } = await getPlatformCommissionRates(prisma);
+          const { commission } = computeCommission(amount, baseRateBp);
           return provider.chargeConnected({
             ...chargeInput,
             destinationAccountId: store.stripeAccountId!,

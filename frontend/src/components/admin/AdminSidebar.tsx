@@ -20,14 +20,14 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/admin/audit-log', label: 'Audit Log', icon: 'clipboard' },
 ];
 
-// Landing-page CMS is SUPERADMIN-only (not part of the locked ADMIN/SUPERADMIN
-// `can[]` capability contract in api/admin/me/route.ts — gated purely on role
-// here, same as the last-SUPERADMIN guard elsewhere in the back office).
-const SUPERADMIN_NAV_ITEM: NavItem = {
-  href: '/admin/site-content',
-  label: 'Site Content',
-  icon: 'image',
-};
+// Landing-page CMS and platform Settings are SUPERADMIN-only (not part of
+// the locked ADMIN/SUPERADMIN `can[]` capability contract in
+// api/admin/me/route.ts — gated purely on role here, same as the
+// last-SUPERADMIN guard elsewhere in the back office).
+const SUPERADMIN_NAV_ITEMS: NavItem[] = [
+  { href: '/admin/site-content', label: 'Site Content', icon: 'image' },
+  { href: '/admin/settings', label: 'Settings', icon: 'settings' },
+];
 
 function isActive(pathname: string, href: string): boolean {
   return href === '/admin' ? pathname === href : pathname.startsWith(href);
@@ -37,7 +37,7 @@ function isActive(pathname: string, href: string): boolean {
 export function AdminSidebar() {
   const pathname = usePathname();
   const { admin } = useAdminAuth();
-  const items = admin?.role === 'SUPERADMIN' ? [...NAV_ITEMS, SUPERADMIN_NAV_ITEM] : NAV_ITEMS;
+  const items = admin?.role === 'SUPERADMIN' ? [...NAV_ITEMS, ...SUPERADMIN_NAV_ITEMS] : NAV_ITEMS;
 
   return (
     <>

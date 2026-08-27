@@ -12,6 +12,7 @@ import 'server-only';
 import { Prisma } from '@prisma/client';
 import type { PrismaTransactionClient } from '@/lib/server/webhook/handler';
 import { computeCommission, resolveCommissionRateBp } from '@/lib/server/payments/commission';
+import { getPlatformCommissionRates } from '@/lib/server/payments/platform-settings';
 import { enqueueOutbox } from '@/lib/server/outbox';
 import { roundQuantity } from '@/lib/quantity';
 
@@ -46,9 +47,7 @@ export async function applyOrderPaidEffects(
     select: { plan: true, organization: { select: { ownerId: true } } },
   });
 
-  const baseRateBp = Number(process.env.COMMISSION_RATE_BP || 0) || 0;
-  const proRateBpRaw = process.env.COMMISSION_RATE_BP_PRO;
-  const proRateBp = proRateBpRaw ? Number(proRateBpRaw) || 0 : null;
+  const { baseRateBp, proRateBp } = await getPlatformCommissionRates(tx);
   const rateBp = resolveCommissionRateBp({ plan: store?.plan ?? 'FREE', baseRateBp, proRateBp });
   const { commission, net } = computeCommission(order.amount, rateBp);
   const paymentMethod = opts.paymentMethod ?? null;

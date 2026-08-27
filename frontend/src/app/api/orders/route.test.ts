@@ -719,7 +719,12 @@ describe('POST /api/orders — Stripe Connect routing (Phase 3)', () => {
         paymentUrl: 'https://checkout.stripe.com/pay/cs_connect_1',
       }) as never,
     );
-    process.env.COMMISSION_RATE_BP = '600'; // 6%
+    prismaMock.platformSettings.findUnique.mockResolvedValueOnce({
+      id: 'default',
+      commissionRateBp: 600, // 6%
+      commissionRateBpPro: null,
+      updatedAt: new Date(),
+    } as never);
 
     const res = await POST(makePost(validBody));
 
@@ -738,8 +743,6 @@ describe('POST /api/orders — Stripe Connect routing (Phase 3)', () => {
 
     const createArgs = prismaMock.order.create.mock.calls[0]?.[0];
     expect(createArgs?.data?.provider).toBe('stripe_connect');
-
-    delete process.env.COMMISSION_RATE_BP;
   });
 
   it('still routes as platform when stripeOnboardingStatus is PENDING/RESTRICTED, not just ACTIVE', async () => {

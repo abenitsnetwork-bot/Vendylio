@@ -599,3 +599,21 @@ model Withdrawal {
   @@index([status, requestedAt])
   @@index([provider, providerPayoutId])
 }
+
+// ───────────────────────────────────────────────────────────────────────
+// Platform-wide settings — singleton row (id always "default"). Started
+// with just the marketplace commission rate, previously only configurable
+// via the COMMISSION_RATE_BP / COMMISSION_RATE_BP_PRO env vars (which
+// required a redeploy to change) — now editable live from /admin/settings
+// (SUPERADMIN-only, same as the Site Content CMS). See
+// lib/server/payments/platform-settings.ts for the read helper and
+// api/admin/settings/route.ts for the read/write endpoint.
+model PlatformSettings {
+  id                   String   @id @default("default")
+  // Basis points: 600 = 6%. 0 = no commission taken.
+  commissionRateBp     Int      @default(0)
+  // Discounted rate for Store.plan === "PRO". Null = no PRO discount
+  // configured — PRO stores fall back to commissionRateBp like everyone else.
+  commissionRateBpPro  Int?
+  updatedAt            DateTime @updatedAt
+}

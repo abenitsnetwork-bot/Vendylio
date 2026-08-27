@@ -7,8 +7,7 @@ import { applyOrderPaidEffects, type OrderForPaidEffects } from './markPaid';
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.stubEnv('COMMISSION_RATE_BP', '');
-  vi.stubEnv('COMMISSION_RATE_BP_PRO', '');
+  prismaMock.platformSettings.findUnique.mockResolvedValue(null); // no row yet = 0% commission
   prismaMock.customer.findUnique.mockResolvedValue(null);
   prismaMock.outboxEvent.create.mockResolvedValue({ id: 'ob1' } as never);
 });
@@ -26,13 +25,18 @@ const BASE_ORDER: OrderForPaidEffects = {
 };
 
 describe('applyOrderPaidEffects', () => {
-  it('marks the order PAID with commission/net computed from COMMISSION_RATE_BP', async () => {
+  it('marks the order PAID with commission/net computed from PlatformSettings.commissionRateBp', async () => {
     prismaMock.store.findUnique.mockResolvedValueOnce({
       plan: 'FREE',
       organization: { ownerId: 'seller-1' },
     } as never);
     prismaMock.product.findUnique.mockResolvedValueOnce({ quantity: 10 } as never);
-    vi.stubEnv('COMMISSION_RATE_BP', '600');
+    prismaMock.platformSettings.findUnique.mockResolvedValueOnce({
+      id: 'default',
+      commissionRateBp: 600,
+      commissionRateBpPro: null,
+      updatedAt: new Date(),
+    } as never);
 
     await applyOrderPaidEffects(prismaMock, BASE_ORDER, { paymentMethod: 'card' });
 
@@ -157,8 +161,12 @@ describe('applyOrderPaidEffects', () => {
       organization: { ownerId: 'seller-1' },
     } as never);
     prismaMock.product.findUnique.mockResolvedValueOnce({ quantity: 10 } as never);
-    vi.stubEnv('COMMISSION_RATE_BP', '600');
-    vi.stubEnv('COMMISSION_RATE_BP_PRO', '300');
+    prismaMock.platformSettings.findUnique.mockResolvedValueOnce({
+      id: 'default',
+      commissionRateBp: 600,
+      commissionRateBpPro: 300,
+      updatedAt: new Date(),
+    } as never);
 
     await applyOrderPaidEffects(prismaMock, BASE_ORDER, {});
     expect(prismaMock.order.update).toHaveBeenCalledWith({

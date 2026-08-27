@@ -17,6 +17,7 @@ const customerCreate = vi.fn();
 const customerUpdate = vi.fn();
 const productVariantFindUnique = vi.fn();
 const productVariantUpdate = vi.fn();
+const platformSettingsFindUnique = vi.fn();
 
 const $transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>, _opts?: unknown) =>
   fn({
@@ -29,6 +30,7 @@ const $transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>, _opts?:
     product: { findUnique: productFindUnique, update: productUpdate },
     productVariant: { findUnique: productVariantFindUnique, update: productVariantUpdate },
     store: { findUnique: storeFindUnique },
+    platformSettings: { findUnique: platformSettingsFindUnique },
     outboxEvent: { create: outboxCreate },
     orderStatusEvent: { create: orderStatusEventCreate },
     customer: { findUnique: customerFindUnique, create: customerCreate, update: customerUpdate },
@@ -42,7 +44,7 @@ vi.mock('@/lib/server/prisma', () => ({
 beforeEach(() => {
   vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test_fixture_only');
   vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'test-webhook-secret');
-  vi.stubEnv('COMMISSION_RATE_BP', '');
+  platformSettingsFindUnique.mockReset().mockResolvedValue(null); // no row yet = 0% commission
   webhookLogFindUnique.mockReset().mockResolvedValue(null);
   webhookLogCreate.mockReset();
   webhookLogUpdate.mockReset();
@@ -116,7 +118,10 @@ describe('POST /api/webhooks/stripe', () => {
     productFindUnique.mockResolvedValueOnce({ quantity: 10 });
     storeFindUnique.mockResolvedValueOnce({ organization: { ownerId: 'seller-1' } });
     outboxCreate.mockResolvedValue({ id: 'ob1' });
-    vi.stubEnv('COMMISSION_RATE_BP', '600'); // 6%
+    platformSettingsFindUnique.mockResolvedValueOnce({
+      commissionRateBp: 600,
+      commissionRateBpPro: null,
+    }); // 6%
 
     const { POST } = await import('./route');
     const { req } = stripeFixtureRequest();
@@ -156,13 +161,15 @@ describe('POST /api/webhooks/stripe', () => {
     expect(notifPayload.userId).toBe('seller-1');
   });
 
-  it('Phase 12 — a PRO store gets the discounted COMMISSION_RATE_BP_PRO rate', async () => {
+  it('Phase 12 — a PRO store gets the discounted commissionRateBpPro rate', async () => {
     orderFindFirst.mockResolvedValueOnce(PAID_ORDER);
     productFindUnique.mockResolvedValueOnce({ quantity: 10 });
     storeFindUnique.mockResolvedValueOnce({ plan: 'PRO', organization: { ownerId: 'seller-1' } });
     outboxCreate.mockResolvedValue({ id: 'ob1' });
-    vi.stubEnv('COMMISSION_RATE_BP', '600'); // 6% base
-    vi.stubEnv('COMMISSION_RATE_BP_PRO', '300'); // 3% for PRO
+    platformSettingsFindUnique.mockResolvedValueOnce({
+      commissionRateBp: 600,
+      commissionRateBpPro: 300,
+    }); // 6% base, 3% PRO
 
     const { POST } = await import('./route');
     const { req } = stripeFixtureRequest();
@@ -177,12 +184,15 @@ describe('POST /api/webhooks/stripe', () => {
     });
   });
 
-  it('Phase 12 — a PRO store falls back to the base rate when COMMISSION_RATE_BP_PRO is unset', async () => {
+  it('Phase 12 — a PRO store falls back to the base rate when commissionRateBpPro is unset', async () => {
     orderFindFirst.mockResolvedValueOnce(PAID_ORDER);
     productFindUnique.mockResolvedValueOnce({ quantity: 10 });
     storeFindUnique.mockResolvedValueOnce({ plan: 'PRO', organization: { ownerId: 'seller-1' } });
     outboxCreate.mockResolvedValue({ id: 'ob1' });
-    vi.stubEnv('COMMISSION_RATE_BP', '600');
+    platformSettingsFindUnique.mockResolvedValueOnce({
+      commissionRateBp: 600,
+      commissionRateBpPro: null,
+    });
 
     const { POST } = await import('./route');
     const { req } = stripeFixtureRequest();
