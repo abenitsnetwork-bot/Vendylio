@@ -23,6 +23,9 @@ const USER_SELECT = {
   status: true,
   emailVerifiedAt: true,
   createdAt: true,
+  ownedOrganizations: {
+    select: { store: { select: { slug: true, name: true } } },
+  },
 } as const satisfies Prisma.UserSelect;
 
 export async function GET(
@@ -48,6 +51,10 @@ export async function GET(
         { status: 404, headers: { 'x-request-id': reqCtx.requestId } },
       );
     }
-    return NextResponse.json({ user }, { headers: { 'x-request-id': reqCtx.requestId } });
+    const { ownedOrganizations, ...rest } = user;
+    return NextResponse.json(
+      { user: { ...rest, store: ownedOrganizations[0]?.store ?? null } },
+      { headers: { 'x-request-id': reqCtx.requestId } },
+    );
   });
 }

@@ -76,6 +76,7 @@ interface UserListRow {
   status: string;
   emailVerifiedAt: Date | null;
   createdAt: Date;
+  ownedOrganizations: { store: { slug: string; name: string } | null }[];
 }
 
 function userRow(overrides: Partial<UserListRow> = {}): UserListRow {
@@ -89,6 +90,7 @@ function userRow(overrides: Partial<UserListRow> = {}): UserListRow {
     status: overrides.status ?? 'ACTIVE',
     emailVerifiedAt: overrides.emailVerifiedAt ?? new Date('2026-01-01T00:00:00Z'),
     createdAt: overrides.createdAt ?? new Date('2026-05-01T00:00:00Z'),
+    ownedOrganizations: overrides.ownedOrganizations ?? [],
   };
 }
 
@@ -137,6 +139,27 @@ describe('/api/admin/users [Wave 1] — list', () => {
     expect(args?.orderBy).toEqual([{ createdAt: 'desc' }, { id: 'desc' }]);
     expect(args?.select).toMatchObject({ id: true, email: true, role: true, status: true });
     expect((args?.select as Record<string, unknown> | undefined)?.['passwordHash']).toBeUndefined();
+  });
+
+  it('GET flattens ownedOrganizations[0].store into a single store field', async () => {
+    prismaMock.user.findMany.mockResolvedValueOnce([
+      {
+        ...userRow({ id: 'seller1' }),
+        ownedOrganizations: [{ store: { slug: 'demo-store', name: 'Demo Store' } }],
+      },
+      {
+        ...userRow({ id: 'buyer1' }),
+        ownedOrganizations: [],
+      },
+    ] as never);
+
+    const res = await GET(makeGet('http://test/api/admin/users'));
+    const body = (await res.json()) as {
+      items: (UserListRow & { store: { slug: string; name: string } | null })[];
+    };
+    expect(body.items[0]?.store).toEqual({ slug: 'demo-store', name: 'Demo Store' });
+    expect(body.items[0]).not.toHaveProperty('ownedOrganizations');
+    expect(body.items[1]?.store).toBeNull();
   });
 
   it('GET returns empty 200 (never 404) on no rows', async () => {

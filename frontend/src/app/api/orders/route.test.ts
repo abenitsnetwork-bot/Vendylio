@@ -1,42 +1,37 @@
-// PAY-01 Wave 1 tests for POST /api/orders.
+// Phase 2 tests for POST /api/orders (guest checkout).
 //
-// Bootstrap (mirrors notifications/route.test.ts):
+// Bootstrap (mirrors the pre-Phase-0 Bictorys orders route test's pattern):
 //   - prisma-mock first (auto-hoists vi.mock for '@/lib/server/prisma')
-//   - mockNextCookies() for next/headers async cookies()
-//   - vi.mock('@/lib/server/middleware') so requireAuth is per-test controllable
+//   - vi.mock('@/lib/server/middleware') so optionalAuth is per-test controllable
 //   - vi.mock('@/lib/server/payments/provider-singleton') so getProvider()
-//     returns a stub PaymentProvider instead of trying to read BICTORYS_* env
-//
-// Coverage maps to plan acceptance + Wave 0 scaffolds:
-//   happy path:     creates Order + returns 201 + paymentUrl, persists with idempotencyKey
-//   idempotency:    replay same key → prior 200 row; missing key → 400
-//   circuit:        CircuitOpenError → 503 PAYMENT_PROVIDER_UNAVAILABLE + Retry-After + Order FAILED
-//   config guard:   BICTORYS env missing → 503 PAYMENT_PROVIDER_UNCONFIGURED (Pitfall 7)
-//   validation:     non-int amount + negative amount → 400 VALIDATION_FAILED
-//   auth:           requireAuth bails → 401 (D-PAY-03 — no guest checkout in v1)
+//     returns a stub PaymentProvider instead of reading STRIPE_* env
 import { prismaMock } from '@/test-utils/prisma-mock';
-import { mockNextCookies } from '@/test-utils/mock-cookies';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { createHash } from 'node:crypto';
 
-// CR-02 — recompute the body fingerprint the route stores at insert time.
-// Mirrors the algorithm in `frontend/src/app/api/orders/route.ts::fingerprintBody`.
-function fingerprintBody(input: { amount: number; currency: string }): string {
-  const canonical = JSON.stringify({ amount: input.amount, currency: input.currency });
+function fingerprintBody(input: {
+  storeId: string;
+  items: { productId: string; quantity: number; variantId?: string }[];
+}) {
+  const sortedItems = [...input.items]
+    .map((i) => ({ productId: i.productId, quantity: i.quantity, variantId: i.variantId ?? null }))
+    .sort((a, b) => a.productId.localeCompare(b.productId));
+  const canonical = JSON.stringify({ storeId: input.storeId, items: sortedItems });
   return createHash('sha256').update(canonical).digest('hex');
 }
 
-mockNextCookies();
-
 vi.mock('@/lib/server/middleware', () => ({
+  optionalAuth: vi.fn(),
   requireAuth: vi.fn(),
+}));
+
+vi.mock('@/lib/server/org', () => ({
+  resolveOwnStore: vi.fn(),
 }));
 
 vi.mock('@/lib/server/payments/provider-singleton', () => ({
   getProvider: vi.fn(),
-  // Use the real CircuitBreaker so its state machine runs, but expose a
-  // mockable `execute` per-test via spies on the returned object.
   breaker: { execute: vi.fn() },
   PaymentProviderUnconfiguredError: class PaymentProviderUnconfiguredError extends Error {
     constructor() {
@@ -47,20 +42,40 @@ vi.mock('@/lib/server/payments/provider-singleton', () => ({
   __resetProviderSingleton: vi.fn(),
 }));
 
-import { requireAuth } from '@/lib/server/middleware';
+import { optionalAuth, requireAuth } from '@/lib/server/middleware';
+import { resolveOwnStore } from '@/lib/server/org';
 import {
   getProvider,
   breaker,
   PaymentProviderUnconfiguredError,
 } from '@/lib/server/payments/provider-singleton';
 import { CircuitOpenError } from '@/lib/server/payments/circuit-breaker';
-import { POST } from './route';
+import { POST, GET } from './route';
 
+const mockOptionalAuth = vi.mocked(optionalAuth);
 const mockRequireAuth = vi.mocked(requireAuth);
+const mockResolveOwnStore = vi.mocked(resolveOwnStore);
 const mockGetProvider = vi.mocked(getProvider);
 const mockExecute = vi.mocked(breaker.execute);
 
-const authedCtx = { user: { sub: 'user-1', email: 'me@example.com' } };
+const STORE = {
+  id: 'store-1',
+  slug: 'shea-store',
+  published: true,
+  stripeAccountId: null,
+  stripeOnboardingStatus: 'NOT_STARTED',
+  deliveryFeeCents: 0,
+};
+const PRODUCT_A = {
+  id: 'prod-a',
+  storeId: 'store-1',
+  name: 'Shea Butter',
+  priceCents: 1800,
+  quantity: 10,
+  unit: 'UNIT',
+  status: 'ACTIVE',
+  variants: [],
+};
 
 interface MakePostOpts {
   idempotencyKey?: string | null;
@@ -71,34 +86,47 @@ function makePost(body: unknown, opts: MakePostOpts = {}): NextRequest {
   const csrf = opts.csrf ?? 'match';
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (csrf === 'match') {
-    headers['x-csrf-token'] = 'csrf-tok';
-    headers['cookie'] = 'app-csrf=csrf-tok';
+    headers['x-csrf-token'] = 'any-nonempty-value';
   }
-  if (opts.idempotencyKey !== null && opts.idempotencyKey !== undefined) {
-    headers['idempotency-key'] = opts.idempotencyKey;
+  if (opts.idempotencyKey !== null) {
+    headers['idempotency-key'] = opts.idempotencyKey ?? 'idem-key-1';
   }
-  return body === undefined
-    ? new NextRequest('http://test/api/orders', { method: 'POST', headers })
-    : new NextRequest('http://test/api/orders', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-      });
+  return new NextRequest('http://test/api/orders', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
 }
+
+const validBody = {
+  storeSlug: 'shea-store',
+  items: [{ productId: 'prod-a', quantity: 2 }],
+  customerName: 'Amara',
+  customerPhone: '+15551234567',
+};
 
 function seededOrder(over: Partial<Record<string, unknown>> = {}) {
   return {
     id: 'order_seed_1',
-    userId: 'user-1',
-    amount: 1000,
-    currency: 'XOF',
+    storeId: 'store-1',
+    userId: null,
+    amount: 3600,
+    currency: 'USD',
     status: 'PENDING',
-    customerEmail: 'me@example.com',
-    customerPhone: null,
-    customerName: null,
-    metadata: null,
+    subtotalCents: 3600,
+    deliveryFeeCents: 0,
+    taxCents: 0,
+    customerEmail: null,
+    customerPhone: '+15551234567',
+    customerName: 'Amara',
+    deliveryAddress: null,
+    lineItems: [{ productId: 'prod-a', name: 'Shea Butter', priceCents: 1800, quantity: 2 }],
     idempotencyKey: 'idem-key-1',
-    provider: 'bictorys',
+    idempotencyBodyHash: fingerprintBody({
+      storeId: 'store-1',
+      items: [{ productId: 'prod-a', quantity: 2 }],
+    }),
+    provider: 'stripe_platform',
     providerChargeId: null,
     paymentUrl: null,
     paymentMethod: null,
@@ -114,429 +142,628 @@ function seededOrder(over: Partial<Record<string, unknown>> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // Default — env present so getProvider() succeeds, requireAuth returns user.
-  process.env.BICTORYS_API_URL = 'https://api.test.bictorys.local';
-  process.env.BICTORYS_API_KEY = 'test-key';
-  process.env.BICTORYS_WEBHOOK_SECRET = 'test-webhook-secret';
-  process.env.PUBLIC_URL = 'http://localhost:3000';
-
-  mockRequireAuth.mockResolvedValue(authedCtx);
+  mockOptionalAuth.mockResolvedValue(null);
+  prismaMock.store.findFirst.mockResolvedValue(STORE as never);
+  prismaMock.product.findMany.mockResolvedValue([PRODUCT_A] as never);
+  prismaMock.order.findUnique.mockResolvedValue(null as never);
   mockGetProvider.mockReturnValue({
-    name: 'bictorys',
+    name: 'stripe',
     charge: vi.fn(async () => ({
-      providerChargeId: 'bictorys_charge_test_1',
-      paymentUrl: 'https://checkout.test/bictorys/pay/test',
+      providerChargeId: 'cs_test_1',
+      paymentUrl: 'https://checkout.stripe.com/pay/cs_test_1',
+      status: 'PENDING' as const,
+    })),
+    chargeConnected: vi.fn(async () => ({
+      providerChargeId: 'cs_connect_1',
+      paymentUrl: 'https://checkout.stripe.com/pay/cs_connect_1',
       status: 'PENDING' as const,
     })),
   } as never);
-  // Default execute = identity around the provided fn (real-call path).
   mockExecute.mockImplementation(async (fn) => fn());
 });
 
-describe('POST /api/orders [Wave 1] — happy path', () => {
-  it('POST creates an Order and returns 201 + paymentUrl', async () => {
-    prismaMock.order.findUnique.mockResolvedValue(null as never);
+describe('POST /api/orders — guards', () => {
+  it('403s when CSRF header is missing', async () => {
+    const res = await POST(makePost(validBody, { csrf: 'missing' }));
+    expect(res.status).toBe(403);
+    expect(prismaMock.store.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('400s IDEMPOTENCY_KEY_REQUIRED when header missing', async () => {
+    const res = await POST(makePost(validBody, { idempotencyKey: null }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('IDEMPOTENCY_KEY_REQUIRED');
+  });
+
+  it('400s IDEMPOTENCY_KEY_INVALID when key exceeds 200 chars', async () => {
+    const res = await POST(makePost(validBody, { idempotencyKey: 'x'.repeat(201) }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('IDEMPOTENCY_KEY_INVALID');
+  });
+
+  it('400s VALIDATION_FAILED on an empty cart', async () => {
+    const res = await POST(makePost({ ...validBody, items: [] }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('VALIDATION_FAILED');
+  });
+
+  it('404s STORE_NOT_FOUND for an unknown or unpublished slug', async () => {
+    prismaMock.store.findFirst.mockResolvedValue(null);
+    const res = await POST(makePost(validBody));
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error).toBe('STORE_NOT_FOUND');
+  });
+});
+
+describe('POST /api/orders — pricing guards (server re-prices, never trusts the client)', () => {
+  it('400s PRODUCT_UNAVAILABLE when a product does not belong to the store / is archived', async () => {
+    prismaMock.product.findMany.mockResolvedValue([]);
+    const res = await POST(makePost(validBody));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('PRODUCT_UNAVAILABLE');
+    expect(prismaMock.order.create).not.toHaveBeenCalled();
+  });
+
+  it('400s PRODUCT_UNAVAILABLE when requested quantity exceeds stock', async () => {
+    prismaMock.product.findMany.mockResolvedValue([{ ...PRODUCT_A, quantity: 1 }] as never);
+    const res = await POST(makePost(validBody));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('PRODUCT_UNAVAILABLE');
+  });
+});
+
+describe('POST /api/orders — variant-aware pricing (Phase 7)', () => {
+  const VARIANT = {
+    id: 'var-1',
+    productId: 'prod-a',
+    name: 'Size',
+    value: 'Large',
+    priceDeltaCents: 200,
+    quantity: 3,
+  };
+  const PRODUCT_WITH_VARIANTS = { ...PRODUCT_A, variants: [VARIANT] };
+
+  it('400s PRODUCT_UNAVAILABLE when the product has variants but none was selected', async () => {
+    prismaMock.product.findMany.mockResolvedValue([PRODUCT_WITH_VARIANTS] as never);
+    const res = await POST(makePost(validBody)); // no variantId on the item
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('PRODUCT_UNAVAILABLE');
+  });
+
+  it("400s PRODUCT_UNAVAILABLE when the given variantId doesn't belong to the product", async () => {
+    prismaMock.product.findMany.mockResolvedValue([PRODUCT_WITH_VARIANTS] as never);
+    const res = await POST(
+      makePost({
+        ...validBody,
+        items: [{ productId: 'prod-a', quantity: 2, variantId: 'not-a-real-variant' }],
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('checks stock against the variant quantity, not the base product quantity', async () => {
+    prismaMock.product.findMany.mockResolvedValue([PRODUCT_WITH_VARIANTS] as never);
+    const res = await POST(
+      makePost({
+        ...validBody,
+        items: [{ productId: 'prod-a', quantity: 5, variantId: 'var-1' }], // variant only has 3
+      }),
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.message).toContain('Only 3');
+  });
+
+  it('prices the line at base + variant delta and snapshots variantId/variantLabel/unit', async () => {
+    prismaMock.product.findMany.mockResolvedValue([PRODUCT_WITH_VARIANTS] as never);
+    prismaMock.order.create.mockResolvedValue(seededOrder() as never);
+    prismaMock.order.update.mockResolvedValue(seededOrder() as never);
+
+    await POST(
+      makePost({
+        ...validBody,
+        items: [{ productId: 'prod-a', quantity: 2, variantId: 'var-1' }],
+      }),
+    );
+
+    const createArgs = prismaMock.order.create.mock.calls[0]?.[0];
+    expect(createArgs?.data?.subtotalCents).toBe(4000); // (1800 + 200) * 2
+    expect(createArgs?.data?.lineItems).toEqual([
+      {
+        productId: 'prod-a',
+        name: 'Shea Butter',
+        priceCents: 2000,
+        quantity: 2,
+        unit: 'UNIT',
+        variantId: 'var-1',
+        variantLabel: 'Size: Large',
+      },
+    ]);
+  });
+});
+
+describe('POST /api/orders — fractional quantity for weight units', () => {
+  const PEPPER = {
+    id: 'prod-pepper',
+    storeId: 'store-1',
+    name: 'Ground Pepper',
+    priceCents: 500,
+    quantity: 20,
+    unit: 'LB',
+    status: 'ACTIVE',
+    variants: [],
+  };
+
+  it('400s INVALID_QUANTITY on a fractional quantity for a UNIT product', async () => {
+    prismaMock.product.findMany.mockResolvedValue([PRODUCT_A] as never); // unit: 'UNIT'
+    const res = await POST(
+      makePost({ ...validBody, items: [{ productId: 'prod-a', quantity: 2.5 }] }),
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('INVALID_QUANTITY');
+  });
+
+  it('accepts and correctly prices a fractional quantity (12.09 lb) for a weight-unit product', async () => {
+    prismaMock.product.findMany.mockResolvedValue([PEPPER] as never);
+    prismaMock.order.create.mockResolvedValue(seededOrder() as never);
+    prismaMock.order.update.mockResolvedValue(seededOrder() as never);
+
+    await POST(
+      makePost({
+        ...validBody,
+        items: [{ productId: 'prod-pepper', quantity: 12.09 }],
+      }),
+    );
+
+    const createArgs = prismaMock.order.create.mock.calls[0]?.[0];
+    // 500 * 12.09 = 6045 exactly, rounded to the nearest cent either way.
+    expect(createArgs?.data?.subtotalCents).toBe(6045);
+    expect(createArgs?.data?.lineItems).toEqual([
+      {
+        productId: 'prod-pepper',
+        name: 'Ground Pepper',
+        priceCents: 500,
+        quantity: 12.09,
+        unit: 'LB',
+      },
+    ]);
+  });
+
+  it('rounds a float-arithmetic-prone quantity to the nearest cent (no fractional-cent DB write)', async () => {
+    prismaMock.product.findMany.mockResolvedValue([PEPPER] as never);
+    prismaMock.order.create.mockResolvedValue(seededOrder() as never);
+    prismaMock.order.update.mockResolvedValue(seededOrder() as never);
+
+    // 333 * 1.005 = 334.665 — a case that would produce a fractional cent
+    // without rounding. Use PEPPER's priceCents via a quantity chosen to
+    // exercise the rounding path deterministically.
+    await POST(
+      makePost({
+        ...validBody,
+        items: [{ productId: 'prod-pepper', quantity: 0.333 }], // rounds to 0.33 lb
+      }),
+    );
+
+    const createArgs = prismaMock.order.create.mock.calls[0]?.[0];
+    expect(Number.isInteger(createArgs?.data?.subtotalCents)).toBe(true);
+    expect(createArgs?.data?.lineItems).toEqual([
+      expect.objectContaining({ quantity: 0.33 }), // rounded from 0.333
+    ]);
+  });
+
+  it('checks stock against the fractional quantity requested', async () => {
+    prismaMock.product.findMany.mockResolvedValue([{ ...PEPPER, quantity: 5 }] as never);
+    const res = await POST(
+      makePost({ ...validBody, items: [{ productId: 'prod-pepper', quantity: 12.09 }] }),
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('PRODUCT_UNAVAILABLE');
+  });
+});
+
+describe('POST /api/orders — happy path', () => {
+  it('creates an Order priced from the DB (not the client) and returns 201 + paymentUrl', async () => {
     prismaMock.order.create.mockResolvedValue(seededOrder() as never);
     prismaMock.order.update.mockResolvedValue(
       seededOrder({
-        providerChargeId: 'bictorys_charge_test_1',
-        paymentUrl: 'https://checkout.test/bictorys/pay/test',
+        providerChargeId: 'cs_test_1',
+        paymentUrl: 'https://checkout.stripe.com/pay/cs_test_1',
       }) as never,
     );
 
-    const res = await POST(
-      makePost({ amount: 1000, currency: 'XOF' }, { idempotencyKey: 'idem-key-1' }),
-    );
+    const res = await POST(makePost(validBody));
 
     expect(res.status).toBe(201);
     const body = await res.json();
     expect(body).toMatchObject({
       id: 'order_seed_1',
-      paymentUrl: 'https://checkout.test/bictorys/pay/test',
+      paymentUrl: 'https://checkout.stripe.com/pay/cs_test_1',
       status: 'PENDING',
     });
-    expect(prismaMock.order.create).toHaveBeenCalledOnce();
+
+    const createArgs = prismaMock.order.create.mock.calls[0]?.[0];
+    expect(createArgs?.data).toMatchObject({
+      storeId: 'store-1',
+      userId: null,
+      amount: 3600, // 2 * 1800, priced from the DB row — client sent no price at all
+      subtotalCents: 3600,
+      currency: 'USD',
+      status: 'PENDING',
+      provider: 'stripe_platform',
+    });
     expect(mockExecute).toHaveBeenCalledOnce();
+
+    const updateArgs = prismaMock.order.update.mock.calls[0]?.[0];
+    expect(updateArgs?.data).toMatchObject({
+      providerChargeId: 'cs_test_1',
+      paymentUrl: 'https://checkout.stripe.com/pay/cs_test_1',
+    });
   });
 
-  it('POST persists Order with idempotencyKey, providerChargeId, paymentUrl set', async () => {
-    prismaMock.order.findUnique.mockResolvedValue(null as never);
+  it('adds the store-configured delivery fee to the order total (Phase 5)', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({ ...STORE, deliveryFeeCents: 500 } as never);
     prismaMock.order.create.mockResolvedValue(seededOrder() as never);
     prismaMock.order.update.mockResolvedValue(seededOrder() as never);
 
-    await POST(
-      makePost(
-        { amount: 5000, currency: 'XOF', metadata: { source: 'web' } },
-        { idempotencyKey: 'unique-idem-1' },
-      ),
-    );
+    await POST(makePost(validBody));
 
-    // create call carries idempotencyKey + amount + currency + metadata
     const createArgs = prismaMock.order.create.mock.calls[0]?.[0];
     expect(createArgs?.data).toMatchObject({
-      userId: 'user-1',
-      amount: 5000,
-      currency: 'XOF',
-      provider: 'bictorys',
-      status: 'PENDING',
-      idempotencyKey: 'unique-idem-1',
-      metadata: { source: 'web' },
+      subtotalCents: 3600,
+      deliveryFeeCents: 500,
+      amount: 4100,
     });
+  });
 
-    // update call carries providerChargeId + paymentUrl from the (mocked) charge
-    expect(prismaMock.order.update).toHaveBeenCalledOnce();
-    const updateArgs = prismaMock.order.update.mock.calls[0]?.[0];
-    expect(updateArgs?.data).toMatchObject({
-      providerChargeId: 'bictorys_charge_test_1',
-      paymentUrl: 'https://checkout.test/bictorys/pay/test',
-    });
+  it('sets Order.userId when the caller happens to be logged in', async () => {
+    mockOptionalAuth.mockResolvedValue({ user: { sub: 'user-1', email: 'me@example.com' } });
+    prismaMock.order.create.mockResolvedValue(seededOrder({ userId: 'user-1' }) as never);
+    prismaMock.order.update.mockResolvedValue(seededOrder({ userId: 'user-1' }) as never);
+
+    await POST(makePost(validBody));
+
+    const createArgs = prismaMock.order.create.mock.calls[0]?.[0];
+    expect(createArgs?.data?.userId).toBe('user-1');
   });
 });
 
-describe('POST /api/orders [Wave 1] — idempotency', () => {
-  it('POST replays returns prior order on same Idempotency-Key', async () => {
-    // Existing PENDING order with same idempotency key
+describe('POST /api/orders — idempotency (CR-02)', () => {
+  it('replays the prior outcome on the same Idempotency-Key + same cart', async () => {
+    const hash = fingerprintBody({
+      storeId: 'store-1',
+      items: [{ productId: 'prod-a', quantity: 2 }],
+    });
     prismaMock.order.findUnique.mockResolvedValue(
       seededOrder({
         id: 'order_existing',
-        idempotencyKey: 'replay-key',
-        paymentUrl: 'https://checkout.test/bictorys/pay/existing',
+        idempotencyBodyHash: hash,
+        paymentUrl: 'https://checkout.stripe.com/pay/existing',
       }) as never,
     );
 
-    const res = await POST(
-      makePost({ amount: 1000, currency: 'XOF' }, { idempotencyKey: 'replay-key' }),
-    );
+    const res = await POST(makePost(validBody, { idempotencyKey: 'replay-key' }));
 
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toMatchObject({
       id: 'order_existing',
-      paymentUrl: 'https://checkout.test/bictorys/pay/existing',
-      status: 'PENDING',
+      paymentUrl: 'https://checkout.stripe.com/pay/existing',
     });
-    // No new charge attempted
     expect(prismaMock.order.create).not.toHaveBeenCalled();
     expect(mockExecute).not.toHaveBeenCalled();
   });
 
-  // WR-01 — in-flight replay. If the prior request crashed between order.create
-  // and the post-charge update, the row is PENDING with paymentUrl=null. The
-  // client must NOT receive a 200 with paymentUrl=null (would dead-redirect).
-  it('POST replay of PENDING order with null paymentUrl → 503 PAYMENT_IN_FLIGHT', async () => {
+  it('422s IDEMPOTENCY_KEY_BODY_MISMATCH when the same key is reused for a different cart', async () => {
     prismaMock.order.findUnique.mockResolvedValue(
-      seededOrder({
-        id: 'order_inflight',
-        status: 'PENDING',
-        paymentUrl: null,
-        idempotencyKey: 'inflight-key',
-      }) as never,
+      seededOrder({ id: 'order_existing', idempotencyBodyHash: 'deadbeef'.repeat(8) }) as never,
     );
 
-    const res = await POST(
-      makePost({ amount: 1000, currency: 'XOF' }, { idempotencyKey: 'inflight-key' }),
+    const res = await POST(makePost(validBody, { idempotencyKey: 'reused-key' }));
+
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.error).toBe('IDEMPOTENCY_KEY_BODY_MISMATCH');
+    expect(prismaMock.order.create).not.toHaveBeenCalled();
+  });
+
+  it('503s PAYMENT_IN_FLIGHT when the prior attempt crashed before a paymentUrl was set', async () => {
+    const hash = fingerprintBody({
+      storeId: 'store-1',
+      items: [{ productId: 'prod-a', quantity: 2 }],
+    });
+    prismaMock.order.findUnique.mockResolvedValue(
+      seededOrder({ id: 'order_inflight', idempotencyBodyHash: hash, paymentUrl: null }) as never,
     );
+
+    const res = await POST(makePost(validBody, { idempotencyKey: 'inflight-key' }));
 
     expect(res.status).toBe(503);
     const body = await res.json();
     expect(body.error).toBe('PAYMENT_IN_FLIGHT');
     expect(res.headers.get('Retry-After')).toBe('5');
-    expect(prismaMock.order.create).not.toHaveBeenCalled();
-    expect(mockExecute).not.toHaveBeenCalled();
   });
 
-  it('POST replay of FAILED order returns 503 PAYMENT_PROVIDER_UNAVAILABLE (Pitfall 3)', async () => {
+  it('503s PAYMENT_PROVIDER_UNAVAILABLE when replaying a terminal FAILED order', async () => {
+    const hash = fingerprintBody({
+      storeId: 'store-1',
+      items: [{ productId: 'prod-a', quantity: 2 }],
+    });
     prismaMock.order.findUnique.mockResolvedValue(
-      seededOrder({
-        id: 'order_failed_replay',
-        status: 'FAILED',
-        idempotencyKey: 'failed-replay-key',
-      }) as never,
+      seededOrder({ id: 'order_failed', idempotencyBodyHash: hash, status: 'FAILED' }) as never,
     );
 
-    const res = await POST(
-      makePost({ amount: 1000, currency: 'XOF' }, { idempotencyKey: 'failed-replay-key' }),
-    );
+    const res = await POST(makePost(validBody, { idempotencyKey: 'failed-key' }));
 
     expect(res.status).toBe(503);
     const body = await res.json();
     expect(body.error).toBe('PAYMENT_PROVIDER_UNAVAILABLE');
     expect(prismaMock.order.create).not.toHaveBeenCalled();
   });
-
-  it('POST 400 IDEMPOTENCY_KEY_REQUIRED when header missing', async () => {
-    const res = await POST(makePost({ amount: 1000, currency: 'XOF' }, { idempotencyKey: null }));
-    expect(res.status).toBe(400);
-    const body = await res.json();
-    expect(body.error).toBe('IDEMPOTENCY_KEY_REQUIRED');
-    expect(prismaMock.order.findUnique).not.toHaveBeenCalled();
-  });
-
-  // CR-02 — body fingerprint binding for idempotency-key replays.
-  // A leaked / reused key with a different (amount, currency) MUST NOT
-  // return the prior order's paymentUrl. Stripe-grade semantics: 422.
-  it('POST replay with same key + DIFFERENT amount → 422 IDEMPOTENCY_KEY_BODY_MISMATCH', async () => {
-    // Existing PENDING order created under amount=1000 (no stored hash —
-    // exercises the defensive fallback that compares amount + currency).
-    prismaMock.order.findUnique.mockResolvedValue(
-      seededOrder({
-        id: 'order_existing',
-        amount: 1000,
-        currency: 'XOF',
-        idempotencyKey: 'replay-mismatch-key',
-        metadata: null,
-      }) as never,
-    );
-
-    const res = await POST(
-      makePost({ amount: 9999, currency: 'XOF' }, { idempotencyKey: 'replay-mismatch-key' }),
-    );
-
-    expect(res.status).toBe(422);
-    const body = await res.json();
-    expect(body.error).toBe('IDEMPOTENCY_KEY_BODY_MISMATCH');
-    // No new charge attempted, no new row created.
-    expect(prismaMock.order.create).not.toHaveBeenCalled();
-    expect(mockExecute).not.toHaveBeenCalled();
-  });
-
-  it('POST replay with same key + same amount + DIFFERENT currency → 422', async () => {
-    prismaMock.order.findUnique.mockResolvedValue(
-      seededOrder({
-        id: 'order_existing_currency',
-        amount: 1000,
-        currency: 'XOF',
-        idempotencyKey: 'replay-currency-mismatch',
-        metadata: null,
-      }) as never,
-    );
-
-    const res = await POST(
-      makePost({ amount: 1000, currency: 'USD' }, { idempotencyKey: 'replay-currency-mismatch' }),
-    );
-
-    expect(res.status).toBe(422);
-    const body = await res.json();
-    expect(body.error).toBe('IDEMPOTENCY_KEY_BODY_MISMATCH');
-  });
-
-  it('POST replay using stored fingerprint hash matches → 200', async () => {
-    // Re-create a row that has a stored fingerprint matching {amount:1000,currency:XOF}.
-    const hash = fingerprintBody({ amount: 1000, currency: 'XOF' });
-    prismaMock.order.findUnique.mockResolvedValue(
-      seededOrder({
-        id: 'order_existing_hash_match',
-        amount: 1000,
-        currency: 'XOF',
-        idempotencyKey: 'replay-hash-match',
-        paymentUrl: 'https://checkout.test/bictorys/pay/existing',
-        metadata: { idempotencyBodyHash: hash } as never,
-      }) as never,
-    );
-
-    const res = await POST(
-      makePost({ amount: 1000, currency: 'XOF' }, { idempotencyKey: 'replay-hash-match' }),
-    );
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.id).toBe('order_existing_hash_match');
-    expect(prismaMock.order.create).not.toHaveBeenCalled();
-  });
-
-  it('POST replay using stored fingerprint hash that DIFFERS → 422', async () => {
-    prismaMock.order.findUnique.mockResolvedValue(
-      seededOrder({
-        id: 'order_existing_hash_mismatch',
-        amount: 1000,
-        currency: 'XOF',
-        idempotencyKey: 'replay-hash-mismatch',
-        // Hash that does not correspond to the current body — even though
-        // amount/currency happen to match in the row, the stored hash takes
-        // precedence so the replay is refused.
-        metadata: {
-          idempotencyBodyHash: 'deadbeef'.repeat(8),
-        } as never,
-      }) as never,
-    );
-
-    const res = await POST(
-      makePost({ amount: 1000, currency: 'XOF' }, { idempotencyKey: 'replay-hash-mismatch' }),
-    );
-    expect(res.status).toBe(422);
-    const body = await res.json();
-    expect(body.error).toBe('IDEMPOTENCY_KEY_BODY_MISMATCH');
-  });
-
-  it('POST 400 IDEMPOTENCY_KEY_INVALID when key exceeds 200 chars', async () => {
-    const huge = 'x'.repeat(201);
-    const res = await POST(makePost({ amount: 1000, currency: 'XOF' }, { idempotencyKey: huge }));
-    expect(res.status).toBe(400);
-    const body = await res.json();
-    expect(body.error).toBe('IDEMPOTENCY_KEY_INVALID');
-    // Length check happens BEFORE the DB lookup.
-    expect(prismaMock.order.findUnique).not.toHaveBeenCalled();
-  });
-
-  it('POST stores idempotencyBodyHash in metadata at insert time', async () => {
-    prismaMock.order.findUnique.mockResolvedValue(null as never);
-    prismaMock.order.create.mockResolvedValue(seededOrder() as never);
-    prismaMock.order.update.mockResolvedValue(seededOrder() as never);
-
-    await POST(
-      makePost(
-        { amount: 2500, currency: 'XOF', metadata: { source: 'web' } },
-        { idempotencyKey: 'fingerprint-store-key' },
-      ),
-    );
-
-    const createArgs = prismaMock.order.create.mock.calls[0]?.[0];
-    expect(createArgs?.data.metadata).toMatchObject({
-      source: 'web',
-      idempotencyBodyHash: expect.any(String),
-    });
-    // Hash is stable for the same canonical body.
-    const expectedHash = fingerprintBody({ amount: 2500, currency: 'XOF' });
-    expect((createArgs?.data.metadata as { idempotencyBodyHash: string }).idempotencyBodyHash).toBe(
-      expectedHash,
-    );
-  });
 });
 
-describe('POST /api/orders [Wave 1] — circuit breaker', () => {
-  it('POST circuit open returns 503 PAYMENT_PROVIDER_UNAVAILABLE', async () => {
-    prismaMock.order.findUnique.mockResolvedValue(null as never);
-    prismaMock.order.create.mockResolvedValue(seededOrder({ id: 'order_circuit_1' }) as never);
-    prismaMock.order.update.mockResolvedValue(
-      seededOrder({ id: 'order_circuit_1', status: 'FAILED' }) as never,
-    );
-
-    const retryAt = new Date(Date.now() + 60_000);
-    mockExecute.mockImplementationOnce(async () => {
-      throw new CircuitOpenError('bictorys.charge', retryAt);
+describe('POST /api/orders — provider failure handling', () => {
+  it('503s PAYMENT_PROVIDER_UNCONFIGURED when Stripe env is missing (no Order row created)', async () => {
+    mockGetProvider.mockImplementation(() => {
+      throw new PaymentProviderUnconfiguredError();
     });
 
-    const res = await POST(
-      makePost({ amount: 1000, currency: 'XOF' }, { idempotencyKey: 'circuit-key' }),
+    const res = await POST(makePost(validBody));
+
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.error).toBe('PAYMENT_PROVIDER_UNCONFIGURED');
+    expect(prismaMock.order.create).not.toHaveBeenCalled();
+  });
+
+  it('503s PAYMENT_PROVIDER_UNAVAILABLE + marks the Order FAILED when the circuit is open', async () => {
+    prismaMock.order.create.mockResolvedValue(seededOrder({ id: 'order_circuit' }) as never);
+    prismaMock.order.update.mockResolvedValue(
+      seededOrder({ id: 'order_circuit', status: 'FAILED' }) as never,
     );
+    const retryAt = new Date(Date.now() + 60_000);
+    mockExecute.mockImplementationOnce(async () => {
+      throw new CircuitOpenError('stripe.charge', retryAt);
+    });
+
+    const res = await POST(makePost(validBody));
 
     expect(res.status).toBe(503);
     const body = await res.json();
     expect(body.error).toBe('PAYMENT_PROVIDER_UNAVAILABLE');
     expect(res.headers.get('Retry-After')).toBeTruthy();
-
-    // Order was created PENDING then marked FAILED so subsequent replays
-    // hit the Pitfall 3 branch (return 503, not 200 with empty paymentUrl).
-    expect(prismaMock.order.update).toHaveBeenCalledOnce();
-    const updateArgs = prismaMock.order.update.mock.calls[0]?.[0];
-    expect(updateArgs?.data).toMatchObject({ status: 'FAILED' });
+    expect(prismaMock.order.update).toHaveBeenCalledWith({
+      where: { id: 'order_circuit' },
+      data: { status: 'FAILED' },
+    });
   });
-});
 
-describe('POST /api/orders [Wave 1] — config guards', () => {
-  it('POST without BICTORYS_API_KEY returns 503 PAYMENT_PROVIDER_UNCONFIGURED', async () => {
-    prismaMock.order.findUnique.mockResolvedValue(null as never);
-    // Simulate Pitfall 7 — getProvider throws because env was wiped.
-    mockGetProvider.mockImplementationOnce(() => {
-      throw new PaymentProviderUnconfiguredError();
+  it('502s PAYMENT_FAILED + marks the Order FAILED when Stripe itself throws', async () => {
+    prismaMock.order.create.mockResolvedValue(seededOrder({ id: 'order_stripe_err' }) as never);
+    prismaMock.order.update.mockResolvedValue(
+      seededOrder({ id: 'order_stripe_err', status: 'FAILED' }) as never,
+    );
+    mockExecute.mockImplementationOnce(async () => {
+      throw new Error('Stripe checkout session creation failed: card declined');
     });
 
-    const res = await POST(
-      makePost({ amount: 1000, currency: 'XOF' }, { idempotencyKey: 'no-env-key' }),
-    );
+    const res = await POST(makePost(validBody));
 
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(502);
     const body = await res.json();
-    expect(body.error).toBe('PAYMENT_PROVIDER_UNCONFIGURED');
-    // No Order row was inserted because we bailed before create()
-    expect(prismaMock.order.create).not.toHaveBeenCalled();
-    expect(mockExecute).not.toHaveBeenCalled();
-  });
-
-  // WR-06 — fail closed in production when PUBLIC_URL is unset, instead of
-  // silently issuing real charges with localhost redirect URLs.
-  it('POST in production with PUBLIC_URL unset → 503 PAYMENT_PROVIDER_UNCONFIGURED, no Order created', async () => {
-    prismaMock.order.findUnique.mockResolvedValue(null as never);
-    const prevNodeEnv = process.env.NODE_ENV;
-    delete process.env.PUBLIC_URL;
-    // node accepts read-only NODE_ENV; cast around the type.
-    (process.env as Record<string, string>).NODE_ENV = 'production';
-
-    try {
-      const res = await POST(
-        makePost({ amount: 1000, currency: 'XOF' }, { idempotencyKey: 'no-public-url-key' }),
-      );
-
-      expect(res.status).toBe(503);
-      const body = await res.json();
-      expect(body.error).toBe('PAYMENT_PROVIDER_UNCONFIGURED');
-      // No Order row inserted; we bailed before create().
-      expect(prismaMock.order.create).not.toHaveBeenCalled();
-      expect(mockExecute).not.toHaveBeenCalled();
-    } finally {
-      if (prevNodeEnv !== undefined) {
-        (process.env as Record<string, string>).NODE_ENV = prevNodeEnv;
-      } else {
-        delete (process.env as Record<string, string>).NODE_ENV;
-      }
-      // beforeEach restores PUBLIC_URL for the next test.
-    }
-  });
-
-  it('POST in dev with PUBLIC_URL unset → still uses localhost fallback (dev parity)', async () => {
-    prismaMock.order.findUnique.mockResolvedValue(null as never);
-    prismaMock.order.create.mockResolvedValue(seededOrder() as never);
-    prismaMock.order.update.mockResolvedValue(seededOrder() as never);
-    delete process.env.PUBLIC_URL;
-    // NODE_ENV stays 'test' (vitest default); the route's localhost fallback applies.
-
-    const res = await POST(
-      makePost({ amount: 1000, currency: 'XOF' }, { idempotencyKey: 'dev-fallback-key' }),
-    );
-
-    expect(res.status).toBe(201);
+    expect(body.error).toBe('PAYMENT_FAILED');
   });
 });
 
-describe('POST /api/orders [Wave 1] — validation', () => {
-  it('POST 400 VALIDATION_FAILED on non-integer amount', async () => {
-    prismaMock.order.findUnique.mockResolvedValue(null as never);
-    const res = await POST(
-      makePost({ amount: 99.5, currency: 'XOF' }, { idempotencyKey: 'val-1' }),
+describe('POST /api/orders — Stripe Connect routing (Phase 3)', () => {
+  it('charges via the platform path when the store is not ACTIVE on Connect', async () => {
+    prismaMock.order.create.mockResolvedValue(
+      seededOrder({ provider: 'stripe_platform' }) as never,
     );
-    expect(res.status).toBe(400);
-    const body = await res.json();
-    expect(body.error).toBe('VALIDATION_FAILED');
-    expect(prismaMock.order.create).not.toHaveBeenCalled();
+    prismaMock.order.update.mockResolvedValue(seededOrder() as never);
+
+    await POST(makePost(validBody));
+
+    const provider = mockGetProvider.mock.results[0]?.value as {
+      charge: ReturnType<typeof vi.fn>;
+      chargeConnected: ReturnType<typeof vi.fn>;
+    };
+    expect(provider.charge).toHaveBeenCalledOnce();
+    expect(provider.chargeConnected).not.toHaveBeenCalled();
+    const createArgs = prismaMock.order.create.mock.calls[0]?.[0];
+    expect(createArgs?.data?.provider).toBe('stripe_platform');
   });
 
-  it('POST 400 VALIDATION_FAILED on negative amount', async () => {
-    prismaMock.order.findUnique.mockResolvedValue(null as never);
-    const res = await POST(
-      makePost({ amount: -100, currency: 'XOF' }, { idempotencyKey: 'val-2' }),
+  it('routes as a destination charge once the store is ACTIVE on Connect', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({
+      ...STORE,
+      stripeAccountId: 'acct_seller_1',
+      stripeOnboardingStatus: 'ACTIVE',
+    } as never);
+    prismaMock.order.create.mockResolvedValue(seededOrder({ provider: 'stripe_connect' }) as never);
+    prismaMock.order.update.mockResolvedValue(
+      seededOrder({
+        provider: 'stripe_connect',
+        providerChargeId: 'cs_connect_1',
+        paymentUrl: 'https://checkout.stripe.com/pay/cs_connect_1',
+      }) as never,
     );
-    expect(res.status).toBe(400);
-    const body = await res.json();
-    expect(body.error).toBe('VALIDATION_FAILED');
+    process.env.COMMISSION_RATE_BP = '600'; // 6%
+
+    const res = await POST(makePost(validBody));
+
+    expect(res.status).toBe(201);
+    const provider = mockGetProvider.mock.results[0]?.value as {
+      charge: ReturnType<typeof vi.fn>;
+      chargeConnected: ReturnType<typeof vi.fn>;
+    };
+    expect(provider.chargeConnected).toHaveBeenCalledOnce();
+    expect(provider.charge).not.toHaveBeenCalled();
+    const chargeArgs = provider.chargeConnected.mock.calls[0]?.[0];
+    expect(chargeArgs).toMatchObject({
+      destinationAccountId: 'acct_seller_1',
+      applicationFeeAmount: 216, // floor(3600 * 600 / 10000)
+    });
+
+    const createArgs = prismaMock.order.create.mock.calls[0]?.[0];
+    expect(createArgs?.data?.provider).toBe('stripe_connect');
+
+    delete process.env.COMMISSION_RATE_BP;
   });
 
-  it('POST 401 when not authenticated (no guest checkout in v1 — D-PAY-03)', async () => {
+  it('still routes as platform when stripeOnboardingStatus is PENDING/RESTRICTED, not just ACTIVE', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({
+      ...STORE,
+      stripeAccountId: 'acct_seller_1',
+      stripeOnboardingStatus: 'RESTRICTED',
+    } as never);
+    prismaMock.order.create.mockResolvedValue(
+      seededOrder({ provider: 'stripe_platform' }) as never,
+    );
+    prismaMock.order.update.mockResolvedValue(seededOrder() as never);
+
+    await POST(makePost(validBody));
+
+    const provider = mockGetProvider.mock.results[0]?.value as {
+      charge: ReturnType<typeof vi.fn>;
+      chargeConnected: ReturnType<typeof vi.fn>;
+    };
+    expect(provider.charge).toHaveBeenCalledOnce();
+    expect(provider.chargeConnected).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /api/orders — seller-facing list (Phase 4)', () => {
+  function makeGetReq(qs = ''): NextRequest {
+    return new NextRequest(`http://test/api/orders${qs}`, { method: 'GET' });
+  }
+
+  it('401s when requireAuth bails', async () => {
+    const { NextResponse } = await import('next/server');
     mockRequireAuth.mockResolvedValueOnce(
       NextResponse.json({ error: 'Missing token' }, { status: 401 }),
     );
-    const res = await POST(
-      makePost({ amount: 1000, currency: 'XOF' }, { idempotencyKey: 'auth-1' }),
-    );
+    const res = await GET(makeGetReq());
     expect(res.status).toBe(401);
-    expect(prismaMock.order.create).not.toHaveBeenCalled();
+  });
+
+  it('404s NO_STORE when the caller has no store yet', async () => {
+    mockRequireAuth.mockResolvedValue({ user: { sub: 'user-1', email: 'me@example.com' } });
+    mockResolveOwnStore.mockResolvedValue(null);
+    const res = await GET(makeGetReq());
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error).toBe('NO_STORE');
+  });
+
+  it('scopes the list to the caller store and never trusts a client-supplied storeId', async () => {
+    mockRequireAuth.mockResolvedValue({ user: { sub: 'user-1', email: 'me@example.com' } });
+    mockResolveOwnStore.mockResolvedValue({ id: 'store-1' } as never);
+    prismaMock.order.findMany.mockResolvedValue([]);
+
+    await GET(makeGetReq());
+
+    const args = prismaMock.order.findMany.mock.calls[0]?.[0];
+    expect(args?.where).toMatchObject({ storeId: 'store-1' });
+  });
+
+  it('filters by ?status= when provided', async () => {
+    mockRequireAuth.mockResolvedValue({ user: { sub: 'user-1', email: 'me@example.com' } });
+    mockResolveOwnStore.mockResolvedValue({ id: 'store-1' } as never);
+    prismaMock.order.findMany.mockResolvedValue([]);
+
+    await GET(makeGetReq('?status=PAID'));
+
+    const args = prismaMock.order.findMany.mock.calls[0]?.[0];
+    expect(args?.where).toMatchObject({ storeId: 'store-1', status: 'PAID' });
+  });
+
+  it('returns items + nextCursor via the shared cursor-pagination shape', async () => {
+    mockRequireAuth.mockResolvedValue({ user: { sub: 'user-1', email: 'me@example.com' } });
+    mockResolveOwnStore.mockResolvedValue({ id: 'store-1' } as never);
+    prismaMock.order.findMany.mockResolvedValue([
+      seededOrder({ id: 'o1' }),
+      seededOrder({ id: 'o2' }),
+    ] as never);
+
+    const res = await GET(makeGetReq());
+    const body = await res.json();
+    expect(body.items.map((o: { id: string }) => o.id)).toEqual(['o1', 'o2']);
+    expect(body.nextCursor).toBeNull();
   });
 });
 
-describe('POST /api/orders [Wave 1] — CSRF', () => {
-  it('POST 403 when CSRF header missing (CF-02 — verifyCsrf before auth)', async () => {
-    const res = await POST(
-      makePost({ amount: 1000, currency: 'XOF' }, { idempotencyKey: 'csrf-1', csrf: 'missing' }),
-    );
-    expect(res.status).toBe(403);
-    expect(mockRequireAuth).not.toHaveBeenCalled();
+describe('POST /api/orders — manual payment methods (Cash App / Zelle)', () => {
+  it('400s PAYMENT_METHOD_UNAVAILABLE for cashapp when the store has no cashAppCashtag', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({ ...STORE, cashAppCashtag: null } as never);
+    const res = await POST(makePost({ ...validBody, paymentMethod: 'cashapp' }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('PAYMENT_METHOD_UNAVAILABLE');
+    expect(prismaMock.order.create).not.toHaveBeenCalled();
+  });
+
+  it('400s PAYMENT_METHOD_UNAVAILABLE for zelle when the store has no zelleContact', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({ ...STORE, zelleContact: null } as never);
+    const res = await POST(makePost({ ...validBody, paymentMethod: 'zelle' }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('PAYMENT_METHOD_UNAVAILABLE');
+  });
+
+  it('creates a cashapp_manual order with no Stripe call and no paymentUrl', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({
+      ...STORE,
+      cashAppCashtag: 'AdaezeShop',
+    } as never);
+    prismaMock.order.create.mockResolvedValue(seededOrder({ provider: 'cashapp_manual' }) as never);
+
+    const res = await POST(makePost({ ...validBody, paymentMethod: 'cashapp' }));
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body).toEqual({ id: 'order_seed_1', paymentUrl: null, status: 'PENDING' });
+
+    const createArgs = prismaMock.order.create.mock.calls[0]?.[0];
+    expect(createArgs?.data).toMatchObject({ provider: 'cashapp_manual', status: 'PENDING' });
+    expect(mockGetProvider).not.toHaveBeenCalled();
+    expect(mockExecute).not.toHaveBeenCalled();
+  });
+
+  it('creates a zelle_manual order with no Stripe call and no paymentUrl', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({
+      ...STORE,
+      zelleContact: 'adaeze@example.com',
+    } as never);
+    prismaMock.order.create.mockResolvedValue(seededOrder({ provider: 'zelle_manual' }) as never);
+
+    const res = await POST(makePost({ ...validBody, paymentMethod: 'zelle' }));
+    expect(res.status).toBe(201);
+    const createArgs = prismaMock.order.create.mock.calls[0]?.[0];
+    expect(createArgs?.data).toMatchObject({ provider: 'zelle_manual' });
+    expect(mockGetProvider).not.toHaveBeenCalled();
+  });
+
+  it('defaults to card (existing Stripe behavior) when paymentMethod is omitted', async () => {
+    prismaMock.order.create.mockResolvedValue(seededOrder() as never);
+    await POST(makePost(validBody)); // validBody has no paymentMethod field at all
+    expect(mockGetProvider).toHaveBeenCalled();
+  });
+});
+
+describe('source invariants', () => {
+  it("route source contains runtime='nodejs' and withRequestContext", async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const src = fs.readFileSync(path.join(__dirname, 'route.ts'), 'utf8');
+    expect(src).toMatch(/export\s+const\s+runtime\s*=\s*['"]nodejs['"]/);
+    expect(src).toContain('withRequestContext');
   });
 });

@@ -34,7 +34,20 @@ const USER_SELECT = {
   status: true,
   emailVerifiedAt: true,
   createdAt: true,
+  // One store per owned Organization in the MVP (no multi-store sellers
+  // yet) — flattened to a single `store` field below so the admin UI can
+  // show "Store > User > email > Role" without knowing about Organization.
+  ownedOrganizations: {
+    select: { store: { select: { slug: true, name: true } } },
+  },
 } as const satisfies Prisma.UserSelect;
+
+function flattenStore<
+  T extends { ownedOrganizations: { store: { slug: string; name: string } | null }[] },
+>(user: T): Omit<T, 'ownedOrganizations'> & { store: { slug: string; name: string } | null } {
+  const { ownedOrganizations, ...rest } = user;
+  return { ...rest, store: ownedOrganizations[0]?.store ?? null };
+}
 
 const Q_MAX = 200;
 
@@ -76,8 +89,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     });
 
     const page = buildPage(rows, limit);
-    return NextResponse.json(page, {
-      headers: { 'x-request-id': ctx.requestId },
-    });
+    return NextResponse.json(
+      { ...page, items: page.items.map(flattenStore) },
+      { headers: { 'x-request-id': ctx.requestId } },
+    );
   });
 }

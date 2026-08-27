@@ -73,6 +73,19 @@ describe('POST /api/auth/signup', () => {
     expect(outboxArg?.payload?.to).toBe('new@example.com');
   });
 
+  it('passes through the optional name field on user.create', async () => {
+    prismaMock.user.findUnique.mockResolvedValue(null);
+    prismaMock.user.create.mockResolvedValue({ id: 'u-named' } as never);
+    prismaMock.verificationCode.create.mockResolvedValue({} as never);
+
+    const res = await POST(
+      makeReq({ email: 'named@example.com', password: 'a-strong-passphrase', name: 'Adaeze O.' }),
+    );
+    expect(res.status).toBe(201);
+    const createArg = prismaMock.user.create.mock.calls[0]?.[0];
+    expect(createArg?.data?.name).toBe('Adaeze O.');
+  });
+
   it('returns identical 201 + dummy-bcrypts on existing email (enumeration-resist)', async () => {
     prismaMock.user.findUnique.mockResolvedValue({ id: 'u-existing' } as never);
 

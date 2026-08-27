@@ -61,7 +61,7 @@ interface WRow {
   amount: number;
   currency: string;
   status: string;
-  destination: { method: string; phone: string } | unknown;
+  destination: { method: string; cashtag: string } | unknown;
   provider: string;
   providerPayoutId: string | null;
   failureReason: string | null;
@@ -76,10 +76,10 @@ function wrow(overrides: Partial<WRow> = {}): WRow {
     id,
     userId: overrides.userId ?? 'user_1',
     amount: overrides.amount ?? 5000,
-    currency: overrides.currency ?? 'XOF',
+    currency: overrides.currency ?? 'USD',
     status: overrides.status ?? 'PENDING',
-    destination: overrides.destination ?? { method: 'WAVE', phone: '+221770000000' },
-    provider: overrides.provider ?? 'bictorys',
+    destination: overrides.destination ?? { method: 'CASH_APP', cashtag: '$seed_seller' },
+    provider: overrides.provider ?? 'manual',
     providerPayoutId: overrides.providerPayoutId ?? null,
     failureReason: overrides.failureReason ?? null,
     requestedAt: overrides.requestedAt ?? new Date('2026-05-01T00:00:00Z'),
