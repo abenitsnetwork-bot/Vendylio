@@ -32,9 +32,18 @@ export function CtaFooter() {
           <p className="mt-0.5 text-xs text-muted-foreground">© 2026 Vendylio · Maryland, USA</p>
         </div>
         <div className="flex flex-wrap items-center gap-6 text-sm text-muted-foreground">
-          <span>Privacy</span>
-          <span>Terms</span>
-          <span>Contact</span>
+          <Link href="/privacy" className="hover:text-foreground">
+            Privacy
+          </Link>
+          <Link href="/terms" className="hover:text-foreground">
+            Terms
+          </Link>
+          <Link href="/refund-policy" className="hover:text-foreground">
+            Refund Policy
+          </Link>
+          <a href="mailto:no-reply@vendylio.com" className="hover:text-foreground">
+            Contact
+          </a>
           <span>Instagram</span>
         </div>
       </footer>
