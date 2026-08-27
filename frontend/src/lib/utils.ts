@@ -31,3 +31,9 @@ export function isTikTokBrowser(): boolean {
   const ua = navigator.userAgent || '';
   return /TikTok|musical_ly|BytedanceWebview/i.test(ua);
 }
+
+/** First name for greetings/avatars — falls back to the email's local part. */
+export function sellerFirstName(user: { name: string | null; email: string }): string {
+  const first = user.name?.trim().split(/\s+/)[0];
+  return first || user.email.split('@')[0] || user.email;
+}

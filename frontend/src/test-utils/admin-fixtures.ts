@@ -16,7 +16,6 @@
 import { vi } from 'vitest';
 import bcrypt from 'bcryptjs';
 import type { User, Order, OutboxEvent, EmailJob, Withdrawal, Prisma } from '@prisma/client';
-import type { PaymentProvider, ChargeResult } from '@/lib/server/payments/provider';
 
 const FROZEN_NOW = new Date('2026-05-08T12:00:00.000Z');
 
@@ -97,30 +96,47 @@ export function seedSuspendedUser(overrides: UserOverrides = {}): User {
 
 interface OrderOverrides {
   id?: string;
-  userId?: string;
+  storeId?: string;
+  userId?: string | null;
   amount?: number;
   currency?: string;
-  status?: 'PENDING' | 'PAID' | 'EXPIRED' | 'FAILED' | 'REFUNDED';
+  status?:
+    | 'PENDING'
+    | 'PAID'
+    | 'PREPARING'
+    | 'READY'
+    | 'OUT_FOR_DELIVERY'
+    | 'DELIVERED'
+    | 'CANCELLED'
+    | 'REFUNDED'
+    | 'EXPIRED'
+    | 'FAILED';
   idempotencyKey?: string | null;
   provider?: string;
   paymentUrl?: string | null;
   providerChargeId?: string | null;
-  metadata?: Prisma.JsonValue | null;
+  lineItems?: Prisma.JsonValue;
 }
 
 export function seedOrder(overrides: OrderOverrides = {}): Order {
   return {
     id: overrides.id ?? `order_${Math.random().toString(36).slice(2, 10)}`,
-    userId: overrides.userId ?? 'user_seed_1',
+    storeId: overrides.storeId ?? 'store_seed_1',
+    userId: overrides.userId ?? null,
     amount: overrides.amount ?? 1000,
-    currency: overrides.currency ?? 'XOF',
+    currency: overrides.currency ?? 'USD',
     status: overrides.status ?? 'PENDING',
+    subtotalCents: overrides.amount ?? 1000,
+    deliveryFeeCents: 0,
+    taxCents: 0,
     customerEmail: null,
     customerPhone: null,
     customerName: null,
-    metadata: (overrides.metadata ?? null) as Prisma.JsonValue,
+    deliveryAddress: null,
+    lineItems: (overrides.lineItems ?? []) as Prisma.JsonValue,
     idempotencyKey: overrides.idempotencyKey ?? null,
-    provider: overrides.provider ?? 'bictorys',
+    idempotencyBodyHash: null,
+    provider: overrides.provider ?? 'stripe_platform',
     providerChargeId: overrides.providerChargeId ?? null,
     paymentUrl: overrides.paymentUrl ?? null,
     paymentMethod: null,
@@ -144,7 +160,7 @@ interface OutboxOverrides {
 export function seedOutbox(overrides: OutboxOverrides = {}): OutboxEvent {
   return {
     id: overrides.id ?? `outbox_${Math.random().toString(36).slice(2, 10)}`,
-    kind: overrides.kind ?? 'notification.payment_received',
+    kind: overrides.kind ?? 'email.verification_code',
     payload: (overrides.payload ?? { foo: 'bar' }) as Prisma.JsonValue,
     status: overrides.status ?? 'PENDING',
     attempts: overrides.attempts ?? 0,
@@ -252,37 +268,6 @@ export function mockRedis(map: Record<string, string | number> = {}): MockRedisS
   };
 }
 
-/**
- * Stub PaymentProvider for orders/route.test.ts. By default returns a happy
- * ChargeResult; pass `{ openCircuit: true }` to make `.charge()` reject so
- * the CircuitBreaker can be exercised.
- */
-export interface MockBictorysOptions {
-  openCircuit?: boolean;
-  chargeResult?: ChargeResult;
-  chargeError?: Error;
-}
-
-export function mockBictorysProvider(
-  opts: MockBictorysOptions = {},
-): PaymentProvider & { charge: ReturnType<typeof vi.fn> } {
-  const charge = opts.openCircuit
-    ? vi.fn(async () => {
-        throw opts.chargeError ?? new Error('upstream provider failure');
-      })
-    : vi.fn(async () => ({
-        providerChargeId: 'bictorys_charge_test_1',
-        paymentUrl: 'https://checkout.test/bictorys/pay/test',
-        status: 'PENDING' as const,
-        ...(opts.chargeResult ?? {}),
-      }));
-
-  return {
-    name: 'bictorys',
-    charge,
-  };
-}
-
 // ────────────────────────────────────────────────────────────────────
 // Phase 4 Plan 04-01 — withdrawal + PIN fixtures
 //
@@ -348,13 +333,13 @@ export function seedWithdrawal(overrides: WithdrawalOverrides = {}): Withdrawal 
     id: overrides.id ?? `withdrawal_${Math.random().toString(36).slice(2, 10)}`,
     userId: overrides.userId ?? 'user_seed_1',
     amount: overrides.amount ?? 1000,
-    currency: overrides.currency ?? 'XOF',
+    currency: overrides.currency ?? 'USD',
     status: overrides.status ?? 'PENDING',
     destination: (overrides.destination ?? {
-      method: 'WAVE',
-      phone: '+221770000001',
+      method: 'CASH_APP',
+      cashtag: '$seed_seller',
     }) as Prisma.JsonValue,
-    provider: overrides.provider ?? 'bictorys',
+    provider: overrides.provider ?? 'manual',
     providerPayoutId: overrides.providerPayoutId ?? null,
     failureReason: overrides.failureReason ?? null,
     requestedAt: overrides.requestedAt ?? FROZEN_NOW,
