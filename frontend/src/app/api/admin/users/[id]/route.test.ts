@@ -50,6 +50,7 @@ describe('/api/admin/users/[id] — detail', () => {
       status: 'ACTIVE',
       emailVerifiedAt: new Date('2026-01-01T00:00:00Z'),
       createdAt: new Date('2026-05-01T00:00:00Z'),
+      ownedOrganizations: [],
     } as never);
 
     const res = await GET(makeGet('http://test/api/admin/users/u1'), ctxWith('u1'));
@@ -57,6 +58,25 @@ describe('/api/admin/users/[id] — detail', () => {
     const body = (await res.json()) as { user: { id: string; email: string } };
     expect(body.user.id).toBe('u1');
     expect(body.user).not.toHaveProperty('passwordHash');
+  });
+
+  it('GET flattens ownedOrganizations[0].store into a single store field', async () => {
+    prismaMock.user.findUnique.mockResolvedValueOnce({
+      id: 'seller1',
+      email: 'seller1@test.local',
+      name: null,
+      avatarUrl: null,
+      role: 'USER',
+      status: 'ACTIVE',
+      emailVerifiedAt: null,
+      createdAt: new Date('2026-05-01T00:00:00Z'),
+      ownedOrganizations: [{ store: { slug: 'demo-store', name: 'Demo Store' } }],
+    } as never);
+
+    const res = await GET(makeGet('http://test/api/admin/users/seller1'), ctxWith('seller1'));
+    const body = (await res.json()) as { user: { store: { slug: string; name: string } | null } };
+    expect(body.user.store).toEqual({ slug: 'demo-store', name: 'Demo Store' });
+    expect(body.user).not.toHaveProperty('ownedOrganizations');
   });
 
   it('GET returns 404 USER_NOT_FOUND for a missing user', async () => {

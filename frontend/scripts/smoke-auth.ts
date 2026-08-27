@@ -16,6 +16,7 @@
 // env var. Forks that override `COOKIE_PREFIX` must update the regex in
 // csrfFromCookies().
 
+import { pathToFileURL } from 'node:url';
 import { PrismaClient } from '@prisma/client';
 
 const BASE_URL = process.env.SMOKE_BASE_URL ?? 'http://localhost:3000';
@@ -150,7 +151,7 @@ export async function main(): Promise<number> {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main()
     .then((code) => process.exit(code))
     .catch((err) => {

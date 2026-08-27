@@ -1,7 +1,7 @@
 // OBS-01 — Admin outbox visibility (read-only, paginated).
 //
 // Threat T-03-04-04 (field-name confusion): the schema column is `kind`
-// (free-form dispatcher routing key, e.g. "notification.payment_received").
+// (free-form dispatcher routing key, e.g. "email.verification_code").
 // We standardise on `kind` everywhere — query param + response field both
 // named `kind` (RESEARCH.md Pitfall 4).
 //

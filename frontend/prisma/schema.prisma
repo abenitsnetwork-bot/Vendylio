@@ -85,6 +85,41 @@ model AdminAction {
 }
 
 // ───────────────────────────────────────────────────────────────────────
+// Landing page content — SUPERADMIN-editable, platform-wide (not per-store).
+// `key` is a fixed manifest defined in lib/siteImageKeys.ts, not a free-form
+// CMS field list; a row simply doesn't exist yet for a key nobody has
+// uploaded an image for, and the public read falls back to a UI placeholder.
+// ───────────────────────────────────────────────────────────────────────
+model SiteImage {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  url       String
+  altText   String?
+  updatedAt DateTime @updatedAt
+}
+
+// Platform testimonials ("what our sellers say" on the homepage) — distinct
+// from the per-order `Review` model (Phase 8): a Review is a buyer's rating
+// of a specific product/order inside one store, a Testimonial is a seller's
+// quote about using Vendylio itself. Admin-authored content, not tied to any
+// Order/Product row.
+model Testimonial {
+  id        String   @id @default(cuid())
+  name      String
+  location  String?
+  detail    String?
+  quote     String
+  avatarUrl String?
+  rating    Int?
+  sortOrder Int      @default(0)
+  visible   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([visible, sortOrder])
+}
+
+// ───────────────────────────────────────────────────────────────────────
 // Multi-tenancy primitives — opt-in.
 //
 // Default project surface stays user-owned (`Order.userId`, `Withdrawal.userId`).
@@ -101,6 +136,7 @@ model Organization {
   ownerId   String
   owner     User     @relation("OrgOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   members   OrganizationMember[]
+  store     Store?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -266,36 +302,55 @@ model WebhookLog {
 }
 
 // ───────────────────────────────────────────────────────────────────────
-// Phase 3 — payments (Order + Withdrawal)
-//
-// `amount` is stored in the smallest unit of `currency` (no decimals).
-// For XOF (FCFA, Senegal) that's 1 = 1 FCFA. For USD adapt to cents
-// at the call site — the schema is currency-agnostic.
+// Phase 2 — guest checkout + Stripe (platform account today, Connect in
+// Phase 3). One Order per checkout attempt, scoped to the Store that owns
+// the products in `lineItems`. `amount` is the grand total charged
+// (subtotalCents + deliveryFeeCents + taxCents), smallest currency unit —
+// for USD that's cents.
 // ───────────────────────────────────────────────────────────────────────
 model Order {
-  id              String    @id @default(cuid())
-  userId          String? // nullable — guest checkout supported
-  user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
-  amount          Int // gross amount, smallest unit
-  currency        String    @default("XOF") // ISO 4217
-  status          String    @default("PENDING") // PENDING | PAID | EXPIRED | FAILED | REFUNDED
-  customerEmail   String?
-  customerPhone   String?
-  customerName    String?
-  metadata        Json? // app-specific fields
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  userId  String? // guest checkout is the norm — set only if the buyer happened to be logged in
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  // Stripe-grade idempotency. Required header on POST /api/orders; replay
-  // with same value returns the original Order row instead of double-charging.
-  // Nullable so existing rows pre-migration don't break the @unique constraint.
-  idempotencyKey  String?   @unique
+  amount   Int // grand total, smallest unit — subtotalCents + deliveryFeeCents + taxCents
+  currency String @default("USD")
+  // EXPIRED: set by the order-expiration cron (lib/server/orders/expire.ts) when a
+  // PENDING order's expiresAt passes unpaid. FAILED: the Stripe Checkout Session
+  // itself could not be created (network/API error) — distinct from EXPIRED so an
+  // idempotency-key replay reports the right terminal state (CR-02).
+  status String @default("PENDING") // PENDING|PAID|PREPARING|READY|OUT_FOR_DELIVERY|DELIVERED|CANCELLED|REFUNDED|EXPIRED|FAILED
 
-  // Provider reference
-  provider         String // e.g. "bictorys"
+  subtotalCents    Int
+  deliveryFeeCents Int  @default(0)
+  taxCents         Int  @default(0) // column ready; MVP always computes 0 (no tax engine)
+  customerEmail    String?
+  customerPhone    String?
+  customerName     String?
+  deliveryAddress  Json?
+  lineItems        Json // snapshot at checkout time: [{ productId, name, priceCents, quantity }]
+
+  // Stripe-grade idempotency (CR-02). Required header on POST /api/orders;
+  // replay with the same value returns the original outcome instead of
+  // double-charging. `idempotencyBodyHash` binds the key to the checkout
+  // body (storeId + lineItems) so a reused key with a different cart 422s
+  // instead of silently returning the old order.
+  idempotencyKey     String? @unique
+  idempotencyBodyHash String?
+
+  // Provider reference — "stripe_platform" | "stripe_connect" (Phase 3) |
+  // "cashapp_manual" | "zelle_manual" (manual payment methods — no webhook
+  // exists for either, the SELLER confirms receipt via
+  // POST /api/orders/[id]/confirm-payment; providerChargeId/paymentUrl stay
+  // null for these two, see api/orders/route.ts's routing).
+  provider         String
   providerChargeId String? @unique
-  paymentUrl       String? // checkout/redirect URL returned by provider
-  paymentMethod    String? // WAVE | ORANGE_MONEY | FREE_MONEY (set on PAID by webhook)
+  paymentUrl       String? // Stripe Checkout Session URL — null for manual payment methods
+  paymentMethod    String? // set on PAID (e.g. Stripe's payment_method_types entry, or "cashapp"/"zelle")
 
-  // Optional commission (for marketplace-style apps)
+  // Marketplace commission (Phase 3 uses this to split platform vs. seller take)
   commissionAmount Int?
   netAmount        Int?
 
@@ -305,22 +360,229 @@ model Order {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
+  @@index([storeId, createdAt])
   @@index([userId, createdAt])
   @@index([status, expiresAt])
   @@index([provider, providerChargeId])
+
+  statusEvents OrderStatusEvent[]
+  delivery     Delivery?
+  review       Review?
+}
+
+// Phase 4 — lightweight audit trail for the order lifecycle. One row per
+// status change: the PAID transition is written by the Stripe webhook
+// (actorType "SYSTEM"), everything after (PREPARING→READY→OUT_FOR_DELIVERY→
+// DELIVERED, or CANCELLED) is written by the seller's PATCH
+// /api/orders/[id] (actorType "SELLER"). Read-only from the API's
+// perspective — nothing ever updates or deletes a row here.
+model OrderStatusEvent {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status    String
+  actorType String // SYSTEM | SELLER
+  createdAt DateTime @default(now())
+
+  @@index([orderId, createdAt])
+}
+
+// Phase 5 — delivery tracking, one row per Order once the seller requests
+// delivery (POST /api/orders/[id]/delivery). Kept separate from
+// OrderStatusEvent: this is provider-facing tracking data (trackingUrl,
+// providerDeliveryId for a future real courier's correlation), not a
+// generic audit log entry.
+model Delivery {
+  id                 String    @id @default(cuid())
+  orderId            String    @unique
+  order              Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider           String // self_manual | uber_direct (future)
+  providerDeliveryId String? // opaque id from the delivery provider, if any
+  status             String    @default("REQUESTED") // REQUESTED | DELIVERED | FAILED
+  trackingUrl        String?
+  deliveredAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+// Phase 8 — post-delivery review, one per Order (guest-submitted, no
+// account needed — same trust model as the checkout success/tracking pages:
+// knowing the unguessable Order id is the only "auth"). Gated at write-time
+// to status === 'DELIVERED' (api/orders/[id]/review/route.ts). `storeId` is
+// denormalized from Order.storeId so the seller's moderation list
+// (GET /api/reviews) and the public storefront read don't need a join
+// through Order. `visible` is the seller's moderation switch — hidden
+// reviews still count toward nothing publicly but stay on record.
+model Review {
+  id        String   @id @default(cuid())
+  orderId   String   @unique
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  rating    Int // 1-5
+  text      String?
+  visible   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([storeId, visible, createdAt])
+}
+
+// Phase 6 — lightweight guest-customer directory, upserted from the Stripe
+// webhook's onPaid handler (api/webhooks/stripe/route.ts) keyed on
+// (storeId, phone) — phone is always present on a checkout (Body requires
+// it), email is optional so it's a secondary unique key only enforced when
+// present. Not incremented at PENDING creation — a customer only "counts"
+// once they've actually paid, same reasoning as stock decrement and the
+// stores/me dashboard stats.
+model Customer {
+  id              String   @id @default(cuid())
+  storeId         String
+  store           Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  email           String?
+  phone           String?
+  name            String?
+  address         Json?
+  totalSpentCents Int      @default(0)
+  ordersCount     Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([storeId, email])
+  @@unique([storeId, phone])
+  @@index([storeId, createdAt])
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Marketplace domain — one Store per Organization (Phase 1 — multi-tenancy),
+// N Products per Store, N Orders per Store (Phase 2). Resolve a caller's own
+// store via `resolveOwnStore()` (lib/server/org.ts), which goes through
+// their OrganizationMember row — never query Store by userId directly, it
+// no longer has that column.
+// ───────────────────────────────────────────────────────────────────────
+model Store {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  slug           String       @unique
+  name           String
+  description    String?
+  city           String?
+  state          String?
+  logoUrl        String?
+  // Storefront contact number — shown prominently in the public storefront's
+  // top bar (see StorefrontTopBar). Free-text, no format validation: sellers
+  // span many countries/formats and this is display-only, never dialed
+  // programmatically.
+  phone          String?
+  // Storefront layout — MODERN (grid), MINIMAL (single-column list), or
+  // BOLD (large imagery, editorial). See src/components/storefront/templates/.
+  template       String       @default("MODERN")
+  // Gates visibility on /s/[slug]. Defaults true so onboarding (which has no
+  // separate "Publish" step yet) keeps working end-to-end; a future
+  // publish/unpublish toggle just flips this.
+  published      Boolean      @default(true)
+  // Phase 3 — Stripe Connect (direct-to-seller payouts, optional). A Store
+  // without a connected account still sells fine via the Phase 2 platform
+  // charge path — see api/orders/route.ts's routing check on
+  // stripeOnboardingStatus === 'ACTIVE'.
+  stripeAccountId        String? @unique
+  stripeOnboardingStatus String  @default("NOT_STARTED") // NOT_STARTED|PENDING|ACTIVE|RESTRICTED
+  // Manual payment methods — no webhook/API exists for either of these to
+  // confirm a peer-to-peer payment automatically, so a buyer who checks out
+  // this way sees the seller's Cash App QR / Zelle contact, the order stays
+  // PENDING, and the SELLER manually confirms receipt via
+  // POST /api/orders/[id]/confirm-payment (see lib/server/orders/markPaid.ts
+  // for the same side effects a real Stripe payment triggers). Both null =
+  // the checkout payment-method selector doesn't offer that option at all.
+  cashAppCashtag String? // stored WITHOUT the leading "$" (e.g. "AdaezeShop")
+  zelleContact   String? // email or phone registered with Zelle — free text
+  // Phase 5 — delivery. self_manual works with zero configuration (the
+  // seller is their own courier) so it's the default for every store, no
+  // separate on/off flag needed. uber_direct is a real courier integration
+  // (lib/server/delivery/uber-direct.ts) that requires a pickup address —
+  // self_manual ignores this column entirely (the seller picks up nothing,
+  // they just walk the order out themselves).
+  deliveryProvider String  @default("self_manual")
+  deliveryFeeCents Int     @default(0)
+  pickupAddress    String?
+  // Phase 12 — Free/Pro tiers. No hard enforcement in the MVP (no feature is
+  // gated behind PRO yet); the one branchable benefit today is a reduced
+  // marketplace commission — see COMMISSION_RATE_BP_PRO and
+  // resolveCommissionRateBp() in lib/server/payments/commission.ts.
+  plan             String  @default("FREE") // FREE|PRO
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  products  Product[]
+  orders    Order[]
+  customers Customer[]
+  reviews   Review[]
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  priceCents  Int
+  // Float, not Int: a UNIT product's quantity is always a whole count
+  // (enforced at the zod layer, not here — Prisma has no per-row numeric
+  // constraint), but a weight unit (KG/LB/G/OZ) needs fractional amounts
+  // like 12.09 lb. Always rounded to 2 decimal places wherever it's
+  // written (lib/server/quantity.ts) so float drift never accumulates.
+  quantity    Float    @default(0)
+  category    String // FOOD_SPICES | BEAUTY_PERSONAL_CARE | TEXTILES_CRAFTS | OTHER
+  // Phase 7 — unit the price/quantity above are denominated in. UNIT means
+  // "priceCents per item" (the only mode before Phase 7); the weight units
+  // let a seller price something like spices "per kg", with fractional
+  // quantities (`quantity` counts however much of that unit is in stock —
+  // e.g. quantity=12.09 with unit=LB means 12.09 lb on hand).
+  unit        String   @default("UNIT") // UNIT | LB | KG | G | OZ
+  imageUrl    String?
+  status      String   @default("ACTIVE") // ACTIVE | ARCHIVED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  variants ProductVariant[]
+
+  @@index([storeId, createdAt])
+}
+
+// Phase 7 — simple independent variant options (e.g. "Size: Large",
+// "250g bag"), NOT a Size×Color combinatorial matrix — a buyer picks at most
+// ONE variant row per cart line, same simplification the plan calls for.
+// When a product has variants, `quantity` below (not Product.quantity) is
+// authoritative for that line's stock — see api/orders/route.ts and the
+// Stripe webhook's stock-decrement step.
+model ProductVariant {
+  id              String   @id @default(cuid())
+  productId       String
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name            String // option group label, e.g. "Size" or "Weight"
+  value           String // the specific option, e.g. "Large" or "1kg bag"
+  priceDeltaCents Int      @default(0) // added to Product.priceCents when selected
+  quantity        Float    @default(0) // same Float-for-fractional-weight reasoning as Product.quantity
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([productId])
 }
 
 model Withdrawal {
   id          String   @id @default(cuid())
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Restrict)
-  amount      Int // requested amount, smallest unit
-  currency    String   @default("XOF")
+  amount      Int // requested amount, smallest unit (cents for Vendylio's USD)
+  currency    String   @default("USD")
   status      String   @default("PENDING") // PENDING | PROCESSING | COMPLETED | FAILED | CANCELLED
-  destination Json // { method: "WAVE" | "ORANGE_MONEY" | ..., phone: "+221...", accountName?: "..." }
+  // Vendylio sellers are US-based: { method: "CASH_APP", cashtag: "$..." } or
+  // { method: "ZELLE", contact: "email or phone" } — see api/withdrawals/route.ts.
+  destination Json
 
   // Provider reference
-  provider         String // e.g. "bictorys"
+  provider         String // "manual" for Vendylio (Cash App/Zelle have no payout API — an operator fulfills by hand)
   providerPayoutId String? @unique
   failureReason    String?
 

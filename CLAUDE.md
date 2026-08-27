@@ -42,6 +42,8 @@ pnpm workspace — run from repo root unless noted. The root `package.json` is a
 
 Integration tests are deferred (no formal harness in v1) — `pnpm smoke:auth` provides a manual UAT script for the auth happy path against a running `pnpm dev`. See README.
 
+`pnpm dev` auto-wipes `.next` first (a `predev` hook) — do not remove this. `next build` (Webpack) and `next dev --turbopack` write incompatible manifest formats into the same `.next` folder; running a local `pnpm build` and then `pnpm dev` without clearing it in between corrupts Turbopack's route manifest and makes API routes 404 at random until `.next` is deleted. The hook only touches the local dev workflow — Vercel's own `next build` is a fresh checkout with no stale `.next`, so this has no effect on deploys.
+
 **Before committing:** `pnpm format && pnpm lint && pnpm typecheck && pnpm test` — must all pass.
 
 ## High-level architecture

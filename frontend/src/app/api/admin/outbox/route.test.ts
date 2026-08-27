@@ -52,17 +52,17 @@ describe('/api/admin/outbox [Wave 1]', () => {
     const rows = [
       seedOutbox({
         id: 'ob-1',
-        kind: 'email.payment_confirmation',
+        kind: 'email.password_reset',
         status: 'PENDING',
       }),
       seedOutbox({
         id: 'ob-2',
-        kind: 'notification.payment_received',
+        kind: 'email.verification_code',
         status: 'SENT',
       }),
       seedOutbox({
         id: 'ob-3',
-        kind: 'notification.payment_received',
+        kind: 'email.verification_code',
         status: 'FAILED',
       }),
       seedOutbox({
@@ -72,7 +72,7 @@ describe('/api/admin/outbox [Wave 1]', () => {
       }),
       seedOutbox({
         id: 'ob-5',
-        kind: 'email.payment_confirmation',
+        kind: 'email.password_reset',
         status: 'PENDING',
       }),
     ];
@@ -127,14 +127,12 @@ describe('/api/admin/outbox [Wave 1]', () => {
 
   it('GET filters by status and kind (not type)', async () => {
     prismaMock.outboxEvent.findMany.mockResolvedValue([
-      seedOutbox({ id: 'ob-1', kind: 'email.payment_confirmation' }),
+      seedOutbox({ id: 'ob-1', kind: 'email.password_reset' }),
     ] as never);
 
-    await GET(
-      makeGet('http://test/api/admin/outbox?status=PENDING&kind=email.payment_confirmation'),
-    );
+    await GET(makeGet('http://test/api/admin/outbox?status=PENDING&kind=email.password_reset'));
     const args = prismaMock.outboxEvent.findMany.mock.calls[0]?.[0];
-    expect(args?.where?.kind).toBe('email.payment_confirmation');
+    expect(args?.where?.kind).toBe('email.password_reset');
     expect(args?.where?.status).toBe('PENDING');
     // Pitfall 4: must NOT use `type` as the field name
     expect((args?.where as Record<string, unknown> | undefined)?.['type']).toBeUndefined();
