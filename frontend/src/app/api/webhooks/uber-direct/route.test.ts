@@ -126,12 +126,12 @@ describe('POST /api/webhooks/uber-direct', () => {
     });
   });
 
-  it('does NOT cancel the Order on a courier cancellation — only notifies the seller', async () => {
+  it('marks the Delivery FAILED and reverts an OUT_FOR_DELIVERY Order back to READY — never straight to CANCELLED', async () => {
     deliveryFindFirst.mockResolvedValueOnce({
       id: 'del-row-1',
       orderId: 'order-1',
       status: 'REQUESTED',
-      order: { id: 'order-1', storeId: 'store-1' },
+      order: { id: 'order-1', status: 'OUT_FOR_DELIVERY', storeId: 'store-1' },
     });
     storeFindUnique.mockResolvedValueOnce({ organization: { ownerId: 'owner-1' } });
     const req = makeReq({ id: 'evt_2', delivery_id: 'del_1', status: 'canceled' });
@@ -139,8 +139,17 @@ describe('POST /api/webhooks/uber-direct', () => {
     const res = await POST(req);
 
     expect(res.status).toBe(200);
-    expect(orderUpdate).not.toHaveBeenCalled();
-    expect(deliveryUpdate).not.toHaveBeenCalled();
+    expect(deliveryUpdate).toHaveBeenCalledWith({
+      where: { id: 'del-row-1' },
+      data: { status: 'FAILED' },
+    });
+    expect(orderUpdate).toHaveBeenCalledWith({
+      where: { id: 'order-1' },
+      data: { status: 'READY' },
+    });
+    expect(orderStatusEventCreate).toHaveBeenCalledWith({
+      data: { orderId: 'order-1', status: 'READY', actorType: 'SYSTEM' },
+    });
     expect(outboxEventCreate).toHaveBeenCalledWith({
       data: {
         kind: 'notification.delivery_failed',
@@ -148,6 +157,44 @@ describe('POST /api/webhooks/uber-direct', () => {
       },
       select: { id: true },
     });
+  });
+
+  it('marks the Delivery FAILED but leaves the Order alone when it already moved on some other way', async () => {
+    deliveryFindFirst.mockResolvedValueOnce({
+      id: 'del-row-1',
+      orderId: 'order-1',
+      status: 'REQUESTED',
+      order: { id: 'order-1', status: 'REFUNDED', storeId: 'store-1' },
+    });
+    storeFindUnique.mockResolvedValueOnce({ organization: { ownerId: 'owner-1' } });
+    const req = makeReq({ id: 'evt_2', delivery_id: 'del_1', status: 'canceled' });
+    const { POST } = await import('./route');
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+    expect(deliveryUpdate).toHaveBeenCalledWith({
+      where: { id: 'del-row-1' },
+      data: { status: 'FAILED' },
+    });
+    expect(orderUpdate).not.toHaveBeenCalled();
+    expect(orderStatusEventCreate).not.toHaveBeenCalled();
+  });
+
+  it('is idempotent — a Delivery already FAILED is left untouched', async () => {
+    deliveryFindFirst.mockResolvedValueOnce({
+      id: 'del-row-1',
+      orderId: 'order-1',
+      status: 'FAILED',
+      order: { id: 'order-1', status: 'READY', storeId: 'store-1' },
+    });
+    const req = makeReq({ id: 'evt_2', delivery_id: 'del_1', status: 'canceled' });
+    const { POST } = await import('./route');
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+    expect(deliveryUpdate).not.toHaveBeenCalled();
+    expect(orderUpdate).not.toHaveBeenCalled();
+    expect(outboxEventCreate).not.toHaveBeenCalled();
   });
 
   it('is a no-op on cancellation for an unknown delivery_id', async () => {

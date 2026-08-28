@@ -157,6 +157,42 @@ export async function getUberDirectDeliveryFeeCents(input: {
   }
 }
 
+/**
+ * Best-effort "is this pickup address even in Uber's courier network"
+ * check, run when a seller saves Store.pickupAddress with deliveryProvider
+ * = 'uber_direct' (api/stores/route.ts PATCH) — so they find out
+ * immediately instead of discovering it only when a real, already-paid
+ * order's delivery request fails (confirmed live: Uber rejects a quote
+ * with "The specified location is not in a deliverable area" for a pickup
+ * address outside its network, independent of the dropoff address).
+ *
+ * There is no dedicated "check coverage" endpoint in Uber's API, so this
+ * quotes the address against ITSELF as both pickup and dropoff — a
+ * heuristic, not a guarantee (Uber's own dispatch may still reject a
+ * SPECIFIC real dropoff later for other reasons). Returns:
+ *   - true/false when Uber gives a clear deliverable/undeliverable answer
+ *   - null when the outcome can't be determined (not configured, network
+ *     error, or any error other than the specific "undeliverable" one) —
+ *     callers should treat null as "no warning", not as failure.
+ */
+export async function checkPickupAddressDeliverable(
+  pickupAddress: string,
+): Promise<boolean | null> {
+  if (!isConfigured()) return null;
+  try {
+    const token = await getCachedAccessToken();
+    const client = createDeliveriesClient(token, process.env.UBER_DIRECT_CUSTOMER_ID!);
+    await client.createQuote({
+      pickup_address: pickupAddress,
+      dropoff_address: pickupAddress,
+      manifest_total_value: 100,
+    });
+    return true;
+  } catch (err) {
+    return /deliverable area/i.test(errorMessage(err)) ? false : null;
+  }
+}
+
 export function createUberDirectProvider(): DeliveryProvider {
   return {
     name: 'uber_direct',

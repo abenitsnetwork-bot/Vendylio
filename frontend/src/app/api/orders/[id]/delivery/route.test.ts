@@ -114,11 +114,34 @@ describe('POST /api/orders/[id]/delivery', () => {
   });
 
   it('409s DELIVERY_ALREADY_REQUESTED when a Delivery row already exists', async () => {
-    prismaMock.delivery.findUnique.mockResolvedValue({ id: 'del-1' } as never);
+    prismaMock.delivery.findUnique.mockResolvedValue({ id: 'del-1', status: 'REQUESTED' } as never);
     const res = await POST(makeReq('POST'), ctx);
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error).toBe('DELIVERY_ALREADY_REQUESTED');
+    expect(mockRequestDelivery).not.toHaveBeenCalled();
+  });
+
+  it('allows a retry (upsert, not a 409) when the existing Delivery is FAILED', async () => {
+    prismaMock.delivery.findUnique.mockResolvedValue({ id: 'del-1', status: 'FAILED' } as never);
+    prismaMock.delivery.upsert.mockResolvedValue({
+      id: 'del-1',
+      orderId: 'order-1',
+      provider: 'self_manual',
+      status: 'REQUESTED',
+    } as never);
+    prismaMock.order.update.mockResolvedValue({
+      ...READY_ORDER,
+      status: 'OUT_FOR_DELIVERY',
+    } as never);
+
+    const res = await POST(makeReq('POST'), ctx);
+
+    expect(res.status).toBe(201);
+    expect(mockRequestDelivery).toHaveBeenCalledOnce();
+    expect(prismaMock.delivery.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { orderId: 'order-1' } }),
+    );
   });
 
   it('503s DELIVERY_PROVIDER_UNCONFIGURED when the provider throws (e.g. Uber Direct stub)', async () => {
@@ -138,7 +161,7 @@ describe('POST /api/orders/[id]/delivery', () => {
 
   it('creates a Delivery row, moves the Order to OUT_FOR_DELIVERY, and logs the status event', async () => {
     prismaMock.delivery.findUnique.mockResolvedValue(null);
-    prismaMock.delivery.create.mockResolvedValue({
+    prismaMock.delivery.upsert.mockResolvedValue({
       id: 'del-1',
       orderId: 'order-1',
       provider: 'self_manual',
@@ -164,12 +187,20 @@ describe('POST /api/orders/[id]/delivery', () => {
       amountCents: 4500,
       manifestItems: [{ name: 'Widget', quantity: 1 }],
     });
-    expect(prismaMock.delivery.create).toHaveBeenCalledWith({
-      data: {
+    expect(prismaMock.delivery.upsert).toHaveBeenCalledWith({
+      where: { orderId: 'order-1' },
+      create: {
         orderId: 'order-1',
         provider: 'self_manual',
         providerDeliveryId: null,
         status: 'REQUESTED',
+      },
+      update: {
+        provider: 'self_manual',
+        providerDeliveryId: null,
+        status: 'REQUESTED',
+        trackingUrl: null,
+        deliveredAt: null,
       },
     });
     expect(prismaMock.order.update).toHaveBeenCalledWith({
@@ -198,7 +229,7 @@ describe('POST /api/orders/[id]/delivery', () => {
       },
     } as never);
     prismaMock.delivery.findUnique.mockResolvedValue(null);
-    prismaMock.delivery.create.mockResolvedValue({
+    prismaMock.delivery.upsert.mockResolvedValue({
       id: 'del-1',
       orderId: 'order-1',
       provider: 'self_manual',
@@ -227,7 +258,7 @@ describe('POST /api/orders/[id]/delivery', () => {
       },
     } as never);
     prismaMock.delivery.findUnique.mockResolvedValue(null);
-    prismaMock.delivery.create.mockResolvedValue({
+    prismaMock.delivery.upsert.mockResolvedValue({
       id: 'del-1',
       orderId: 'order-1',
       provider: 'self_manual',

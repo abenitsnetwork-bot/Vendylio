@@ -10,13 +10,18 @@ vi.mock('@/lib/server/middleware', () => ({
 vi.mock('@/lib/server/org', () => ({
   resolveOwnStore: vi.fn(),
 }));
+vi.mock('@/lib/server/delivery/uber-direct', () => ({
+  checkPickupAddressDeliverable: vi.fn(),
+}));
 
 import { requireAuth } from '@/lib/server/middleware';
 import { resolveOwnStore } from '@/lib/server/org';
+import { checkPickupAddressDeliverable } from '@/lib/server/delivery/uber-direct';
 import { POST, PATCH } from './route';
 
 const mockRequireAuth = vi.mocked(requireAuth);
 const mockResolveOwnStore = vi.mocked(resolveOwnStore);
+const mockCheckPickupAddressDeliverable = vi.mocked(checkPickupAddressDeliverable);
 const authedCtx = { user: { sub: 'user-1', email: 'me@example.com' } };
 
 function makeReq(
@@ -43,6 +48,7 @@ function makePost(body: unknown, csrf: 'match' | 'missing' = 'match'): NextReque
 beforeEach(() => {
   vi.clearAllMocks();
   mockRequireAuth.mockResolvedValue(authedCtx);
+  mockCheckPickupAddressDeliverable.mockResolvedValue(null);
   // Default $transaction passes the prismaMock as `tx` so writes within the
   // callback hit the same mocks as the outer client (mockDeep proxies them).
   prismaMock.$transaction.mockImplementation((cb: unknown) => {
@@ -286,6 +292,72 @@ describe('PATCH /api/stores', () => {
     expect(prismaMock.store.update.mock.calls[0]?.[0]?.data).toMatchObject({
       pickupAddress: null,
     });
+  });
+
+  it('surfaces deliverabilityWarning when checkPickupAddressDeliverable says no', async () => {
+    mockResolveOwnStore.mockResolvedValue({ id: 'store-1', organizationId: 'org-1' } as never);
+    prismaMock.store.update.mockResolvedValue({
+      id: 'store-1',
+      deliveryProvider: 'uber_direct',
+      pickupAddress: '5329 w ian dr, laveen, az, 85339',
+    } as never);
+    mockCheckPickupAddressDeliverable.mockResolvedValueOnce(false);
+
+    const res = await PATCH(
+      makeReq('PATCH', {
+        deliveryProvider: 'uber_direct',
+        pickupAddress: '5329 w ian dr, laveen, az, 85339',
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.deliverabilityWarning).toMatch(/does not currently service/);
+    expect(mockCheckPickupAddressDeliverable).toHaveBeenCalledWith(
+      '5329 w ian dr, laveen, az, 85339',
+    );
+  });
+
+  it('omits deliverabilityWarning when the check is inconclusive (null)', async () => {
+    mockResolveOwnStore.mockResolvedValue({ id: 'store-1', organizationId: 'org-1' } as never);
+    prismaMock.store.update.mockResolvedValue({
+      id: 'store-1',
+      deliveryProvider: 'uber_direct',
+      pickupAddress: '100 W Washington St, Phoenix, AZ 85003',
+    } as never);
+    mockCheckPickupAddressDeliverable.mockResolvedValueOnce(null);
+
+    const res = await PATCH(
+      makeReq('PATCH', {
+        deliveryProvider: 'uber_direct',
+        pickupAddress: '100 W Washington St, Phoenix, AZ 85003',
+      }),
+    );
+    const body = await res.json();
+    expect(body.deliverabilityWarning).toBeUndefined();
+  });
+
+  it('skips the deliverability check entirely when the save does not touch pickupAddress/deliveryProvider', async () => {
+    mockResolveOwnStore.mockResolvedValue({ id: 'store-1', organizationId: 'org-1' } as never);
+    prismaMock.store.update.mockResolvedValue({
+      id: 'store-1',
+      deliveryProvider: 'uber_direct',
+      pickupAddress: '5329 w ian dr, laveen, az, 85339',
+    } as never);
+
+    await PATCH(makeReq('PATCH', { deliveryFeeCents: 500 }));
+    expect(mockCheckPickupAddressDeliverable).not.toHaveBeenCalled();
+  });
+
+  it('skips the deliverability check for self_manual stores', async () => {
+    mockResolveOwnStore.mockResolvedValue({ id: 'store-1', organizationId: 'org-1' } as never);
+    prismaMock.store.update.mockResolvedValue({
+      id: 'store-1',
+      deliveryProvider: 'self_manual',
+      pickupAddress: '5329 w ian dr, laveen, az, 85339',
+    } as never);
+
+    await PATCH(makeReq('PATCH', { pickupAddress: '5329 w ian dr, laveen, az, 85339' }));
+    expect(mockCheckPickupAddressDeliverable).not.toHaveBeenCalled();
   });
 });
 

@@ -75,6 +75,7 @@ export default function DeliveryPage() {
   const [needsDelivery, setNeedsDelivery] = useState<SellerOrder[] | null>(null);
   const [outForDelivery, setOutForDelivery] = useState<SellerOrder[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [busyOrderId, setBusyOrderId] = useState<string | null>(null);
 
@@ -118,8 +119,9 @@ export default function DeliveryPage() {
     }
     setSaving(true);
     setError(null);
+    setWarning(null);
     try {
-      await api('/api/stores', {
+      const res = await api<{ deliverabilityWarning?: string }>('/api/stores', {
         method: 'PATCH',
         body: {
           deliveryFeeCents: cents,
@@ -127,6 +129,7 @@ export default function DeliveryPage() {
           pickupAddress: pickupAddressInput.trim() || null,
         },
       });
+      if (res.deliverabilityWarning) setWarning(res.deliverabilityWarning);
       load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save delivery settings.');
@@ -194,6 +197,11 @@ export default function DeliveryPage() {
           </p>
 
           {error && <p className="mb-6 text-sm text-red-600">{error}</p>}
+          {warning && (
+            <p className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              ⚠️ {warning}
+            </p>
+          )}
 
           <Card className="mb-8 p-8">
             <h2 className="mb-6 border-b border-border pb-6 font-headings text-lg font-bold text-foreground">

@@ -270,3 +270,57 @@ describe('getUberDirectDeliveryFeeCents', () => {
     });
   });
 });
+
+describe('checkPickupAddressDeliverable', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetAccessToken.mockResolvedValue('access-token-123');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('returns null when not configured', async () => {
+    const { checkPickupAddressDeliverable } = await freshProvider();
+    const result = await checkPickupAddressDeliverable('1 Pickup Ave, Springfield, IL 62704');
+    expect(result).toBeNull();
+    expect(mockGetAccessToken).not.toHaveBeenCalled();
+  });
+
+  describe('once configured', () => {
+    beforeEach(() => {
+      vi.stubEnv('UBER_DIRECT_CLIENT_ID', 'client-id');
+      vi.stubEnv('UBER_DIRECT_CLIENT_SECRET', 'client-secret');
+      vi.stubEnv('UBER_DIRECT_CUSTOMER_ID', 'customer-id');
+    });
+
+    it('returns true when Uber can quote the address (uses it as both pickup and dropoff)', async () => {
+      mockCreateQuote.mockResolvedValueOnce({ id: 'quote-1', fee: 0 });
+      const { checkPickupAddressDeliverable } = await freshProvider();
+      const result = await checkPickupAddressDeliverable('100 W Washington St, Phoenix, AZ 85003');
+      expect(result).toBe(true);
+      expect(mockCreateQuote).toHaveBeenCalledWith({
+        pickup_address: '100 W Washington St, Phoenix, AZ 85003',
+        dropoff_address: '100 W Washington St, Phoenix, AZ 85003',
+        manifest_total_value: 100,
+      });
+    });
+
+    it('returns false for the specific "not in a deliverable area" rejection', async () => {
+      mockCreateQuote.mockRejectedValueOnce(
+        new Error('The specified location is not in a deliverable area.'),
+      );
+      const { checkPickupAddressDeliverable } = await freshProvider();
+      const result = await checkPickupAddressDeliverable('5329 w ian dr, laveen, az, 85339');
+      expect(result).toBe(false);
+    });
+
+    it('returns null (not a confident "undeliverable") for an unrelated error', async () => {
+      mockCreateQuote.mockRejectedValueOnce(new Error('Uber API down'));
+      const { checkPickupAddressDeliverable } = await freshProvider();
+      const result = await checkPickupAddressDeliverable('1 Pickup Ave, Springfield, IL 62704');
+      expect(result).toBeNull();
+    });
+  });
+});

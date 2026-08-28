@@ -64,8 +64,12 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       );
     }
 
+    // A FAILED delivery (courier cancelled/returned — see the Uber Direct
+    // webhook's onFailed handler) is retryable: it already reverted
+    // Order.status to READY specifically so this route stays reachable.
+    // Anything else (REQUESTED, DELIVERED) still blocks a second request.
     const existing = await prisma.delivery.findUnique({ where: { orderId: order.id } });
-    if (existing) {
+    if (existing && existing.status !== 'FAILED') {
       return NextResponse.json(
         {
           error: 'DELIVERY_ALREADY_REQUESTED',
@@ -120,13 +124,23 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     }
 
     const { delivery, order: updatedOrder } = await prisma.$transaction(async (tx) => {
-      const createdDelivery = await tx.delivery.create({
-        data: {
+      // Delivery.orderId is unique — a retry after FAILED reuses the same
+      // row (upsert) rather than inserting a second one for this order.
+      const createdDelivery = await tx.delivery.upsert({
+        where: { orderId: order.id },
+        create: {
           orderId: order.id,
           provider: store.deliveryProvider,
           providerDeliveryId: result.providerDeliveryId,
           status: result.status,
           ...(result.trackingUrl ? { trackingUrl: result.trackingUrl } : {}),
+        },
+        update: {
+          provider: store.deliveryProvider,
+          providerDeliveryId: result.providerDeliveryId,
+          status: result.status,
+          trackingUrl: result.trackingUrl ?? null,
+          deliveredAt: null,
         },
       });
       const updated = await tx.order.update({

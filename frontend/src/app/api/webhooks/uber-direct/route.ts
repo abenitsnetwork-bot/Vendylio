@@ -10,8 +10,13 @@
  *   - onPaid: the "paid" slot reused for "delivery completed" (status
  *     "delivered") — no dedicated slot exists in the generic factory, same
  *     precedent as Stripe Connect's account.updated handler
- *   - onFailed: courier cancellation/return — alerts the seller only, never
- *     auto-cancels the Order (a courier hiccup isn't proof the sale is void)
+ *   - onFailed: courier cancellation/return — never auto-cancels the Order
+ *     (a courier hiccup isn't proof the sale is void), but DOES mark the
+ *     Delivery FAILED and revert the Order to READY so the seller's
+ *     existing "Request Delivery" button works again instead of being
+ *     permanently blocked by a dead Delivery row (see the
+ *     DELIVERY_ALREADY_REQUESTED guard in api/orders/[id]/delivery/route.ts,
+ *     which treats a FAILED delivery as retryable). Also alerts the seller.
  *
  * CLAUDE.md invariants honored here:
  *   - runtime = 'nodejs' + dynamic = 'force-dynamic' exported below.
@@ -70,9 +75,22 @@ export const POST = createWebhookHandler<UberDirectWebhookPayload>({
   async onFailed(payload, tx) {
     const delivery = await tx.delivery.findFirst({
       where: { providerDeliveryId: payload.delivery_id },
-      include: { order: { select: { storeId: true } } },
+      include: { order: { select: { id: true, status: true, storeId: true } } },
     });
     if (!delivery) return {};
+    if (delivery.status === 'FAILED') return {}; // already processed
+
+    await tx.delivery.update({ where: { id: delivery.id }, data: { status: 'FAILED' } });
+
+    // Only revert an order still sitting OUT_FOR_DELIVERY because of THIS
+    // delivery — an order the seller already moved on from some other way
+    // (e.g. a manual refund) must not be silently pulled back to READY.
+    if (delivery.order.status === 'OUT_FOR_DELIVERY') {
+      await tx.order.update({ where: { id: delivery.orderId }, data: { status: 'READY' } });
+      await tx.orderStatusEvent.create({
+        data: { orderId: delivery.orderId, status: 'READY', actorType: 'SYSTEM' },
+      });
+    }
 
     const store = await tx.store.findUnique({
       where: { id: delivery.order.storeId },

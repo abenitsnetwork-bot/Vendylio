@@ -70,7 +70,9 @@ export function deliveryCompleted(userId: string, orderId: string): CreateNotifi
 /**
  * Uber Direct — notifies the store owner when the courier cancels or
  * returns a delivery, so the seller can follow up with the buyer. Does not
- * imply the order itself was cancelled.
+ * imply the order itself was cancelled — the order is moved back to READY
+ * (see api/webhooks/uber-direct/route.ts's onFailed) so "Request Delivery"
+ * is immediately clickable again.
  */
 export function deliveryFailed(
   userId: string,
@@ -81,7 +83,7 @@ export function deliveryFailed(
     userId,
     type: 'DELIVERY_FAILED',
     title: 'Delivery needs attention',
-    body: `Order ${orderId}'s Uber Direct delivery was ${status} — follow up with the customer.`,
+    body: `Order ${orderId}'s Uber Direct delivery was ${status}. The order is back to Ready — request delivery again once you've checked in with the customer.`,
     data: { orderId, status },
     dedupeKey: `delivery-failed:${orderId}:${status}`,
   };

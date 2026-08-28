@@ -17,6 +17,7 @@ import { requireAuth } from '@/lib/server/middleware';
 import { prisma } from '@/lib/server/prisma';
 import { resolveOwnStore } from '@/lib/server/org';
 import { slugify, ensureUniqueSlug } from '@/lib/server/slug';
+import { checkPickupAddressDeliverable } from '@/lib/server/delivery/uber-direct';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 import { STORE_TEMPLATE_VALUES } from '@/lib/storeTemplates';
 
@@ -164,6 +165,28 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
       data,
     });
 
-    return NextResponse.json({ store }, { headers: { 'x-request-id': ctx.requestId } });
+    // Best-effort, non-blocking: warn the seller immediately if their Uber
+    // Direct pickup address looks undeliverable, instead of them finding
+    // out only after a real order is paid and "Request Delivery" fails
+    // (confirmed live — see checkPickupAddressDeliverable's docstring).
+    // Only worth the extra API call when this save actually touched the
+    // pickup address or turned Uber Direct on for the first time.
+    let deliverabilityWarning: string | undefined;
+    if (
+      store.deliveryProvider === 'uber_direct' &&
+      store.pickupAddress &&
+      ('pickupAddress' in data || 'deliveryProvider' in data)
+    ) {
+      const deliverable = await checkPickupAddressDeliverable(store.pickupAddress);
+      if (deliverable === false) {
+        deliverabilityWarning =
+          'Uber Direct does not currently service this pickup address — courier delivery requests from this store are likely to fail.';
+      }
+    }
+
+    return NextResponse.json(
+      { store, ...(deliverabilityWarning ? { deliverabilityWarning } : {}) },
+      { headers: { 'x-request-id': ctx.requestId } },
+    );
   });
 }
