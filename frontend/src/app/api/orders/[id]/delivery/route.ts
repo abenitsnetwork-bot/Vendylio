@@ -14,6 +14,7 @@ import { requireAuth } from '@/lib/server/middleware';
 import { prisma } from '@/lib/server/prisma';
 import { findOwnedOrder } from '@/lib/server/orders/ownership';
 import { getDeliveryProviderFor } from '@/lib/server/delivery';
+import { formatQuantityWithUnit } from '@/lib/productUnits';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
 interface RouteCtx {
@@ -75,7 +76,11 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     }
 
     const provider = getDeliveryProviderFor(store.deliveryProvider);
-    const lineItems = order.lineItems as unknown as { name: string; quantity: number }[];
+    const lineItems = order.lineItems as unknown as {
+      name: string;
+      quantity: number;
+      unit?: string;
+    }[];
     let result;
     try {
       result = await provider.requestDelivery({
@@ -88,7 +93,23 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
         storeName: store.name,
         storePhone: store.phone,
         amountCents: order.amount,
-        manifestItems: lineItems.map((item) => ({ name: item.name, quantity: item.quantity })),
+        // Uber Direct's manifest_items.quantity is a package count and must
+        // be a whole number — sending a weight-based line item's raw
+        // quantity (e.g. 5.3 lb) fails with a 400 whose body carries no
+        // usable message (confirmed live). A weight/measure-sold item
+        // (unit !== 'UNIT') is physically one package regardless of its
+        // weight, so it always reports quantity 1 with the weight folded
+        // into the name instead; a UNIT item keeps its real count, rounded
+        // and floored at 1 as a defensive minimum.
+        manifestItems: lineItems.map((item) => {
+          const unit = item.unit ?? 'UNIT';
+          return unit === 'UNIT'
+            ? { name: item.name, quantity: Math.max(1, Math.round(item.quantity)) }
+            : {
+                name: `${item.name} (${formatQuantityWithUnit(item.quantity, unit)})`,
+                quantity: 1,
+              };
+        }),
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown delivery provider error';

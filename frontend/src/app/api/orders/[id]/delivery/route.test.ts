@@ -180,6 +180,72 @@ describe('POST /api/orders/[id]/delivery', () => {
       data: { orderId: 'order-1', status: 'OUT_FOR_DELIVERY', actorType: 'SELLER' },
     });
   });
+
+  it('sends a weight-sold line item as one manifest package with the weight folded into the name (Uber rejects fractional package counts)', async () => {
+    mockFindOwnedOrder.mockResolvedValue({
+      store: STORE,
+      order: {
+        ...READY_ORDER,
+        lineItems: [
+          {
+            productId: 'prod-1',
+            name: 'poisson maquereau',
+            priceCents: 900,
+            quantity: 5.3,
+            unit: 'LB',
+          },
+        ],
+      },
+    } as never);
+    prismaMock.delivery.findUnique.mockResolvedValue(null);
+    prismaMock.delivery.create.mockResolvedValue({
+      id: 'del-1',
+      orderId: 'order-1',
+      provider: 'self_manual',
+      status: 'REQUESTED',
+    } as never);
+    prismaMock.order.update.mockResolvedValue({
+      ...READY_ORDER,
+      status: 'OUT_FOR_DELIVERY',
+    } as never);
+
+    await POST(makeReq('POST'), ctx);
+
+    expect(mockRequestDelivery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        manifestItems: [{ name: 'poisson maquereau (5.30 lb)', quantity: 1 }],
+      }),
+    );
+  });
+
+  it('rounds and floors a fractional UNIT-item quantity at 1 (defensive minimum)', async () => {
+    mockFindOwnedOrder.mockResolvedValue({
+      store: STORE,
+      order: {
+        ...READY_ORDER,
+        lineItems: [{ productId: 'prod-1', name: 'Widget', priceCents: 4500, quantity: 0.4 }],
+      },
+    } as never);
+    prismaMock.delivery.findUnique.mockResolvedValue(null);
+    prismaMock.delivery.create.mockResolvedValue({
+      id: 'del-1',
+      orderId: 'order-1',
+      provider: 'self_manual',
+      status: 'REQUESTED',
+    } as never);
+    prismaMock.order.update.mockResolvedValue({
+      ...READY_ORDER,
+      status: 'OUT_FOR_DELIVERY',
+    } as never);
+
+    await POST(makeReq('POST'), ctx);
+
+    expect(mockRequestDelivery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        manifestItems: [{ name: 'Widget', quantity: 1 }],
+      }),
+    );
+  });
 });
 
 describe('PATCH /api/orders/[id]/delivery', () => {
