@@ -1,2 +1,38 @@
 packages:
   - 'frontend'
+
+# Security overrides for transitive-only vulnerabilities reported by `pnpm audit`
+# (build-tooling dependencies of @sentry/nextjs — not our own direct
+# dependencies, so pinning the range in our own package.json isn't an option).
+# Each entry is the smallest version that resolves a known advisory without
+# crossing a major version boundary. (postcss/sharp no longer need a scoped
+# next>x override — next@16.3.3 bundles a patched postcss and loosened its
+# own sharp range, so the blanket entries below now reach those edges too.)
+#
+# @opentelemetry/sdk-logs below is confirmed INERT on this pnpm version
+# (9.15.0) for one specific remaining path: @vercel/otel declares
+# @opentelemetry/sdk-logs as a peerDependency (broad range), and the old
+# 0.217.0 release that auto-install-peers picks for it pins the vulnerable
+# core@2.7.1 internally. Overrides for auto-installed *peer* dependencies
+# don't take effect on 9.15.0 — verified 3x independently (bare-name,
+# clean node_modules, and a brand-new never-used --store-dir), so this
+# isn't cache staleness. The identical override resolves correctly on
+# pnpm 10.34.5 and 11.x, but pnpm 10+ changes node_modules layout in a way
+# that breaks Prisma 5.22's generated client (verified on a clean install —
+# every model export goes missing, tsc fails project-wide). Fixing that
+# needs a Prisma major upgrade, out of scope here. Left in place so it
+# activates automatically once pnpm or Prisma is separately upgraded.
+overrides:
+  postcss: ^8.5.26
+  nanoid: ^3.3.18
+  fast-uri: ^3.1.6
+  brace-expansion: ^5.0.9
+  sharp: ^0.35.4
+  '@opentelemetry/core': ^2.8.0
+  '@babel/core': ^7.29.6
+  # @vercel/otel peer-requires @opentelemetry/sdk-logs in a broad range
+  # (">=0.200.0 <0.300.0"); auto-install-peers picked an old release that
+  # itself pins the vulnerable core@2.7.1. Forcing it to a current release
+  # (already used elsewhere via @sentry/nextjs's own otel chain) collapses
+  # both paths onto the same patched core@2.10.0 instance.
+  '@opentelemetry/sdk-logs': ^0.221.0
