@@ -18,15 +18,24 @@ interface RouteCtx {
   params: Promise<{ id: string }>;
 }
 
-// Explicit transition table — PENDING/EXPIRED/FAILED/REFUNDED aren't part of
-// the seller-controlled lifecycle (they're managed by checkout/webhook/cron),
+// Explicit transition table — EXPIRED/FAILED/REFUNDED aren't part of the
+// seller-controlled lifecycle (they're managed by checkout/webhook/cron),
 // and DELIVERED is terminal, so none of those appear as keys here.
 //
-// CANCELLED is deliberately NOT a reachable target from any of these
-// post-payment states — it used to be, but that was a bare status flip that
-// never touched money: a seller "cancelling" a paid Stripe order left the
-// buyer's card charged with no way to reverse it from inside Vendylio.
-// Ending a paid order early now always goes through
+// PENDING→CANCELLED is the one exception where a bare status flip is
+// still correct: nothing has ever been charged or reserved at PENDING
+// (stock decrements at PAID, not checkout — see api/orders/route.ts), so a
+// seller clearing an abandoned/stale unpaid order has no money to reverse.
+// This mirrors what cancelAbandonedOrder does automatically when the buyer
+// lands on the checkout-failed page, and what the order-expiration cron
+// does after ORDER_EXPIRATION_MINUTES either way — this just lets the
+// seller do it immediately instead of waiting.
+//
+// CANCELLED is deliberately NOT a reachable target from any of the
+// post-payment states below — it used to be, but that was a bare status
+// flip that never touched money: a seller "cancelling" a paid Stripe order
+// left the buyer's card charged with no way to reverse it from inside
+// Vendylio. Ending a paid order early now always goes through
 // POST /api/orders/[id]/refund, which actually reverses the charge (or
 // records a manual refund for Cash App/Zelle) before setting REFUNDED.
 //
@@ -47,6 +56,7 @@ interface RouteCtx {
 // only offers it for PICKUP orders, but the API itself doesn't forbid it for
 // a seller who genuinely handed a delivery order over without a courier.
 const TRANSITIONS: Record<string, readonly string[]> = {
+  PENDING: ['CANCELLED'],
   PAID: ['PREPARING'],
   PREPARING: ['READY'],
   READY: ['OUT_FOR_DELIVERY', 'DELIVERED'],

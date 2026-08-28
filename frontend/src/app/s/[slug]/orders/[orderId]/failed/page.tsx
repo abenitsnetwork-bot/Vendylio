@@ -1,10 +1,13 @@
 // Stripe redirects here when the buyer cancels/abandons the hosted
-// Checkout page. The Order row stays PENDING (untouched) — the cron at
-// lib/server/orders/expire.ts will mark it EXPIRED after 24h if the buyer
-// never returns to retry, so nothing needs to happen here beyond guiding
-// them back to the cart.
+// Checkout page — a reliable "gave up" signal, so this cancels the Order
+// immediately (cancelAbandonedOrder) instead of leaving it PENDING for the
+// order-expiration cron to clean up ORDER_EXPIRATION_MINUTES later. Guest
+// checkout means the order id in the URL is the only "auth" here, same
+// trust model as the success/tracking pages.
 import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
+import { prisma } from '@/lib/server/prisma';
+import { cancelAbandonedOrder } from '@/lib/server/orders/cancelAbandoned';
 
 export const runtime = 'nodejs';
 
@@ -13,7 +16,15 @@ interface Params {
 }
 
 export default async function OrderFailedPage({ params }: Params) {
-  const { slug } = await params;
+  const { slug, orderId } = await params;
+
+  // Best-effort — a DB hiccup here must never break rendering the page the
+  // buyer is actively looking at. Worst case the cron catches it later.
+  try {
+    await cancelAbandonedOrder(prisma, orderId);
+  } catch {
+    // swallow — see comment above
+  }
 
   return (
     <div className="mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center px-4 text-center font-body">

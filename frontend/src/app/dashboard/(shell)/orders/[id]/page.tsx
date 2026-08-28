@@ -233,6 +233,26 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   </Card>
                 )}
 
+              {order.status === 'PENDING' && (
+                <Card className="mb-6">
+                  <p className="mb-1 text-sm font-semibold text-foreground">
+                    Waiting on the customer to complete payment
+                  </p>
+                  <p className="mb-4 text-xs text-muted-foreground">
+                    Nothing has been charged yet. This clears on its own after a while if the
+                    customer never comes back — cancel now if you know they won&apos;t.
+                  </p>
+                  <button
+                    type="button"
+                    disabled={updating}
+                    onClick={() => advance('CANCELLED')}
+                    className="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 disabled:opacity-50"
+                  >
+                    Cancel Order
+                  </button>
+                </Card>
+              )}
+
               {NEXT_ACTIONS[order.status] && (
                 <Card className="mb-6">
                   <p className="mb-4 text-sm font-semibold text-foreground">Update status</p>

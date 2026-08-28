@@ -113,6 +113,7 @@ describe('PATCH /api/orders/[id] — status transitions', () => {
   });
 
   it.each([
+    ['PENDING', 'CANCELLED'], // never charged/reserved — a bare flip is safe
     ['PAID', 'PREPARING'],
     ['PREPARING', 'READY'],
     ['READY', 'OUT_FOR_DELIVERY'],
