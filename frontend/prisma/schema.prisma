@@ -544,6 +544,15 @@ model Store {
   ordersPaused             Boolean      @default(false)
   pauseMessage             String?
   hours                    Json         @default("[]")
+  // Phase 9 — storefront hero. `heroImages` is an ordered array of up to 3
+  // uploaded image URLs (Cloudinary secure_url, same as logoUrl); the
+  // storefront renders them as an auto-advancing carousel above the product
+  // list. `heroHeadline`/`heroSubhead` are one global promo message overlaid
+  // on every slide. Empty array = no hero (storefront looks exactly as
+  // before). See lib/storeHero.ts + components/storefront/StorefrontHero.tsx.
+  heroImages               Json         @default("[]")
+  heroHeadline             String?
+  heroSubhead              String?
   createdAt                DateTime     @default(now())
   updatedAt                DateTime     @updatedAt
 

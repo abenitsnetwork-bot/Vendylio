@@ -2,6 +2,7 @@ import 'server-only';
 import { prisma } from '@/lib/server/prisma';
 import { isStoreTemplate, type StoreTemplate } from '@/lib/storeTemplates';
 import { getStoreOpenState } from '@/lib/server/store/availability';
+import { parseHeroImages, type StoreHero } from '@/lib/storeHero';
 
 export interface PublicProductVariant {
   id: string;
@@ -59,6 +60,10 @@ export interface PublicStore {
   deliveryProvider: string;
   pickupAddress: string | null;
   template: StoreTemplate;
+  // Phase 9 — storefront hero carousel. `images` empty = no hero (storefront
+  // renders exactly as before). `headline`/`subhead` are one global promo
+  // message overlaid on every slide.
+  hero: StoreHero;
   // Phase 8 — store operations. `acceptingOrders` is the hard switch (false =
   // checkout is blocked server-side too). `openState` is informational: it
   // drives a "currently closed" banner but does NOT block checkout.
@@ -108,6 +113,9 @@ export async function getPublicStore(slug: string): Promise<PublicStore | null> 
       deliveryProvider: true,
       pickupAddress: true,
       template: true,
+      heroImages: true,
+      heroHeadline: true,
+      heroSubhead: true,
       timezone: true,
       ordersPaused: true,
       pauseMessage: true,
@@ -167,10 +175,24 @@ export async function getPublicStore(slug: string): Promise<PublicStore | null> 
     ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviewCount
     : null;
 
-  const { timezone, ordersPaused, pauseMessage, hours, ...publicFields } = store;
+  const {
+    timezone,
+    ordersPaused,
+    pauseMessage,
+    hours,
+    heroImages,
+    heroHeadline,
+    heroSubhead,
+    ...publicFields
+  } = store;
   return {
     ...publicFields,
     template: isStoreTemplate(store.template) ? store.template : 'MODERN',
+    hero: {
+      images: parseHeroImages(heroImages),
+      headline: heroHeadline,
+      subhead: heroSubhead,
+    },
     acceptingOrders: !ordersPaused,
     pauseMessage,
     openState: getStoreOpenState({ timezone, hours }),

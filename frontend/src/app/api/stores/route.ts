@@ -21,6 +21,7 @@ import { DEFAULT_CATEGORIES } from '@/lib/productCategories';
 import { checkPickupAddressDeliverable } from '@/lib/server/delivery/uber-direct';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 import { STORE_TEMPLATE_VALUES } from '@/lib/storeTemplates';
+import { MAX_HERO_IMAGES as HERO_MAX } from '@/lib/storeHero';
 
 const Body = z.object({
   name: z.string().trim().min(2).max(80),
@@ -100,6 +101,12 @@ const PatchBody = z.object({
     .optional(),
   ordersPaused: z.boolean().optional(),
   pauseMessage: z.string().trim().max(200).nullable().optional(),
+  // Phase 9 — storefront hero carousel. Up to 3 uploaded image URLs (same
+  // Cloudinary URLs as logoUrl) + one global promo message. See
+  // lib/storeHero.ts + components/storefront/StorefrontHero.tsx.
+  heroImages: z.array(z.string().url()).max(HERO_MAX).optional(),
+  heroHeadline: z.string().trim().max(80).nullable().optional(),
+  heroSubhead: z.string().trim().max(160).nullable().optional(),
   // Informational opening hours. One entry per open window; a day with no
   // entry is closed. `close` must be after `open` (no overnight windows in V1).
   hours: z

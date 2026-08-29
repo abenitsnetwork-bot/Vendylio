@@ -28,6 +28,9 @@ interface StoreDetails {
   zelleContact: string | null;
   template: StoreTemplate;
   defaultLowStockThreshold: number;
+  heroImages: string[];
+  heroHeadline: string | null;
+  heroSubhead: string | null;
   timezone: string;
   ordersPaused: boolean;
   pauseMessage: string | null;

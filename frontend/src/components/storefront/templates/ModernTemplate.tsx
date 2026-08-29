@@ -12,6 +12,7 @@ import { StoreReviews } from '@/components/storefront/StoreReviews';
 import { StorefrontCategoryNav } from '@/components/storefront/StorefrontCategoryNav';
 import { StorefrontTopBar } from '@/components/storefront/StorefrontTopBar';
 import { StorefrontHeader } from '@/components/storefront/StorefrontHeader';
+import { StorefrontHero } from '@/components/storefront/StorefrontHero';
 
 export function ModernTemplate({
   store,
@@ -36,6 +37,8 @@ export function ModernTemplate({
         searchQuery={query}
         onSearchChange={setQuery}
       />
+
+      <StorefrontHero hero={store.hero} storeName={store.name} />
 
       <header className="border-b border-border bg-card px-4 py-6 lg:px-14">
         <div className="mx-auto flex max-w-5xl items-center gap-4">

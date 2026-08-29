@@ -12,6 +12,7 @@ import { StoreReviews } from '@/components/storefront/StoreReviews';
 import { StorefrontCategoryNav } from '@/components/storefront/StorefrontCategoryNav';
 import { StorefrontTopBar } from '@/components/storefront/StorefrontTopBar';
 import { StorefrontHeader } from '@/components/storefront/StorefrontHeader';
+import { StorefrontHero } from '@/components/storefront/StorefrontHero';
 
 export function BoldTemplate({
   store,
@@ -36,6 +37,8 @@ export function BoldTemplate({
         searchQuery={query}
         onSearchChange={setQuery}
       />
+
+      <StorefrontHero hero={store.hero} storeName={store.name} />
 
       <header className="bg-primary px-4 py-16 text-primary-foreground lg:px-14">
         <div className="mx-auto flex max-w-6xl flex-col items-start gap-4">

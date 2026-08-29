@@ -21,6 +21,9 @@ export interface OnboardingStore {
   phone: string | null;
   logoUrl: string | null;
   template: string;
+  heroImages: string[];
+  heroHeadline: string | null;
+  heroSubhead: string | null;
   stripeOnboardingStatus: string;
   deliveryProvider: string;
   deliveryFeeCents: number;

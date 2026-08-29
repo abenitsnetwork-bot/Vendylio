@@ -149,6 +149,55 @@ describe('getPublicStore', () => {
     expect(result?.reviewCount).toBe(0);
   });
 
+  it('normalizes the hero carousel — drops non-string entries, caps at 3', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({
+      slug: 'shea-store',
+      name: 'Shea Store',
+      description: null,
+      city: null,
+      state: null,
+      logoUrl: null,
+      heroImages: [
+        'https://cdn/a.jpg',
+        42,
+        'https://cdn/b.jpg',
+        '',
+        'https://cdn/c.jpg',
+        'https://cdn/d.jpg',
+      ],
+      heroHeadline: 'Fresh, fast, local',
+      heroSubhead: null,
+      products: [],
+      reviews: [],
+    } as never);
+
+    const result = await getPublicStore('shea-store');
+    expect(result?.hero).toEqual({
+      images: ['https://cdn/a.jpg', 'https://cdn/b.jpg', 'https://cdn/c.jpg'],
+      headline: 'Fresh, fast, local',
+      subhead: null,
+    });
+  });
+
+  it('returns an empty hero when the store has no hero images', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({
+      slug: 'shea-store',
+      name: 'Shea Store',
+      description: null,
+      city: null,
+      state: null,
+      logoUrl: null,
+      heroImages: [],
+      heroHeadline: null,
+      heroSubhead: null,
+      products: [],
+      reviews: [],
+    } as never);
+
+    const result = await getPublicStore('shea-store');
+    expect(result?.hero).toEqual({ images: [], headline: null, subhead: null });
+  });
+
   it('only returns published stores — unpublished ones read as not-found', async () => {
     prismaMock.store.findFirst.mockResolvedValue(null);
     const result = await getPublicStore('unpublished-store');

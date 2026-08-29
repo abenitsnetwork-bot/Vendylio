@@ -279,6 +279,46 @@ describe('PATCH /api/stores', () => {
     });
   });
 
+  it('updates the Phase 9 hero fields (images + global promo message)', async () => {
+    mockResolveOwnStore.mockResolvedValue({ id: 'store-1', organizationId: 'org-1' } as never);
+    prismaMock.store.update.mockResolvedValue({ id: 'store-1' } as never);
+
+    const res = await PATCH(
+      makeReq('PATCH', {
+        heroImages: ['https://cdn/a.jpg', 'https://cdn/b.jpg'],
+        heroHeadline: 'Fresh groceries, fast',
+        heroSubhead: 'Same-day pickup or delivery',
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(prismaMock.store.update.mock.calls[0]?.[0]?.data).toMatchObject({
+      heroImages: ['https://cdn/a.jpg', 'https://cdn/b.jpg'],
+      heroHeadline: 'Fresh groceries, fast',
+      heroSubhead: 'Same-day pickup or delivery',
+    });
+  });
+
+  it('400s on more than 3 hero images', async () => {
+    mockResolveOwnStore.mockResolvedValue({ id: 'store-1', organizationId: 'org-1' } as never);
+    const res = await PATCH(
+      makeReq('PATCH', {
+        heroImages: [
+          'https://cdn/a.jpg',
+          'https://cdn/b.jpg',
+          'https://cdn/c.jpg',
+          'https://cdn/d.jpg',
+        ],
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('400s on a non-URL hero image', async () => {
+    mockResolveOwnStore.mockResolvedValue({ id: 'store-1', organizationId: 'org-1' } as never);
+    const res = await PATCH(makeReq('PATCH', { heroImages: ['not-a-url'] }));
+    expect(res.status).toBe(400);
+  });
+
   it('400s on an unknown timezone', async () => {
     mockResolveOwnStore.mockResolvedValue({ id: 'store-1', organizationId: 'org-1' } as never);
     const res = await PATCH(makeReq('PATCH', { timezone: 'Not/AZone' }));

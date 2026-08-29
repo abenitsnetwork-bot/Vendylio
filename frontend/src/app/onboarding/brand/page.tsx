@@ -6,8 +6,10 @@ import { api, ApiError } from '@/lib/api';
 import { Field } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { ImageDropzone } from '@/components/ui/ImageDropzone';
+import { StoreHeroEditor } from '@/components/seller/StoreHeroEditor';
 import { cn } from '@/lib/utils';
 import { STORE_TEMPLATES, type StoreTemplate } from '@/lib/storeTemplates';
+import { parseHeroImages } from '@/lib/storeHero';
 import { useOnboarding } from '../layout';
 
 export default function BrandStepPage() {
@@ -18,6 +20,9 @@ export default function BrandStepPage() {
   const [template, setTemplate] = useState<StoreTemplate>(
     (store?.template as StoreTemplate) ?? 'MODERN',
   );
+  const [heroImages, setHeroImages] = useState<string[]>(parseHeroImages(store?.heroImages));
+  const [heroHeadline, setHeroHeadline] = useState(store?.heroHeadline ?? '');
+  const [heroSubhead, setHeroSubhead] = useState(store?.heroSubhead ?? '');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,7 +31,16 @@ export default function BrandStepPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await api('/api/stores', { method: 'PATCH', body: { logoUrl, template } });
+      await api('/api/stores', {
+        method: 'PATCH',
+        body: {
+          logoUrl,
+          template,
+          heroImages,
+          heroHeadline: heroHeadline.trim() || null,
+          heroSubhead: heroSubhead.trim() || null,
+        },
+      });
       refresh();
       router.push('/onboarding/products');
     } catch (err) {
@@ -60,6 +74,22 @@ export default function BrandStepPage() {
             onRemove={() => setLogoUrl(null)}
           />
         </Field>
+
+        <div>
+          <p className="mb-1 text-sm font-medium text-foreground">Storefront hero</p>
+          <p className="mb-3 text-xs text-muted-foreground">
+            A rotating banner at the top of your store — great for showing off your best products
+            and a short promo line.
+          </p>
+          <StoreHeroEditor
+            images={heroImages}
+            headline={heroHeadline}
+            subhead={heroSubhead}
+            onImagesChange={setHeroImages}
+            onHeadlineChange={setHeroHeadline}
+            onSubheadChange={setHeroSubhead}
+          />
+        </div>
 
         <div>
           <p className="mb-3 text-sm font-medium text-foreground">Storefront Look</p>
