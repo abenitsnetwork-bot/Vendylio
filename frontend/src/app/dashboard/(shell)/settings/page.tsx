@@ -26,6 +26,7 @@ interface StoreDetails {
   cashAppCashtag: string | null;
   zelleContact: string | null;
   template: StoreTemplate;
+  defaultLowStockThreshold: number;
 }
 
 const TABS = [

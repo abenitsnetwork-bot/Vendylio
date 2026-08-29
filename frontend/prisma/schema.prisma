@@ -466,33 +466,33 @@ model Customer {
 // no longer has that column.
 // ───────────────────────────────────────────────────────────────────────
 model Store {
-  id                     String       @id @default(cuid())
-  organizationId         String       @unique
-  organization           Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  slug                   String       @unique
-  name                   String
-  description            String?
-  city                   String?
-  state                  String?
-  logoUrl                String?
+  id                       String       @id @default(cuid())
+  organizationId           String       @unique
+  organization             Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  slug                     String       @unique
+  name                     String
+  description              String?
+  city                     String?
+  state                    String?
+  logoUrl                  String?
   // Storefront contact number — shown prominently in the public storefront's
   // top bar (see StorefrontTopBar). Free-text, no format validation: sellers
   // span many countries/formats and this is display-only, never dialed
   // programmatically.
-  phone                  String?
+  phone                    String?
   // Storefront layout — MODERN (grid), MINIMAL (single-column list), or
   // BOLD (large imagery, editorial). See src/components/storefront/templates/.
-  template               String       @default("MODERN")
+  template                 String       @default("MODERN")
   // Gates visibility on /s/[slug]. Defaults true so onboarding (which has no
   // separate "Publish" step yet) keeps working end-to-end; a future
   // publish/unpublish toggle just flips this.
-  published              Boolean      @default(true)
+  published                Boolean      @default(true)
   // Phase 3 — Stripe Connect (direct-to-seller payouts, optional). A Store
   // without a connected account still sells fine via the Phase 2 platform
   // charge path — see api/orders/route.ts's routing check on
   // stripeOnboardingStatus === 'ACTIVE'.
-  stripeAccountId        String?      @unique
-  stripeOnboardingStatus String       @default("NOT_STARTED") // NOT_STARTED|PENDING|ACTIVE|RESTRICTED
+  stripeAccountId          String?      @unique
+  stripeOnboardingStatus   String       @default("NOT_STARTED") // NOT_STARTED|PENDING|ACTIVE|RESTRICTED
   // Manual payment methods — no webhook/API exists for either of these to
   // confirm a peer-to-peer payment automatically, so a buyer who checks out
   // this way sees the seller's Cash App QR / Zelle contact, the order stays
@@ -500,30 +500,35 @@ model Store {
   // POST /api/orders/[id]/confirm-payment (see lib/server/orders/markPaid.ts
   // for the same side effects a real Stripe payment triggers). Both null =
   // the checkout payment-method selector doesn't offer that option at all.
-  cashAppCashtag         String? // stored WITHOUT the leading "$" (e.g. "AdaezeShop")
-  zelleContact           String? // email or phone registered with Zelle — free text
+  cashAppCashtag           String? // stored WITHOUT the leading "$" (e.g. "AdaezeShop")
+  zelleContact             String? // email or phone registered with Zelle — free text
   // Phase 5 — delivery. self_manual works with zero configuration (the
   // seller is their own courier) so it's the default for every store, no
   // separate on/off flag needed. uber_direct is a real courier integration
   // (lib/server/delivery/uber-direct.ts) that requires a pickup address —
   // self_manual ignores this column entirely (the seller picks up nothing,
   // they just walk the order out themselves).
-  deliveryProvider       String       @default("self_manual")
-  deliveryFeeCents       Int          @default(0)
-  pickupAddress          String?
+  deliveryProvider         String       @default("self_manual")
+  deliveryFeeCents         Int          @default(0)
+  pickupAddress            String?
   // Phase 12 — Free/Pro tiers. No hard enforcement in the MVP (no feature is
   // gated behind PRO yet); the one branchable benefit today is a reduced
   // marketplace commission — see COMMISSION_RATE_BP_PRO and
   // resolveCommissionRateBp() in lib/server/payments/commission.ts.
-  plan                   String       @default("FREE") // FREE|PRO
-  createdAt              DateTime     @default(now())
-  updatedAt              DateTime     @updatedAt
+  plan                     String       @default("FREE") // FREE|PRO
+  // Phase 3 — inventory. Default "low stock" threshold applied to a product
+  // whose own `lowStockThreshold` is null. A product/variant is LOW when its
+  // quantity is > 0 and <= the effective threshold, OUT when quantity <= 0.
+  defaultLowStockThreshold Int          @default(3)
+  createdAt                DateTime     @default(now())
+  updatedAt                DateTime     @updatedAt
 
-  products   Product[]
-  orders     Order[]
-  customers  Customer[]
-  reviews    Review[]
-  categories Category[]
+  products       Product[]
+  orders         Order[]
+  customers      Customer[]
+  reviews        Review[]
+  categories     Category[]
+  stockMovements StockMovement[]
 }
 
 // Per-store product categories. Replaced the old hard-coded 4-value
@@ -549,34 +554,37 @@ model Category {
 }
 
 model Product {
-  id          String    @id @default(cuid())
-  storeId     String
-  store       Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  name        String
-  description String?
-  priceCents  Int
+  id                String    @id @default(cuid())
+  storeId           String
+  store             Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name              String
+  description       String?
+  priceCents        Int
   // Float, not Int: a UNIT product's quantity is always a whole count
   // (enforced at the zod layer, not here — Prisma has no per-row numeric
   // constraint), but a weight unit (KG/LB/G/OZ) needs fractional amounts
   // like 12.09 lb. Always rounded to 2 decimal places wherever it's
   // written (lib/server/quantity.ts) so float drift never accumulates.
-  quantity    Float     @default(0)
+  quantity          Float     @default(0)
   // Nullable on purpose — a product with no category shows under "Sans
   // catégorie". Set null (not blocked) when its Category row is deleted.
-  categoryId  String?
-  category    Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  categoryId        String?
+  category          Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   // Phase 7 — unit the price/quantity above are denominated in. UNIT means
   // "priceCents per item" (the only mode before Phase 7); the weight units
   // let a seller price something like spices "per kg", with fractional
   // quantities (`quantity` counts however much of that unit is in stock —
   // e.g. quantity=12.09 with unit=LB means 12.09 lb on hand).
-  unit        String    @default("UNIT") // UNIT | LB | KG | G | OZ
-  imageUrl    String?
-  status      String    @default("ACTIVE") // ACTIVE | ARCHIVED
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  unit              String    @default("UNIT") // UNIT | LB | KG | G | OZ
+  imageUrl          String?
+  status            String    @default("ACTIVE") // ACTIVE | ARCHIVED
+  // Phase 3 — inventory. null = use the store's defaultLowStockThreshold.
+  lowStockThreshold Int?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  variants ProductVariant[]
+  variants       ProductVariant[]
+  stockMovements StockMovement[]
 
   @@index([storeId, createdAt])
   @@index([storeId, categoryId])
@@ -599,7 +607,34 @@ model ProductVariant {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  stockMovements StockMovement[]
+
   @@index([productId])
+}
+
+// Phase 3 — append-only inventory ledger. One row per stock change: a paid
+// sale (SALE), a seller restock/adjustment (RESTOCK | MANUAL_ADJUST |
+// CORRECTION), or a refund putting stock back (REFUND_RESTOCK). Written
+// only via lib/server/inventory/adjust.ts's applyStockChange() so the
+// product/variant `quantity` and this ledger never diverge.
+model StockMovement {
+  id                String          @id @default(cuid())
+  storeId           String
+  store             Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  productId         String
+  product           Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId         String?
+  variant           ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  delta             Float // signed: -3 for a sale of 3, +10 for a restock
+  resultingQuantity Float // quantity immediately after this movement (audit)
+  reason            String // SALE | RESTOCK | MANUAL_ADJUST | CORRECTION | REFUND_RESTOCK
+  note              String?
+  orderId           String? // set for SALE / REFUND_RESTOCK
+  actorType         String // SYSTEM | SELLER
+  createdAt         DateTime        @default(now())
+
+  @@index([storeId, createdAt])
+  @@index([productId, createdAt])
 }
 
 model Withdrawal {

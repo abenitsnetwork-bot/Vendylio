@@ -10,13 +10,18 @@ vi.mock('@/lib/server/middleware', () => ({
 vi.mock('@/lib/server/org', () => ({
   resolveOwnStore: vi.fn(),
 }));
+vi.mock('@/lib/server/inventory/adjust', () => ({
+  applyStockChange: vi.fn(),
+}));
 
 import { requireAuth } from '@/lib/server/middleware';
 import { resolveOwnStore } from '@/lib/server/org';
+import { applyStockChange } from '@/lib/server/inventory/adjust';
 import { GET, PATCH, DELETE } from './route';
 
 const mockRequireAuth = vi.mocked(requireAuth);
 const mockResolveOwnStore = vi.mocked(resolveOwnStore);
+const mockApplyStockChange = vi.mocked(applyStockChange);
 const authedCtx = { user: { sub: 'user-1', email: 'me@example.com' } };
 const ctx = { params: Promise.resolve({ id: 'prod-1' }) };
 
@@ -41,6 +46,23 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockRequireAuth.mockResolvedValue(authedCtx);
   mockResolveOwnStore.mockResolvedValue({ id: 'store-1', organizationId: 'org-1' } as never);
+  mockApplyStockChange.mockResolvedValue({
+    before: 0,
+    after: 0,
+    delta: 0,
+    effectiveThreshold: 3,
+    crossedLowThreshold: false,
+    crossedZero: false,
+  });
+  // PATCH now wraps its writes in a $transaction — run the callback against
+  // the same mock client.
+  prismaMock.$transaction.mockImplementation((cb: unknown) => {
+    if (typeof cb === 'function') {
+      return (cb as (tx: typeof prismaMock) => unknown)(prismaMock) as Promise<unknown>;
+    }
+    return Promise.resolve(cb);
+  });
+  prismaMock.product.findUniqueOrThrow.mockResolvedValue({ id: 'prod-1' } as never);
 });
 
 describe('GET /api/products/[id]', () => {
@@ -142,18 +164,40 @@ describe('PATCH /api/products/[id]', () => {
     expect(res.status).toBe(400);
   });
 
-  it('accepts a fractional quantity when the product is already a weight unit', async () => {
+  it('routes a hand-edited quantity through applyStockChange (MANUAL_ADJUST), not a plain update', async () => {
     prismaMock.product.findFirst.mockResolvedValue({
       id: 'prod-1',
       storeId: 'store-1',
       unit: 'KG',
+      quantity: 5,
     } as never);
-    prismaMock.product.update.mockResolvedValue({ id: 'prod-1', quantity: 12.09 } as never);
 
     const res = await PATCH(makeReq('PATCH', { quantity: 12.09 }), ctx);
     expect(res.status).toBe(200);
-    const updateArg = prismaMock.product.update.mock.calls[0]?.[0];
-    expect(updateArg?.data).toEqual({ quantity: 12.09 });
+    expect(mockApplyStockChange).toHaveBeenCalledWith(
+      prismaMock,
+      expect.objectContaining({
+        productId: 'prod-1',
+        newQuantity: 12.09,
+        reason: 'MANUAL_ADJUST',
+        actorType: 'SELLER',
+      }),
+    );
+    // no non-quantity fields sent → no plain product.update
+    expect(prismaMock.product.update).not.toHaveBeenCalled();
+  });
+
+  it('does not touch stock when the sent quantity equals the current quantity', async () => {
+    prismaMock.product.findFirst.mockResolvedValue({
+      id: 'prod-1',
+      storeId: 'store-1',
+      unit: 'UNIT',
+      quantity: 8,
+    } as never);
+
+    const res = await PATCH(makeReq('PATCH', { quantity: 8 }), ctx);
+    expect(res.status).toBe(200);
+    expect(mockApplyStockChange).not.toHaveBeenCalled();
   });
 
   it('400s on a fractional quantity for a UNIT product', async () => {

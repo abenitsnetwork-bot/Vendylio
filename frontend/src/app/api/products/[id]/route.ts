@@ -13,6 +13,7 @@ import { requireAuth } from '@/lib/server/middleware';
 import { prisma } from '@/lib/server/prisma';
 import { findOwnedProduct } from '@/lib/server/products/ownership';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
+import { applyStockChange } from '@/lib/server/inventory/adjust';
 import { PRODUCT_UNIT_VALUES } from '@/lib/productUnits';
 import { isValidQuantityForUnit, roundQuantity } from '@/lib/quantity';
 
@@ -30,6 +31,9 @@ const PatchBody = z.object({
   unit: z.enum(PRODUCT_UNIT_VALUES).optional(),
   imageUrl: z.string().url().nullable().optional(),
   status: z.enum(['ACTIVE', 'ARCHIVED']).optional(),
+  // Phase 3 — per-product low-stock threshold; null clears it (falls back
+  // to the store default).
+  lowStockThreshold: z.number().int().min(0).nullable().optional(),
 });
 
 interface RouteCtx {
@@ -116,18 +120,28 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<NextRespon
       );
     }
 
-    const data = Object.fromEntries(
-      Object.entries({
-        ...parsed.data,
-        ...(parsed.data.quantity !== undefined
-          ? { quantity: roundQuantity(parsed.data.quantity) }
-          : {}),
-      }).filter(([, v]) => v !== undefined),
-    );
+    // `quantity` is handled separately (via the ledger) so it never lands
+    // in the plain update below.
+    const { quantity: nextQuantity, ...rest } = parsed.data;
+    const data = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined));
 
-    const updated = await prisma.product.update({
-      where: { id: product.id },
-      data,
+    const updated = await prisma.$transaction(async (tx) => {
+      if (Object.keys(data).length > 0) {
+        await tx.product.update({ where: { id: product.id }, data });
+      }
+      // A hand-edited quantity is a MANUAL_ADJUST — route it through
+      // applyStockChange so the change is recorded in StockMovement and the
+      // product row and ledger can't drift.
+      if (nextQuantity !== undefined && roundQuantity(nextQuantity) !== product.quantity) {
+        await applyStockChange(tx, {
+          storeId: store.id,
+          productId: product.id,
+          newQuantity: nextQuantity,
+          reason: 'MANUAL_ADJUST',
+          actorType: 'SELLER',
+        });
+      }
+      return tx.product.findUniqueOrThrow({ where: { id: product.id } });
     });
 
     return NextResponse.json(

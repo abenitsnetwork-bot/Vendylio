@@ -77,6 +77,8 @@ const PatchBody = z.object({
   // Required for uber_direct to dispatch a courier; self_manual ignores it.
   // Free-text, no format validation — same reasoning as Store.phone.
   pickupAddress: z.string().trim().max(200).nullable().optional(),
+  // Phase 3 — default "low stock" threshold for products without their own.
+  defaultLowStockThreshold: z.number().int().min(0).max(100000).optional(),
 });
 
 export async function POST(req: NextRequest): Promise<NextResponse> {

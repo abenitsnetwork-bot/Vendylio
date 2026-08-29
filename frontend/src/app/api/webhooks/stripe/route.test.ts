@@ -41,6 +41,14 @@ vi.mock('@/lib/server/prisma', () => ({
   prisma: { $transaction },
 }));
 
+// applyStockChange (product/variant quantity + StockMovement ledger) is
+// unit-tested on its own — here we just assert markPaid asked for the right
+// decrement.
+const applyStockChange = vi.fn();
+vi.mock('@/lib/server/inventory/adjust', () => ({
+  applyStockChange: (...args: unknown[]) => applyStockChange(...args),
+}));
+
 beforeEach(() => {
   vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test_fixture_only');
   vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'test-webhook-secret');
@@ -60,6 +68,14 @@ beforeEach(() => {
   customerUpdate.mockReset();
   productVariantFindUnique.mockReset();
   productVariantUpdate.mockReset();
+  applyStockChange.mockReset().mockResolvedValue({
+    before: 0,
+    after: 0,
+    delta: 0,
+    effectiveThreshold: 3,
+    crossedLowThreshold: false,
+    crossedZero: false,
+  });
 });
 
 afterEach(() => {
@@ -138,10 +154,15 @@ describe('POST /api/webhooks/stripe', () => {
       }),
     });
 
-    expect(productUpdate).toHaveBeenCalledWith({
-      where: { id: 'prod-a' },
-      data: { quantity: 8 }, // 10 - 2
-    });
+    expect(applyStockChange).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        productId: 'prod-a',
+        delta: -2,
+        reason: 'SALE',
+        floorAtZero: true,
+      }),
+    );
 
     expect(orderStatusEventCreate).toHaveBeenCalledWith({
       data: { orderId: 'order-1', status: 'PAID', actorType: 'SYSTEM' },
@@ -207,22 +228,22 @@ describe('POST /api/webhooks/stripe', () => {
     });
   });
 
-  it('floors stock at 0 instead of going negative', async () => {
+  it('asks applyStockChange to floor stock at 0 rather than going negative', async () => {
     orderFindFirst.mockResolvedValueOnce(PAID_ORDER);
-    productFindUnique.mockResolvedValueOnce({ quantity: 1 }); // less than the 2 requested
+    productFindUnique.mockResolvedValueOnce({ id: 'prod-a' });
     storeFindUnique.mockResolvedValueOnce({ organization: { ownerId: 'seller-1' } });
 
     const { POST } = await import('./route');
     const { req } = stripeFixtureRequest();
     await POST(req);
 
-    expect(productUpdate).toHaveBeenCalledWith({
-      where: { id: 'prod-a' },
-      data: { quantity: 0 },
-    });
+    expect(applyStockChange).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ productId: 'prod-a', delta: -2, floorAtZero: true }),
+    );
   });
 
-  it('decrements the ProductVariant quantity (not Product) when a lineItem carries a variantId (Phase 7)', async () => {
+  it('decrements the variant (not the product) when a lineItem carries a variantId (Phase 7)', async () => {
     orderFindFirst.mockResolvedValueOnce({
       ...PAID_ORDER,
       lineItems: [
@@ -235,37 +256,37 @@ describe('POST /api/webhooks/stripe', () => {
         },
       ],
     });
-    productVariantFindUnique.mockResolvedValueOnce({ quantity: 5 });
+    productVariantFindUnique.mockResolvedValueOnce({ id: 'var-1' });
     storeFindUnique.mockResolvedValueOnce({ organization: { ownerId: 'seller-1' } });
 
     const { POST } = await import('./route');
     const { req } = stripeFixtureRequest();
     await POST(req);
 
-    expect(productVariantUpdate).toHaveBeenCalledWith({
-      where: { id: 'var-1' },
-      data: { quantity: 3 }, // 5 - 2
-    });
+    expect(applyStockChange).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ productId: 'prod-a', variantId: 'var-1', delta: -2 }),
+    );
     expect(productFindUnique).not.toHaveBeenCalled();
     expect(productUpdate).not.toHaveBeenCalled();
   });
 
-  it('decrements a fractional Product quantity (weight unit) and rounds off float drift', async () => {
+  it('passes a fractional weight-unit quantity straight through to applyStockChange', async () => {
     orderFindFirst.mockResolvedValueOnce({
       ...PAID_ORDER,
       lineItems: [{ productId: 'prod-a', name: 'Ground Pepper', priceCents: 500, quantity: 12.09 }],
     });
-    productFindUnique.mockResolvedValueOnce({ quantity: 20 });
+    productFindUnique.mockResolvedValueOnce({ id: 'prod-a' });
     storeFindUnique.mockResolvedValueOnce({ organization: { ownerId: 'seller-1' } });
 
     const { POST } = await import('./route');
     const { req } = stripeFixtureRequest();
     await POST(req);
 
-    expect(productUpdate).toHaveBeenCalledWith({
-      where: { id: 'prod-a' },
-      data: { quantity: 7.91 }, // 20 - 12.09, rounded to 2 decimals
-    });
+    expect(applyStockChange).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ productId: 'prod-a', delta: -12.09 }),
+    );
   });
 
   it('is a no-op when the Order is already past PENDING (defense-in-depth alongside WebhookLog dedup)', async () => {

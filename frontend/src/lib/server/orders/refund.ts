@@ -9,7 +9,7 @@ import 'server-only';
 import { Prisma } from '@prisma/client';
 import type { PrismaTransactionClient } from '@/lib/server/webhook/handler';
 import { enqueueOutbox } from '@/lib/server/outbox';
-import { roundQuantity } from '@/lib/quantity';
+import { applyStockChange } from '@/lib/server/inventory/adjust';
 
 interface OrderLineItem {
   productId: string;
@@ -19,6 +19,7 @@ interface OrderLineItem {
 
 export interface OrderForRefundEffects {
   id: string;
+  storeId: string;
   amount: number;
   currency: string;
   lineItems: Prisma.JsonValue;
@@ -38,30 +39,24 @@ export async function applyOrderRefundedEffects(
     data: { orderId: order.id, status: 'REFUNDED', actorType: 'SELLER' },
   });
 
-  // Restock — the mirror image of markPaid's decrement. No floor needed
-  // here (unlike the decrement's floor at 0): adding back can't go negative.
+  // Restock — the mirror image of markPaid's decrement, and like it goes
+  // through applyStockChange so a REFUND_RESTOCK row lands in the ledger.
+  // No floor needed here: adding back can't go negative.
   const lineItems = order.lineItems as unknown as OrderLineItem[];
   for (const item of lineItems) {
-    if (item.variantId) {
-      const variant = await tx.productVariant.findUnique({
-        where: { id: item.variantId },
-        select: { quantity: true },
-      });
-      if (!variant) continue;
-      await tx.productVariant.update({
-        where: { id: item.variantId },
-        data: { quantity: roundQuantity(variant.quantity + item.quantity) },
-      });
-      continue;
-    }
-    const product = await tx.product.findUnique({
-      where: { id: item.productId },
-      select: { quantity: true },
-    });
-    if (!product) continue;
-    await tx.product.update({
-      where: { id: item.productId },
-      data: { quantity: roundQuantity(product.quantity + item.quantity) },
+    const exists = item.variantId
+      ? await tx.productVariant.findUnique({ where: { id: item.variantId }, select: { id: true } })
+      : await tx.product.findUnique({ where: { id: item.productId }, select: { id: true } });
+    if (!exists) continue;
+
+    await applyStockChange(tx, {
+      storeId: order.storeId,
+      productId: item.productId,
+      variantId: item.variantId ?? null,
+      delta: item.quantity,
+      reason: 'REFUND_RESTOCK',
+      actorType: 'SELLER',
+      orderId: order.id,
     });
   }
 

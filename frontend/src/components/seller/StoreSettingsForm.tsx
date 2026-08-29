@@ -20,6 +20,7 @@ interface StoreDetails extends DashboardStore {
   cashAppCashtag: string | null;
   zelleContact: string | null;
   template: StoreTemplate;
+  defaultLowStockThreshold: number;
 }
 
 /** Tiny CSS mockup of each layout's shape — not a live render, just enough
@@ -70,6 +71,9 @@ export function StoreSettingsForm({
   const [zelleContact, setZelleContact] = useState(store.zelleContact ?? '');
   const [logoUrl, setLogoUrl] = useState<string | null>(store.logoUrl);
   const [template, setTemplate] = useState<StoreTemplate>(store.template);
+  const [defaultLowStockThreshold, setDefaultLowStockThreshold] = useState(
+    String(store.defaultLowStockThreshold ?? 3),
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -84,7 +88,8 @@ export function StoreSettingsForm({
     cashAppCashtag.trim().replace(/^\$/, '') !== (store.cashAppCashtag ?? '') ||
     zelleContact !== (store.zelleContact ?? '') ||
     logoUrl !== store.logoUrl ||
-    template !== store.template;
+    template !== store.template ||
+    Number(defaultLowStockThreshold) !== (store.defaultLowStockThreshold ?? 3);
 
   useEffect(() => {
     if (!isDirty) return;
@@ -128,6 +133,7 @@ export function StoreSettingsForm({
           zelleContact,
           logoUrl,
           template,
+          defaultLowStockThreshold: Math.max(0, Math.trunc(Number(defaultLowStockThreshold) || 0)),
         },
       });
       onSaved(res.store);
@@ -206,6 +212,21 @@ export function StoreSettingsForm({
               onUploaded={setLogoUrl}
               onRemove={() => setLogoUrl(null)}
             />
+          </Field>
+          <Field label="Default low-stock alert threshold" htmlFor="defaultLowStockThreshold">
+            <input
+              id="defaultLowStockThreshold"
+              type="number"
+              min="0"
+              step="1"
+              className={inputClass}
+              value={defaultLowStockThreshold}
+              onChange={(e) => setDefaultLowStockThreshold(e.target.value)}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              You&apos;ll be warned when a product drops to this many left. Individual products can
+              override this in their own settings.
+            </p>
           </Field>
         </div>
       </Card>

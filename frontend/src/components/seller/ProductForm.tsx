@@ -26,6 +26,7 @@ export interface ProductFields {
   categoryId: string | null;
   category?: { id: string; name: string; slug: string } | null;
   unit: string;
+  lowStockThreshold: number | null;
   imageUrl: string | null;
   status: string;
 }
@@ -53,6 +54,10 @@ export function ProductForm(props: CreateProps | EditProps) {
   const [categoryId, setCategoryId] = useState<string | null>(initial?.categoryId ?? null);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [unit, setUnit] = useState<ProductUnit>((initial?.unit as ProductUnit) ?? 'UNIT');
+  const [lowStockThreshold, setLowStockThreshold] = useState(
+    initial?.lowStockThreshold != null ? String(initial.lowStockThreshold) : '',
+  );
+  const [storeDefaultThreshold, setStoreDefaultThreshold] = useState<number | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(initial?.imageUrl ?? null);
   const [status, setStatus] = useState<'ACTIVE' | 'ARCHIVED'>(
     initial?.status === 'ARCHIVED' ? 'ARCHIVED' : 'ACTIVE',
@@ -68,6 +73,9 @@ export function ProductForm(props: CreateProps | EditProps) {
     api<{ categories: CategoryOption[] }>('/api/categories')
       .then((res) => setCategories(res.categories))
       .catch(() => setCategories([]));
+    api<{ store: { defaultLowStockThreshold: number } }>('/api/stores/me')
+      .then((res) => setStoreDefaultThreshold(res.store.defaultLowStockThreshold))
+      .catch(() => setStoreDefaultThreshold(null));
   }, []);
 
   const categoryName = categories.find((c) => c.id === categoryId)?.name ?? null;
@@ -115,6 +123,12 @@ export function ProductForm(props: CreateProps | EditProps) {
       return;
     }
 
+    const parsedThreshold = lowStockThreshold.trim() === '' ? null : Number(lowStockThreshold);
+    if (parsedThreshold !== null && (!Number.isInteger(parsedThreshold) || parsedThreshold < 0)) {
+      setError('Low-stock threshold must be a whole number (0 or more).');
+      return;
+    }
+
     setSubmitting(true);
     try {
       if (props.mode === 'create') {
@@ -127,6 +141,7 @@ export function ProductForm(props: CreateProps | EditProps) {
             quantity: quantityNum,
             categoryId,
             unit,
+            ...(parsedThreshold !== null ? { lowStockThreshold: parsedThreshold } : {}),
             ...(imageUrl ? { imageUrl } : {}),
           },
         });
@@ -141,6 +156,7 @@ export function ProductForm(props: CreateProps | EditProps) {
             quantity: quantityNum,
             categoryId,
             unit,
+            lowStockThreshold: parsedThreshold,
             imageUrl,
             status,
           },
@@ -320,6 +336,25 @@ export function ProductForm(props: CreateProps | EditProps) {
               Store Settings
             </a>
             .
+          </p>
+        </Field>
+
+        <Field label="Low-stock alert (optional)" htmlFor="lowStockThreshold">
+          <input
+            id="lowStockThreshold"
+            type="number"
+            min="0"
+            step="1"
+            className={inputClass}
+            placeholder={
+              storeDefaultThreshold !== null ? `Store default: ${storeDefaultThreshold}` : 'e.g. 5'
+            }
+            value={lowStockThreshold}
+            onChange={(e) => setLowStockThreshold(e.target.value)}
+          />
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            You&apos;ll be warned when stock drops to this number. Leave blank to use the store
+            default.
           </p>
         </Field>
 

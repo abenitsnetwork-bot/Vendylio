@@ -3,13 +3,29 @@
 // function instead of only through the Stripe webhook HTTP layer.
 import { prismaMock } from '@/test-utils/prisma-mock';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+vi.mock('@/lib/server/inventory/adjust', () => ({
+  applyStockChange: vi.fn(),
+}));
+
 import { applyOrderPaidEffects, type OrderForPaidEffects } from './markPaid';
+import { applyStockChange } from '@/lib/server/inventory/adjust';
+
+const mockApplyStockChange = vi.mocked(applyStockChange);
 
 beforeEach(() => {
   vi.clearAllMocks();
   prismaMock.platformSettings.findUnique.mockResolvedValue(null); // no row yet = 0% commission
   prismaMock.customer.findUnique.mockResolvedValue(null);
   prismaMock.outboxEvent.create.mockResolvedValue({ id: 'ob1' } as never);
+  mockApplyStockChange.mockResolvedValue({
+    before: 0,
+    after: 0,
+    delta: 0,
+    effectiveThreshold: 3,
+    crossedLowThreshold: false,
+    crossedZero: false,
+  });
 });
 
 const BASE_ORDER: OrderForPaidEffects = {
@@ -54,26 +70,36 @@ describe('applyOrderPaidEffects', () => {
     });
   });
 
-  it('decrements Product.quantity for a lineItem with no variantId', async () => {
+  it('records a SALE stock movement for a lineItem with no variantId', async () => {
     prismaMock.store.findUnique.mockResolvedValueOnce({
       plan: 'FREE',
+      defaultLowStockThreshold: 3,
       organization: { ownerId: 'seller-1' },
     } as never);
-    prismaMock.product.findUnique.mockResolvedValueOnce({ quantity: 10 } as never);
+    prismaMock.product.findUnique.mockResolvedValueOnce({ id: 'prod-a' } as never);
 
     await applyOrderPaidEffects(prismaMock, BASE_ORDER, {});
-    expect(prismaMock.product.update).toHaveBeenCalledWith({
-      where: { id: 'prod-a' },
-      data: { quantity: 8 },
-    });
+    expect(mockApplyStockChange).toHaveBeenCalledWith(
+      prismaMock,
+      expect.objectContaining({
+        productId: 'prod-a',
+        variantId: null,
+        delta: -2,
+        reason: 'SALE',
+        actorType: 'SYSTEM',
+        orderId: 'order-1',
+        floorAtZero: true,
+      }),
+    );
   });
 
-  it('decrements ProductVariant.quantity (not Product) for a lineItem with a variantId', async () => {
+  it('targets the variant (not the product) for a lineItem with a variantId', async () => {
     prismaMock.store.findUnique.mockResolvedValueOnce({
       plan: 'FREE',
+      defaultLowStockThreshold: 3,
       organization: { ownerId: 'seller-1' },
     } as never);
-    prismaMock.productVariant.findUnique.mockResolvedValueOnce({ quantity: 5 } as never);
+    prismaMock.productVariant.findUnique.mockResolvedValueOnce({ id: 'var-1' } as never);
 
     await applyOrderPaidEffects(
       prismaMock,
@@ -92,25 +118,28 @@ describe('applyOrderPaidEffects', () => {
       {},
     );
 
-    expect(prismaMock.productVariant.update).toHaveBeenCalledWith({
-      where: { id: 'var-1' },
-      data: { quantity: 3 },
-    });
+    expect(mockApplyStockChange).toHaveBeenCalledWith(
+      prismaMock,
+      expect.objectContaining({
+        productId: 'prod-a',
+        variantId: 'var-1',
+        delta: -2,
+        reason: 'SALE',
+      }),
+    );
     expect(prismaMock.product.findUnique).not.toHaveBeenCalled();
   });
 
-  it('floors stock at 0 instead of going negative', async () => {
+  it('skips a lineItem whose product no longer exists (no stock movement)', async () => {
     prismaMock.store.findUnique.mockResolvedValueOnce({
       plan: 'FREE',
+      defaultLowStockThreshold: 3,
       organization: { ownerId: 'seller-1' },
     } as never);
-    prismaMock.product.findUnique.mockResolvedValueOnce({ quantity: 1 } as never);
+    prismaMock.product.findUnique.mockResolvedValueOnce(null);
 
     await applyOrderPaidEffects(prismaMock, BASE_ORDER, {});
-    expect(prismaMock.product.update).toHaveBeenCalledWith({
-      where: { id: 'prod-a' },
-      data: { quantity: 0 },
-    });
+    expect(mockApplyStockChange).not.toHaveBeenCalled();
   });
 
   it('upserts the Customer directory keyed on (storeId, phone)', async () => {

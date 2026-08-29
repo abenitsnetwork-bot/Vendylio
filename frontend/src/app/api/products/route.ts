@@ -33,6 +33,8 @@ const Body = z
     categoryId: z.string().min(1).nullable().optional(),
     unit: z.enum(PRODUCT_UNIT_VALUES).optional().default('UNIT'),
     imageUrl: z.string().url().optional(),
+    // Phase 3 — per-product low-stock threshold (null/omitted = store default).
+    lowStockThreshold: z.number().int().min(0).optional(),
   })
   .superRefine((data, ctx) => {
     if (!isValidQuantityForUnit(data.quantity, data.unit)) {
@@ -69,7 +71,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const { name, description, priceCents, quantity, categoryId, unit, imageUrl } = parsed.data;
+    const {
+      name,
+      description,
+      priceCents,
+      quantity,
+      categoryId,
+      unit,
+      imageUrl,
+      lowStockThreshold,
+    } = parsed.data;
 
     if (categoryId) {
       const category = await prisma.category.findFirst({
@@ -84,17 +95,35 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       }
     }
 
-    const product = await prisma.product.create({
-      data: {
-        storeId: store.id,
-        name,
-        priceCents,
-        quantity: roundQuantity(quantity),
-        unit,
-        ...(categoryId ? { categoryId } : {}),
-        ...(description ? { description } : {}),
-        ...(imageUrl ? { imageUrl } : {}),
-      },
+    const initialQuantity = roundQuantity(quantity);
+    const product = await prisma.$transaction(async (tx) => {
+      const created = await tx.product.create({
+        data: {
+          storeId: store.id,
+          name,
+          priceCents,
+          quantity: initialQuantity,
+          unit,
+          ...(categoryId ? { categoryId } : {}),
+          ...(lowStockThreshold !== undefined ? { lowStockThreshold } : {}),
+          ...(description ? { description } : {}),
+          ...(imageUrl ? { imageUrl } : {}),
+        },
+      });
+      // Opening-balance row so the product's ledger isn't empty (matches
+      // what migration 6_phase_inventory did for pre-existing products).
+      await tx.stockMovement.create({
+        data: {
+          storeId: store.id,
+          productId: created.id,
+          delta: initialQuantity,
+          resultingQuantity: initialQuantity,
+          reason: 'CORRECTION',
+          note: 'Opening balance',
+          actorType: 'SELLER',
+        },
+      });
+      return created;
     });
 
     return NextResponse.json(

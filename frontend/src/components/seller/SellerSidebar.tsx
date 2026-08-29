@@ -17,6 +17,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: 'home' },
   { href: '/dashboard/orders', label: 'Orders', icon: 'shopping-bag' },
   { href: '/dashboard/products', label: 'Products', icon: 'package' },
+  { href: '/dashboard/inventory', label: 'Inventory', icon: 'clipboard' },
   { href: '/dashboard/customers', label: 'Customers', icon: 'users' },
   { href: '/dashboard/reviews', label: 'Reviews', icon: 'star' },
   { href: '/dashboard/delivery', label: 'Delivery', icon: 'truck' },
@@ -24,14 +25,14 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 // Mobile keeps only the highest-traffic destinations in the fixed bottom
-// bar — seven full labels don't fit a phone width. Everything is still one
-// tap away from the desktop sidebar or the Dashboard home's own cards.
+// bar — the full label list doesn't fit a phone width. Everything is still
+// one tap away from the desktop sidebar or the Dashboard home's own cards.
 const MOBILE_NAV_ITEMS: NavItem[] = [
   NAV_ITEMS[0]!,
   NAV_ITEMS[1]!,
   NAV_ITEMS[2]!,
   NAV_ITEMS[3]!,
-  NAV_ITEMS[6]!,
+  NAV_ITEMS[7]!,
 ];
 
 function isActive(pathname: string, href: string): boolean {

@@ -14,7 +14,7 @@ import type { PrismaTransactionClient } from '@/lib/server/webhook/handler';
 import { computeCommission, resolveCommissionRateBp } from '@/lib/server/payments/commission';
 import { getPlatformCommissionRates } from '@/lib/server/payments/platform-settings';
 import { enqueueOutbox } from '@/lib/server/outbox';
-import { roundQuantity } from '@/lib/quantity';
+import { applyStockChange } from '@/lib/server/inventory/adjust';
 
 interface OrderLineItem {
   productId: string;
@@ -44,7 +44,11 @@ export async function applyOrderPaidEffects(
   // of two separate round-trips to the same row.
   const store = await tx.store.findUnique({
     where: { id: order.storeId },
-    select: { plan: true, organization: { select: { ownerId: true } } },
+    select: {
+      plan: true,
+      defaultLowStockThreshold: true,
+      organization: { select: { ownerId: true } },
+    },
   });
 
   const { baseRateBp, proRateBp } = await getPlatformCommissionRates(tx);
@@ -72,35 +76,32 @@ export async function applyOrderPaidEffects(
   });
 
   // Decrement stock now (not at checkout creation) — see the file header
-  // of app/api/orders/route.ts for why. Floored at 0: a concurrent sale
-  // racing between checkout and payment is a known MVP compromise; the
-  // floor just avoids a nonsensical negative count rather than pretending
-  // to solve the race. Phase 7 — a lineItem carrying a variantId decrements
-  // that ProductVariant's own quantity instead of the parent Product's
-  // (variant stock is authoritative once a product has variants at all —
-  // see the ProductVariant comment in schema.prisma).
+  // of app/api/orders/route.ts for why. Phase 3 — every decrement goes
+  // through applyStockChange so it also writes a SALE row to the
+  // StockMovement ledger. floorAtZero: a concurrent sale racing between
+  // checkout and payment is a known MVP compromise; the floor just avoids a
+  // nonsensical negative count rather than pretending to solve the race.
+  // A lineItem carrying a variantId decrements that ProductVariant's own
+  // quantity instead of the parent Product's.
   const lineItems = order.lineItems as unknown as OrderLineItem[];
   for (const item of lineItems) {
-    if (item.variantId) {
-      const variant = await tx.productVariant.findUnique({
-        where: { id: item.variantId },
-        select: { quantity: true },
-      });
-      if (!variant) continue;
-      await tx.productVariant.update({
-        where: { id: item.variantId },
-        data: { quantity: roundQuantity(Math.max(0, variant.quantity - item.quantity)) },
-      });
-      continue;
-    }
-    const product = await tx.product.findUnique({
-      where: { id: item.productId },
-      select: { quantity: true },
-    });
-    if (!product) continue;
-    await tx.product.update({
-      where: { id: item.productId },
-      data: { quantity: roundQuantity(Math.max(0, product.quantity - item.quantity)) },
+    // Deleted between checkout and payment — skip rather than fail the
+    // whole payment (mirrors the pre-Phase-3 behavior).
+    const exists = item.variantId
+      ? await tx.productVariant.findUnique({ where: { id: item.variantId }, select: { id: true } })
+      : await tx.product.findUnique({ where: { id: item.productId }, select: { id: true } });
+    if (!exists) continue;
+
+    await applyStockChange(tx, {
+      storeId: order.storeId,
+      productId: item.productId,
+      variantId: item.variantId ?? null,
+      delta: -item.quantity,
+      reason: 'SALE',
+      actorType: 'SYSTEM',
+      orderId: order.id,
+      floorAtZero: true,
+      ...(store ? { storeDefaultLowStockThreshold: store.defaultLowStockThreshold } : {}),
     });
   }
 
