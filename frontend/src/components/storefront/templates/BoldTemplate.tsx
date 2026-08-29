@@ -4,7 +4,6 @@ import { useState } from 'react';
 import Link from 'next/link';
 import type { PublicStore } from '@/lib/server/storefront';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
-import { productCategoryLabel } from '@/lib/productCategories';
 import { formatUsdPerUnit } from '@/lib/productUnits';
 import { toAddableProduct } from '@/lib/productVariants';
 import { useCart } from '@/contexts/CartContext';
@@ -103,9 +102,11 @@ export function BoldTemplate({
                       </span>
                     )}
                   </Link>
-                  <span className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary">
-                    {productCategoryLabel(product.category)}
-                  </span>
+                  {product.category && (
+                    <span className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary">
+                      {product.category.name}
+                    </span>
+                  )}
                   <Link href={`/s/${store.slug}/products/${product.id}`}>
                     <p className="mb-2 font-headings text-2xl font-bold text-foreground hover:text-primary">
                       {product.name}

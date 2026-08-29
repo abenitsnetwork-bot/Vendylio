@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import { Field, inputClass } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { ImageDropzone } from '@/components/ui/ImageDropzone';
 import { cn } from '@/lib/utils';
-import { PRODUCT_CATEGORIES, type ProductCategory } from '@/lib/productCategories';
+import type { CategoryOption } from '@/lib/productCategories';
 import { PRODUCT_UNITS, type ProductUnit } from '@/lib/productUnits';
 import { isValidQuantityForUnit, roundQuantity } from '@/lib/quantity';
 import { VariantManager } from '@/components/seller/VariantManager';
@@ -23,7 +23,8 @@ export interface ProductFields {
   description: string | null;
   priceCents: number;
   quantity: number;
-  category: string;
+  categoryId: string | null;
+  category?: { id: string; name: string; slug: string } | null;
   unit: string;
   imageUrl: string | null;
   status: string;
@@ -49,9 +50,8 @@ export function ProductForm(props: CreateProps | EditProps) {
   const [description, setDescription] = useState(initial?.description ?? '');
   const [price, setPrice] = useState(initial ? (initial.priceCents / 100).toFixed(2) : '');
   const [quantity, setQuantity] = useState(initial ? String(initial.quantity) : '');
-  const [category, setCategory] = useState<ProductCategory | null>(
-    (initial?.category as ProductCategory) ?? null,
-  );
+  const [categoryId, setCategoryId] = useState<string | null>(initial?.categoryId ?? null);
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [unit, setUnit] = useState<ProductUnit>((initial?.unit as ProductUnit) ?? 'UNIT');
   const [imageUrl, setImageUrl] = useState<string | null>(initial?.imageUrl ?? null);
   const [status, setStatus] = useState<'ACTIVE' | 'ARCHIVED'>(
@@ -64,6 +64,14 @@ export function ProductForm(props: CreateProps | EditProps) {
   const [generatingDescription, setGeneratingDescription] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
+  useEffect(() => {
+    api<{ categories: CategoryOption[] }>('/api/categories')
+      .then((res) => setCategories(res.categories))
+      .catch(() => setCategories([]));
+  }, []);
+
+  const categoryName = categories.find((c) => c.id === categoryId)?.name ?? null;
+
   async function onGenerateDescription() {
     if (!name.trim()) {
       setAiError('Enter a product name first.');
@@ -74,7 +82,7 @@ export function ProductForm(props: CreateProps | EditProps) {
     try {
       const res = await api<{ description: string }>('/api/ai/generate-description', {
         method: 'POST',
-        body: { kind: 'product', name, ...(category ? { category } : {}), unit },
+        body: { kind: 'product', name, ...(categoryName ? { category: categoryName } : {}), unit },
       });
       setDescription(res.description);
     } catch (err) {
@@ -106,10 +114,6 @@ export function ProductForm(props: CreateProps | EditProps) {
       setError('Quantity must be a whole number for a per-item product.');
       return;
     }
-    if (!category) {
-      setError('Pick a category.');
-      return;
-    }
 
     setSubmitting(true);
     try {
@@ -121,7 +125,7 @@ export function ProductForm(props: CreateProps | EditProps) {
             ...(description ? { description } : {}),
             priceCents,
             quantity: quantityNum,
-            category,
+            categoryId,
             unit,
             ...(imageUrl ? { imageUrl } : {}),
           },
@@ -135,7 +139,7 @@ export function ProductForm(props: CreateProps | EditProps) {
             description: description || null,
             priceCents,
             quantity: quantityNum,
-            category,
+            categoryId,
             unit,
             imageUrl,
             status,
@@ -297,23 +301,26 @@ export function ProductForm(props: CreateProps | EditProps) {
         </Field>
 
         <Field label="Category" htmlFor="category">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {PRODUCT_CATEGORIES.map((cat) => (
-              <button
-                key={cat.value}
-                type="button"
-                onClick={() => setCategory(cat.value)}
-                className={cn(
-                  'rounded-lg border px-4 py-3 text-center text-sm',
-                  category === cat.value
-                    ? 'border-primary bg-secondary font-medium text-foreground'
-                    : 'border-border text-muted-foreground',
-                )}
-              >
-                {cat.label}
-              </button>
+          <select
+            id="category"
+            className={inputClass}
+            value={categoryId ?? ''}
+            onChange={(e) => setCategoryId(e.target.value || null)}
+          >
+            <option value="">Uncategorized</option>
+            {categories.map((cat) => (
+              <option key={cat.id} value={cat.id}>
+                {cat.name}
+              </option>
             ))}
-          </div>
+          </select>
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            Manage your categories in{' '}
+            <a href="/dashboard/settings?tab=categories" className="text-primary">
+              Store Settings
+            </a>
+            .
+          </p>
         </Field>
 
         {props.mode === 'edit' && (

@@ -17,6 +17,7 @@ import { requireAuth } from '@/lib/server/middleware';
 import { prisma } from '@/lib/server/prisma';
 import { resolveOwnStore } from '@/lib/server/org';
 import { slugify, ensureUniqueSlug } from '@/lib/server/slug';
+import { DEFAULT_CATEGORIES } from '@/lib/productCategories';
 import { checkPickupAddressDeliverable } from '@/lib/server/delivery/uber-direct';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 import { STORE_TEMPLATE_VALUES } from '@/lib/storeTemplates';
@@ -113,7 +114,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         await tx.organizationMember.create({
           data: { organizationId: organization.id, userId: auth.user.sub, role: 'OWNER' },
         });
-        return tx.store.create({
+        const created = await tx.store.create({
           data: {
             organizationId: organization.id,
             slug: candidate,
@@ -125,6 +126,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             ...(phone ? { phone } : {}),
           },
         });
+        // Seed the starter category set so a new store isn't a blank slate.
+        // The seller renames/reorders/deletes these freely in Settings.
+        await tx.category.createMany({
+          data: DEFAULT_CATEGORIES.map((catName, i) => ({
+            storeId: created.id,
+            name: catName,
+            slug: slugify(catName),
+            sortOrder: i,
+          })),
+        });
+        return created;
       });
       return store;
     });

@@ -1,22 +1,34 @@
-export const PRODUCT_CATEGORIES = [
-  { value: 'FOOD_SPICES', label: 'Food & Spices' },
-  { value: 'BEAUTY_PERSONAL_CARE', label: 'Beauty & Personal Care' },
-  { value: 'TEXTILES_CRAFTS', label: 'Textiles & Crafts' },
-  { value: 'OTHER', label: 'Other' },
+// Product categories are now per-store, seller-managed rows (see the
+// `Category` model + /api/categories). This module keeps only what's still
+// shared:
+//   - DEFAULT_CATEGORIES: the starter set seeded for a brand-new store
+//     (onboarding) — the same 4 the pre-Phase-1 hard-coded enum had.
+//   - categoryLabel(): resolve a categoryId to a display name against a
+//     fetched category list, with a stable fallback for uncategorized
+//     products.
+
+export interface CategoryOption {
+  id: string;
+  name: string;
+  slug: string;
+  sortOrder: number;
+}
+
+/** Seeded for every new store. Names only — slug/sortOrder are derived. */
+export const DEFAULT_CATEGORIES = [
+  'Food & Spices',
+  'Beauty & Personal Care',
+  'Textiles & Crafts',
+  'Other',
 ] as const;
 
-export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number]['value'];
+export const UNCATEGORIZED_LABEL = 'Uncategorized';
 
-/** Tuple of category values — shaped for z.enum(). */
-export const PRODUCT_CATEGORY_VALUES = PRODUCT_CATEGORIES.map((c) => c.value) as [
-  ProductCategory,
-  ...ProductCategory[],
-];
-
-const LABELS: Record<ProductCategory, string> = Object.fromEntries(
-  PRODUCT_CATEGORIES.map((c) => [c.value, c.label]),
-) as Record<ProductCategory, string>;
-
-export function productCategoryLabel(value: string): string {
-  return LABELS[value as ProductCategory] ?? value;
+/** Resolve a product's categoryId to a name. `null`/unknown → Uncategorized. */
+export function categoryLabel(
+  categories: readonly CategoryOption[],
+  categoryId: string | null | undefined,
+): string {
+  if (!categoryId) return UNCATEGORIZED_LABEL;
+  return categories.find((c) => c.id === categoryId)?.name ?? UNCATEGORIZED_LABEL;
 }

@@ -137,14 +137,16 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const products = productIds.length
       ? await prisma.product.findMany({
           where: { id: { in: productIds } },
-          select: { id: true, category: true },
+          select: { id: true, category: { select: { name: true } } },
         })
       : [];
-    const categoryByProductId = new Map(products.map((p) => [p.id, p.category]));
+    const categoryNameByProductId = new Map(
+      products.map((p) => [p.id, p.category?.name ?? 'Uncategorized']),
+    );
 
     const categoryAgg = new Map<string, number>();
     for (const [productId, agg] of productAgg) {
-      const category = categoryByProductId.get(productId) ?? 'Uncategorized';
+      const category = categoryNameByProductId.get(productId) ?? 'Uncategorized';
       categoryAgg.set(category, (categoryAgg.get(category) ?? 0) + agg.revenueCents);
     }
     const salesByCategory = [...categoryAgg.entries()]

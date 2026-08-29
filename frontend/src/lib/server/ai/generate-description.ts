@@ -4,7 +4,6 @@
 // fields already visible in the form (name/category/unit or name/city/state).
 import 'server-only';
 import { getAnthropicClient } from './anthropic-client';
-import { productCategoryLabel } from '@/lib/productCategories';
 
 export { AiNotConfiguredError } from './anthropic-client';
 
@@ -29,9 +28,7 @@ export type GenerateDescriptionInput = ProductDescriptionInput | StoreDescriptio
 
 function buildPrompt(input: GenerateDescriptionInput): string {
   if (input.kind === 'product') {
-    const categoryHint = input.category
-      ? ` in the "${productCategoryLabel(input.category)}" category`
-      : '';
+    const categoryHint = input.category ? ` in the "${input.category}" category` : '';
     const unitHint =
       input.unit && input.unit !== 'UNIT'
         ? ` It is sold by weight (${input.unit.toLowerCase()}).`

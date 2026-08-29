@@ -4,7 +4,6 @@ import { useState } from 'react';
 import Link from 'next/link';
 import type { PublicStore } from '@/lib/server/storefront';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
-import { productCategoryLabel } from '@/lib/productCategories';
 import { formatUsdPerUnit, formatQuantityWithUnit } from '@/lib/productUnits';
 import { toAddableProduct } from '@/lib/productVariants';
 import { useCart } from '@/contexts/CartContext';
@@ -101,9 +100,11 @@ export function ModernTemplate({
                     )}
                   </Link>
                   <div className="p-5">
-                    <span className="mb-2 inline-block rounded bg-secondary px-2 py-0.5 text-xs font-medium text-primary">
-                      {productCategoryLabel(product.category)}
-                    </span>
+                    {product.category && (
+                      <span className="mb-2 inline-block rounded bg-secondary px-2 py-0.5 text-xs font-medium text-primary">
+                        {product.category.name}
+                      </span>
+                    )}
                     <Link href={`/s/${store.slug}/products/${product.id}`}>
                       <p className="mb-1 font-headings text-base font-semibold text-foreground hover:text-primary">
                         {product.name}

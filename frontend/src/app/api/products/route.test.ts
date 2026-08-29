@@ -23,7 +23,6 @@ const validBody = {
   name: 'Shea Butter 250g',
   priceCents: 1800,
   quantity: 10,
-  category: 'BEAUTY_PERSONAL_CARE',
 };
 
 function makePost(body: unknown, csrf: 'match' | 'missing' = 'match'): NextRequest {
@@ -67,11 +66,20 @@ describe('POST /api/products', () => {
     expect(body.error).toBe('NO_STORE');
   });
 
-  it('400s on invalid category', async () => {
-    const res = await POST(makePost({ ...validBody, category: 'NOT_A_CATEGORY' }));
+  it('400s VALIDATION_FAILED on a categoryId that is not one of the store’s categories', async () => {
+    prismaMock.category.findFirst.mockResolvedValue(null as never);
+    const res = await POST(makePost({ ...validBody, categoryId: 'not-mine' }));
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe('VALIDATION_FAILED');
+  });
+
+  it('attaches a valid categoryId to the created product', async () => {
+    prismaMock.category.findFirst.mockResolvedValue({ id: 'cat-1' } as never);
+    prismaMock.product.create.mockResolvedValue({ id: 'prod-1', ...validBody } as never);
+    await POST(makePost({ ...validBody, categoryId: 'cat-1' }));
+    const createArg = prismaMock.product.create.mock.calls[0]?.[0];
+    expect(createArg?.data?.categoryId).toBe('cat-1');
   });
 
   it('400s on non-integer priceCents', async () => {

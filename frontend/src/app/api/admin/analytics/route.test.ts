@@ -119,14 +119,29 @@ describe('GET /api/admin/analytics', () => {
       },
     ] as never);
     prismaMock.product.findMany.mockResolvedValueOnce([
-      { id: 'p1', category: 'BEAUTY_PERSONAL_CARE' },
+      { id: 'p1', category: { name: 'Beauty & Personal Care' } },
     ] as never);
 
     const res = await GET(makeGet());
     const body = await res.json();
     expect(body.salesByCategory).toEqual([
-      { category: 'BEAUTY_PERSONAL_CARE', revenueCents: 3600 },
+      { category: 'Beauty & Personal Care', revenueCents: 3600 },
     ]);
+  });
+
+  it('labels a product with no category as Uncategorized', async () => {
+    prismaMock.order.findMany.mockResolvedValueOnce([
+      {
+        amount: 500,
+        paidAt: new Date('2026-06-01T00:00:00.000Z'),
+        lineItems: [{ productId: 'p9', name: 'Loose', priceCents: 500, quantity: 1 }],
+      },
+    ] as never);
+    prismaMock.product.findMany.mockResolvedValueOnce([{ id: 'p9', category: null }] as never);
+
+    const res = await GET(makeGet());
+    const body = await res.json();
+    expect(body.salesByCategory).toEqual([{ category: 'Uncategorized', revenueCents: 500 }]);
   });
 
   it('falls back to Uncategorized when the product no longer exists', async () => {

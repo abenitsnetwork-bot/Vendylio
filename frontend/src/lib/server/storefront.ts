@@ -16,7 +16,7 @@ export interface PublicProduct {
   description: string | null;
   priceCents: number;
   quantity: number;
-  category: string;
+  category: { id: string; name: string; slug: string } | null;
   unit: string;
   imageUrl: string | null;
   variants: PublicProductVariant[];
@@ -99,7 +99,7 @@ export async function getPublicStore(slug: string): Promise<PublicStore | null> 
           description: true,
           priceCents: true,
           quantity: true,
-          category: true,
+          category: { select: { id: true, name: true, slug: true } },
           unit: true,
           imageUrl: true,
           variants: {
@@ -181,7 +181,7 @@ export async function getPublicProduct(
           description: true,
           priceCents: true,
           quantity: true,
-          category: true,
+          category: { select: { id: true, name: true, slug: true } },
           unit: true,
           imageUrl: true,
           variants: {

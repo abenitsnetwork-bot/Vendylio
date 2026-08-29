@@ -20,7 +20,6 @@ import { api, ApiError } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { formatUsdPerUnit } from '@/lib/productUnits';
-import { productCategoryLabel } from '@/lib/productCategories';
 import { StatusBadge, formatUsd } from '@/components/seller/OrdersTable';
 
 interface Stats {
@@ -199,16 +198,10 @@ export default function AdminDashboardPage() {
                       ))}
                     </Pie>
                     <Tooltip
-                      formatter={(value, name) => [
-                        usd(Number(value)),
-                        productCategoryLabel(String(name)),
-                      ]}
+                      formatter={(value, name) => [usd(Number(value)), String(name)]}
                       contentStyle={{ borderRadius: 10, borderColor: '#dbe2d6' }}
                     />
-                    <Legend
-                      formatter={(value: string) => productCategoryLabel(value)}
-                      wrapperStyle={{ fontSize: 12 }}
-                    />
+                    <Legend formatter={(value: string) => value} wrapperStyle={{ fontSize: 12 }} />
                   </PieChart>
                 </ResponsiveContainer>
               )}

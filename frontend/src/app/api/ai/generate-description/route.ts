@@ -14,14 +14,15 @@ import { requireAuth } from '@/lib/server/middleware';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 import { AiNotConfiguredError, generateDescription } from '@/lib/server/ai/generate-description';
 import { enforceAiRateLimit } from '@/lib/server/ai/rate-limit';
-import { PRODUCT_CATEGORY_VALUES } from '@/lib/productCategories';
 import { PRODUCT_UNIT_VALUES } from '@/lib/productUnits';
 
 const Body = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('product'),
     name: z.string().trim().min(1).max(120),
-    category: z.enum(PRODUCT_CATEGORY_VALUES).optional(),
+    // Free-text category name (categories are per-store rows now) — only
+    // used as a prompt hint, never stored.
+    category: z.string().trim().min(1).max(60).optional(),
     unit: z.enum(PRODUCT_UNIT_VALUES).optional(),
   }),
   z.object({

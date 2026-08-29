@@ -4,7 +4,6 @@ import { useState } from 'react';
 import Link from 'next/link';
 import type { PublicStore } from '@/lib/server/storefront';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
-import { productCategoryLabel } from '@/lib/productCategories';
 import { formatUsdPerUnit } from '@/lib/productUnits';
 import { toAddableProduct } from '@/lib/productVariants';
 import { useCart } from '@/contexts/CartContext';
@@ -84,9 +83,11 @@ export function MinimalTemplate({
                     )}
                   </Link>
                   <div className="min-w-0 flex-1">
-                    <p className="mb-0.5 text-xs uppercase tracking-wide text-muted-foreground">
-                      {productCategoryLabel(product.category)}
-                    </p>
+                    {product.category && (
+                      <p className="mb-0.5 text-xs uppercase tracking-wide text-muted-foreground">
+                        {product.category.name}
+                      </p>
+                    )}
                     <Link href={`/s/${store.slug}/products/${product.id}`}>
                       <p className="font-headings font-semibold text-foreground hover:text-primary">
                         {product.name}

@@ -46,7 +46,7 @@ model User {
   // Multi-tenancy is opt-in per project: by default no resource is org-scoped.
   // Apps that need it (marketplace, B2B SaaS, classifieds) wire owner relations
   // on their domain models.
-  ownedOrganizations Organization[]      @relation("OrgOwner")
+  ownedOrganizations Organization[]       @relation("OrgOwner")
   memberships        OrganizationMember[] @relation("OrgMembership")
 
   @@index([email])
@@ -130,15 +130,15 @@ model Testimonial {
 // used as a stable URL segment.
 // ───────────────────────────────────────────────────────────────────────
 model Organization {
-  id        String   @id @default(cuid())
-  slug      String   @unique
+  id        String               @id @default(cuid())
+  slug      String               @unique
   name      String
   ownerId   String
-  owner     User     @relation("OrgOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  owner     User                 @relation("OrgOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   members   OrganizationMember[]
   store     Store?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
 
   @@index([ownerId])
 }
@@ -309,9 +309,9 @@ model WebhookLog {
 // for USD that's cents.
 // ───────────────────────────────────────────────────────────────────────
 model Order {
-  id      String @id @default(cuid())
+  id      String  @id @default(cuid())
   storeId String
-  store   Store  @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  store   Store   @relation(fields: [storeId], references: [id], onDelete: Restrict)
   userId  String? // guest checkout is the norm — set only if the buyer happened to be logged in
   user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
@@ -321,11 +321,11 @@ model Order {
   // PENDING order's expiresAt passes unpaid. FAILED: the Stripe Checkout Session
   // itself could not be created (network/API error) — distinct from EXPIRED so an
   // idempotency-key replay reports the right terminal state (CR-02).
-  status String @default("PENDING") // PENDING|PAID|PREPARING|READY|OUT_FOR_DELIVERY|DELIVERED|CANCELLED|REFUNDED|EXPIRED|FAILED
+  status   String @default("PENDING") // PENDING|PAID|PREPARING|READY|OUT_FOR_DELIVERY|DELIVERED|CANCELLED|REFUNDED|EXPIRED|FAILED
 
-  subtotalCents    Int
-  deliveryFeeCents Int  @default(0)
-  taxCents         Int  @default(0) // column ready; MVP always computes 0 (no tax engine)
+  subtotalCents     Int
+  deliveryFeeCents  Int     @default(0)
+  taxCents          Int     @default(0) // column ready; MVP always computes 0 (no tax engine)
   // Buyer's checkout choice — PICKUP: deliveryFeeCents forced to 0 and no
   // courier is ever involved (seller hands the order over in person, marked
   // done via the generic READY→DELIVERED transition). DELIVERY: existing
@@ -342,7 +342,7 @@ model Order {
   // double-charging. `idempotencyBodyHash` binds the key to the checkout
   // body (storeId + lineItems) so a reused key with a different cart 422s
   // instead of silently returning the old order.
-  idempotencyKey     String? @unique
+  idempotencyKey      String? @unique
   idempotencyBodyHash String?
 
   // Provider reference — "stripe_platform" | "stripe_connect" (Phase 3) |
@@ -365,14 +365,14 @@ model Order {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
+  statusEvents OrderStatusEvent[]
+  delivery     Delivery?
+  review       Review?
+
   @@index([storeId, createdAt])
   @@index([userId, createdAt])
   @@index([status, expiresAt])
   @@index([provider, providerChargeId])
-
-  statusEvents OrderStatusEvent[]
-  delivery     Delivery?
-  review       Review?
 }
 
 // Phase 4 — lightweight audit trail for the order lifecycle. One row per
@@ -466,33 +466,33 @@ model Customer {
 // no longer has that column.
 // ───────────────────────────────────────────────────────────────────────
 model Store {
-  id             String       @id @default(cuid())
-  organizationId String       @unique
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  slug           String       @unique
-  name           String
-  description    String?
-  city           String?
-  state          String?
-  logoUrl        String?
+  id                     String       @id @default(cuid())
+  organizationId         String       @unique
+  organization           Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  slug                   String       @unique
+  name                   String
+  description            String?
+  city                   String?
+  state                  String?
+  logoUrl                String?
   // Storefront contact number — shown prominently in the public storefront's
   // top bar (see StorefrontTopBar). Free-text, no format validation: sellers
   // span many countries/formats and this is display-only, never dialed
   // programmatically.
-  phone          String?
+  phone                  String?
   // Storefront layout — MODERN (grid), MINIMAL (single-column list), or
   // BOLD (large imagery, editorial). See src/components/storefront/templates/.
-  template       String       @default("MODERN")
+  template               String       @default("MODERN")
   // Gates visibility on /s/[slug]. Defaults true so onboarding (which has no
   // separate "Publish" step yet) keeps working end-to-end; a future
   // publish/unpublish toggle just flips this.
-  published      Boolean      @default(true)
+  published              Boolean      @default(true)
   // Phase 3 — Stripe Connect (direct-to-seller payouts, optional). A Store
   // without a connected account still sells fine via the Phase 2 platform
   // charge path — see api/orders/route.ts's routing check on
   // stripeOnboardingStatus === 'ACTIVE'.
-  stripeAccountId        String? @unique
-  stripeOnboardingStatus String  @default("NOT_STARTED") // NOT_STARTED|PENDING|ACTIVE|RESTRICTED
+  stripeAccountId        String?      @unique
+  stripeOnboardingStatus String       @default("NOT_STARTED") // NOT_STARTED|PENDING|ACTIVE|RESTRICTED
   // Manual payment methods — no webhook/API exists for either of these to
   // confirm a peer-to-peer payment automatically, so a buyer who checks out
   // this way sees the seller's Cash App QR / Zelle contact, the order stays
@@ -500,35 +500,58 @@ model Store {
   // POST /api/orders/[id]/confirm-payment (see lib/server/orders/markPaid.ts
   // for the same side effects a real Stripe payment triggers). Both null =
   // the checkout payment-method selector doesn't offer that option at all.
-  cashAppCashtag String? // stored WITHOUT the leading "$" (e.g. "AdaezeShop")
-  zelleContact   String? // email or phone registered with Zelle — free text
+  cashAppCashtag         String? // stored WITHOUT the leading "$" (e.g. "AdaezeShop")
+  zelleContact           String? // email or phone registered with Zelle — free text
   // Phase 5 — delivery. self_manual works with zero configuration (the
   // seller is their own courier) so it's the default for every store, no
   // separate on/off flag needed. uber_direct is a real courier integration
   // (lib/server/delivery/uber-direct.ts) that requires a pickup address —
   // self_manual ignores this column entirely (the seller picks up nothing,
   // they just walk the order out themselves).
-  deliveryProvider String  @default("self_manual")
-  deliveryFeeCents Int     @default(0)
-  pickupAddress    String?
+  deliveryProvider       String       @default("self_manual")
+  deliveryFeeCents       Int          @default(0)
+  pickupAddress          String?
   // Phase 12 — Free/Pro tiers. No hard enforcement in the MVP (no feature is
   // gated behind PRO yet); the one branchable benefit today is a reduced
   // marketplace commission — see COMMISSION_RATE_BP_PRO and
   // resolveCommissionRateBp() in lib/server/payments/commission.ts.
-  plan             String  @default("FREE") // FREE|PRO
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  plan                   String       @default("FREE") // FREE|PRO
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
 
-  products  Product[]
-  orders    Order[]
-  customers Customer[]
-  reviews   Review[]
+  products   Product[]
+  orders     Order[]
+  customers  Customer[]
+  reviews    Review[]
+  categories Category[]
+}
+
+// Per-store product categories. Replaced the old hard-coded 4-value
+// `Product.category` enum so a seller can add/rename/reorder/delete their
+// own. One category per product (Product.categoryId, nullable = "Sans
+// catégorie"); deleting a category re-parents its products to null rather
+// than blocking. Slug is unique per store and used as the storefront
+// section anchor (/s/[slug]#<category-slug>).
+model Category {
+  id        String   @id @default(cuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name      String
+  slug      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+
+  @@unique([storeId, slug])
+  @@index([storeId, sortOrder])
 }
 
 model Product {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   storeId     String
-  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store       Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
   name        String
   description String?
   priceCents  Int
@@ -537,22 +560,26 @@ model Product {
   // constraint), but a weight unit (KG/LB/G/OZ) needs fractional amounts
   // like 12.09 lb. Always rounded to 2 decimal places wherever it's
   // written (lib/server/quantity.ts) so float drift never accumulates.
-  quantity    Float    @default(0)
-  category    String // FOOD_SPICES | BEAUTY_PERSONAL_CARE | TEXTILES_CRAFTS | OTHER
+  quantity    Float     @default(0)
+  // Nullable on purpose — a product with no category shows under "Sans
+  // catégorie". Set null (not blocked) when its Category row is deleted.
+  categoryId  String?
+  category    Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   // Phase 7 — unit the price/quantity above are denominated in. UNIT means
   // "priceCents per item" (the only mode before Phase 7); the weight units
   // let a seller price something like spices "per kg", with fractional
   // quantities (`quantity` counts however much of that unit is in stock —
   // e.g. quantity=12.09 with unit=LB means 12.09 lb on hand).
-  unit        String   @default("UNIT") // UNIT | LB | KG | G | OZ
+  unit        String    @default("UNIT") // UNIT | LB | KG | G | OZ
   imageUrl    String?
-  status      String   @default("ACTIVE") // ACTIVE | ARCHIVED
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  status      String    @default("ACTIVE") // ACTIVE | ARCHIVED
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   variants ProductVariant[]
 
   @@index([storeId, createdAt])
+  @@index([storeId, categoryId])
 }
 
 // Phase 7 — simple independent variant options (e.g. "Size: Large",
@@ -576,12 +603,12 @@ model ProductVariant {
 }
 
 model Withdrawal {
-  id          String   @id @default(cuid())
+  id          String @id @default(cuid())
   userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  user        User   @relation(fields: [userId], references: [id], onDelete: Restrict)
   amount      Int // requested amount, smallest unit (cents for Vendylio's USD)
-  currency    String   @default("USD")
-  status      String   @default("PENDING") // PENDING | PROCESSING | COMPLETED | FAILED | CANCELLED
+  currency    String @default("USD")
+  status      String @default("PENDING") // PENDING | PROCESSING | COMPLETED | FAILED | CANCELLED
   // Vendylio sellers are US-based: { method: "CASH_APP", cashtag: "$..." } or
   // { method: "ZELLE", contact: "email or phone" } — see api/withdrawals/route.ts.
   destination Json
@@ -609,11 +636,11 @@ model Withdrawal {
 // lib/server/payments/platform-settings.ts for the read helper and
 // api/admin/settings/route.ts for the read/write endpoint.
 model PlatformSettings {
-  id                   String   @id @default("default")
+  id                  String   @id @default("default")
   // Basis points: 600 = 6%. 0 = no commission taken.
-  commissionRateBp     Int      @default(0)
+  commissionRateBp    Int      @default(0)
   // Discounted rate for Store.plan === "PRO". Null = no PRO discount
   // configured — PRO stores fall back to commissionRateBp like everyone else.
-  commissionRateBpPro  Int?
-  updatedAt            DateTime @updatedAt
+  commissionRateBpPro Int?
+  updatedAt           DateTime @updatedAt
 }

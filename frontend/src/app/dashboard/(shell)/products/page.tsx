@@ -8,7 +8,6 @@ import { api, ApiError } from '@/lib/api';
 import { Icon } from '@/components/ui/Icon';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 import { SellerHeader } from '@/components/seller/SellerHeader';
-import { productCategoryLabel } from '@/lib/productCategories';
 import { formatUsdPerUnit, formatQuantityWithUnit } from '@/lib/productUnits';
 import type { ProductFields } from '@/components/seller/ProductForm';
 
@@ -138,7 +137,7 @@ export default function ProductsPage() {
                   </div>
                   <div className="p-4">
                     <span className="mb-2 inline-block rounded bg-secondary px-2 py-0.5 text-xs font-medium text-primary">
-                      {productCategoryLabel(product.category)}
+                      {product.category?.name ?? 'Uncategorized'}
                     </span>
                     <p className="mb-1 font-semibold text-foreground">{product.name}</p>
                     <div className="flex items-center justify-between text-sm">

@@ -13,7 +13,6 @@ import { requireAuth } from '@/lib/server/middleware';
 import { prisma } from '@/lib/server/prisma';
 import { resolveOwnStore } from '@/lib/server/org';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
-import { PRODUCT_CATEGORY_VALUES } from '@/lib/productCategories';
 import { PRODUCT_UNIT_VALUES } from '@/lib/productUnits';
 import { isValidQuantityForUnit, roundQuantity } from '@/lib/quantity';
 
@@ -25,7 +24,9 @@ const Body = z
     // Whole number for UNIT (checked below — a bare .int() here would also
     // block the fractional weight amounts a KG/LB/G/OZ product needs).
     quantity: z.number().min(0),
-    category: z.enum(PRODUCT_CATEGORY_VALUES),
+    // Per-store Category id, or null/omitted for "Uncategorized". Ownership
+    // is verified against the caller's store below.
+    categoryId: z.string().min(1).nullable().optional(),
     unit: z.enum(PRODUCT_UNIT_VALUES).optional().default('UNIT'),
     imageUrl: z.string().url().optional(),
   })
@@ -64,15 +65,29 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const { name, description, priceCents, quantity, category, unit, imageUrl } = parsed.data;
+    const { name, description, priceCents, quantity, categoryId, unit, imageUrl } = parsed.data;
+
+    if (categoryId) {
+      const category = await prisma.category.findFirst({
+        where: { id: categoryId, storeId: store.id },
+        select: { id: true },
+      });
+      if (!category) {
+        return NextResponse.json(
+          { error: 'VALIDATION_FAILED', message: 'Unknown category.' },
+          { status: 400, headers: { 'x-request-id': ctx.requestId } },
+        );
+      }
+    }
+
     const product = await prisma.product.create({
       data: {
         storeId: store.id,
         name,
         priceCents,
         quantity: roundQuantity(quantity),
-        category,
         unit,
+        ...(categoryId ? { categoryId } : {}),
         ...(description ? { description } : {}),
         ...(imageUrl ? { imageUrl } : {}),
       },
@@ -102,6 +117,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const products = await prisma.product.findMany({
       where: { storeId: store.id },
       orderBy: { createdAt: 'desc' },
+      include: { category: { select: { id: true, name: true, slug: true, sortOrder: true } } },
     });
 
     return NextResponse.json({ products }, { headers: { 'x-request-id': ctx.requestId } });

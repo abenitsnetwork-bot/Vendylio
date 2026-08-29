@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { PublicProduct, PublicStoreHeader } from '@/lib/server/storefront';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
-import { productCategoryLabel } from '@/lib/productCategories';
 import { formatUsdPerUnit, formatQuantityWithUnit } from '@/lib/productUnits';
 import { toAddableProduct } from '@/lib/productVariants';
 import { useCart } from '@/contexts/CartContext';
@@ -56,7 +55,9 @@ export function ProductDetailView({
       <Breadcrumbs
         items={[
           { label: store.name, href: `/s/${store.slug}` },
-          { label: productCategoryLabel(product.category) },
+          ...(product.category
+            ? [{ label: product.category.name, href: `/s/${store.slug}#${product.category.slug}` }]
+            : []),
           { label: product.name },
         ]}
       />

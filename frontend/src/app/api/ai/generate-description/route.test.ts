@@ -82,8 +82,8 @@ describe('POST /api/ai/generate-description', () => {
     expect(res.status).toBe(400);
   });
 
-  it('400s VALIDATION_FAILED on an invalid category enum value', async () => {
-    const res = await POST(makePost({ kind: 'product', name: 'Shea Butter', category: 'MADE_UP' }));
+  it('400s VALIDATION_FAILED on a blank category string', async () => {
+    const res = await POST(makePost({ kind: 'product', name: 'Shea Butter', category: '' }));
     expect(res.status).toBe(400);
   });
 
@@ -93,7 +93,7 @@ describe('POST /api/ai/generate-description', () => {
       makePost({
         kind: 'product',
         name: 'Shea Butter',
-        category: 'BEAUTY_PERSONAL_CARE',
+        category: 'Beauty & Personal Care',
         unit: 'KG',
       }),
     );
@@ -103,7 +103,7 @@ describe('POST /api/ai/generate-description', () => {
     expect(mockGenerate).toHaveBeenCalledWith({
       kind: 'product',
       name: 'Shea Butter',
-      category: 'BEAUTY_PERSONAL_CARE',
+      category: 'Beauty & Personal Care',
       unit: 'KG',
     });
   });

@@ -9,6 +9,7 @@ import { api, ApiError } from '@/lib/api';
 import { Icon } from '@/components/ui/Icon';
 import { SellerHeader } from '@/components/seller/SellerHeader';
 import { StoreSettingsForm } from '@/components/seller/StoreSettingsForm';
+import { CategoryManager } from '@/components/seller/CategoryManager';
 import { PaymentsConnectSettings } from '@/components/seller/PaymentsConnectSettings';
 import { AccountSecurityForm } from '@/components/seller/AccountSecurityForm';
 import type { StoreTemplate } from '@/lib/storeTemplates';
@@ -29,6 +30,7 @@ interface StoreDetails {
 
 const TABS = [
   { value: 'store', label: 'Store' },
+  { value: 'categories', label: 'Categories' },
   { value: 'payments', label: 'Payments' },
   { value: 'account', label: 'Account' },
 ] as const;
@@ -128,6 +130,8 @@ function SettingsTabs() {
             ) : (
               store && <StoreSettingsForm store={store} onSaved={setStore} />
             ))}
+
+          {activeTab === 'categories' && <CategoryManager />}
 
           {activeTab === 'payments' && <PaymentsConnectSettings />}
 

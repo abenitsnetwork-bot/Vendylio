@@ -13,7 +13,6 @@ import { requireAuth } from '@/lib/server/middleware';
 import { prisma } from '@/lib/server/prisma';
 import { findOwnedProduct } from '@/lib/server/products/ownership';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
-import { PRODUCT_CATEGORY_VALUES } from '@/lib/productCategories';
 import { PRODUCT_UNIT_VALUES } from '@/lib/productUnits';
 import { isValidQuantityForUnit, roundQuantity } from '@/lib/quantity';
 
@@ -25,7 +24,9 @@ const PatchBody = z.object({
   // request's `unit` if sent, else the product's existing one) once the
   // product row is in hand — not doable inside this schema alone.
   quantity: z.number().min(0).optional(),
-  category: z.enum(PRODUCT_CATEGORY_VALUES).optional(),
+  // Per-store Category id, or null to move the product to "Uncategorized".
+  // Ownership of the id is verified against the caller's store below.
+  categoryId: z.string().min(1).nullable().optional(),
   unit: z.enum(PRODUCT_UNIT_VALUES).optional(),
   imageUrl: z.string().url().nullable().optional(),
   status: z.enum(['ACTIVE', 'ARCHIVED']).optional(),
@@ -72,8 +73,8 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<NextRespon
     if (auth instanceof NextResponse) return auth;
 
     const { id } = await ctx.params;
-    const { product } = await findOwnedProduct(auth.user.sub, id);
-    if (!product) {
+    const { store, product } = await findOwnedProduct(auth.user.sub, id);
+    if (!store || !product) {
       return NextResponse.json(
         { error: 'PRODUCT_NOT_FOUND', message: 'No such product.' },
         { status: 404, headers: { 'x-request-id': reqCtx.requestId } },
@@ -86,6 +87,19 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<NextRespon
         { error: 'VALIDATION_FAILED', issues: parsed.error.issues },
         { status: 400, headers: { 'x-request-id': reqCtx.requestId } },
       );
+    }
+
+    if (parsed.data.categoryId) {
+      const category = await prisma.category.findFirst({
+        where: { id: parsed.data.categoryId, storeId: store.id },
+        select: { id: true },
+      });
+      if (!category) {
+        return NextResponse.json(
+          { error: 'VALIDATION_FAILED', message: 'Unknown category.' },
+          { status: 400, headers: { 'x-request-id': reqCtx.requestId } },
+        );
+      }
     }
 
     const effectiveUnit = parsed.data.unit ?? product.unit;
