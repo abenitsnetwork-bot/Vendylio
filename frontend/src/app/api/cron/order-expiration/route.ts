@@ -39,3 +39,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   });
 }
+
+// Vercel Cron invokes cron routes with GET (Authorization: Bearer $CRON_SECRET
+// is still attached). Alias so the scheduled GET hits the same handler; POST
+// stays for manual curl / the dashboard "Run" button / tests.
+export const GET = POST;

@@ -64,6 +64,18 @@ describe('vercel.json schema (CRON-07, D-20)', () => {
     }
   });
 
+  it('every cron route.ts exports GET (Vercel Cron invokes cron paths with GET)', async () => {
+    const routeFiles = await fg('*/route.ts', { cwd: APP_API_CRON, onlyFiles: true });
+    expect(routeFiles.length).toBeGreaterThan(0);
+    for (const rel of routeFiles) {
+      const src = readFileSync(resolve(APP_API_CRON, rel), 'utf8');
+      expect(
+        /export\s+(async\s+function|const)\s+GET\b/.test(src),
+        `${rel} has no GET export — Vercel Cron GET requests would 405`,
+      ).toBe(true);
+    }
+  });
+
   it('declares schedules for the 7 canonical crons (Phase 5 + post-audit + Phase 4 catalogue)', () => {
     if (!existsSync(VERCEL_JSON)) return;
     const cfg = JSON.parse(readFileSync(VERCEL_JSON, 'utf8')) as VercelConfig;
