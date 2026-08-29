@@ -21,6 +21,10 @@ export interface DashboardStats {
   monthSalesCents: number;
   monthOrdersCount: number;
   visits: number;
+  /** Phase 4 — products/variants at or below their low-stock threshold (still > 0). */
+  lowStockCount: number;
+  /** Phase 4 — products/variants at zero. */
+  outOfStockCount: number;
 }
 
 export interface RecentOrder {
@@ -108,17 +112,28 @@ export function SellerDashboard({
             <p className="font-headings text-2xl font-bold text-foreground">{stats.visits}</p>
             <p className="mt-1 text-xs text-muted-foreground">From your link</p>
           </Card>
-          <Link href="/dashboard/products">
-            <Card className="transition-colors hover:border-primary">
-              <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
-                Active Products
-              </p>
-              <p className="font-headings text-2xl font-bold text-foreground">
-                {stats.productCount}
-              </p>
-              <p className="mt-1 text-xs text-primary">Manage products →</p>
-            </Card>
-          </Link>
+          {(() => {
+            const restockCount = stats.lowStockCount + stats.outOfStockCount;
+            return (
+              <Link href={restockCount > 0 ? '/dashboard/inventory' : '/dashboard/products'}>
+                <Card className="transition-colors hover:border-primary">
+                  <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
+                    Active Products
+                  </p>
+                  <p className="font-headings text-2xl font-bold text-foreground">
+                    {stats.productCount}
+                  </p>
+                  {restockCount > 0 ? (
+                    <p className="mt-1 text-xs font-semibold text-amber-600">
+                      ⚠ {restockCount} to restock →
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-xs text-primary">Manage products →</p>
+                  )}
+                </Card>
+              </Link>
+            );
+          })()}
         </div>
 
         {/* Main dashboard grid */}

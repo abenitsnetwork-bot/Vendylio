@@ -25,9 +25,11 @@ describe('applyStockChange — product (no variant)', () => {
     });
 
     expect(r).toMatchObject({ before: 10, after: 7, delta: -3 });
+    // 7 is still above the effective threshold (3) → the low-stock alert is
+    // re-armed in the same write.
     expect(prismaMock.product.update).toHaveBeenCalledWith({
       where: { id: 'prod-a' },
-      data: { quantity: 7 },
+      data: { quantity: 7, lowStockNotifiedAt: null },
     });
     expect(prismaMock.stockMovement.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
@@ -141,6 +143,48 @@ describe('applyStockChange — product (no variant)', () => {
     expect(r.crossedLowThreshold).toBe(true);
   });
 
+  it('does NOT touch lowStockNotifiedAt when the result stays at/below threshold', async () => {
+    prismaMock.product.findUniqueOrThrow.mockResolvedValueOnce({
+      quantity: 5,
+      lowStockThreshold: null,
+    } as never);
+
+    await applyStockChange(prismaMock, {
+      storeId: 'store-1',
+      productId: 'prod-a',
+      delta: -3, // 5 → 2, still <= 3
+      reason: 'SALE',
+      actorType: 'SYSTEM',
+      storeDefaultLowStockThreshold: 3,
+    });
+
+    expect(prismaMock.product.update).toHaveBeenCalledWith({
+      where: { id: 'prod-a' },
+      data: { quantity: 2 },
+    });
+  });
+
+  it('re-arms lowStockNotifiedAt when a restock lifts the quantity back above threshold', async () => {
+    prismaMock.product.findUniqueOrThrow.mockResolvedValueOnce({
+      quantity: 1,
+      lowStockThreshold: null,
+    } as never);
+
+    await applyStockChange(prismaMock, {
+      storeId: 'store-1',
+      productId: 'prod-a',
+      delta: 20, // 1 → 21, well above 3
+      reason: 'RESTOCK',
+      actorType: 'SELLER',
+      storeDefaultLowStockThreshold: 3,
+    });
+
+    expect(prismaMock.product.update).toHaveBeenCalledWith({
+      where: { id: 'prod-a' },
+      data: { quantity: 21, lowStockNotifiedAt: null },
+    });
+  });
+
   it('throws when neither delta nor newQuantity is supplied', async () => {
     await expect(
       applyStockChange(prismaMock, {
@@ -173,7 +217,7 @@ describe('applyStockChange — variant', () => {
 
     expect(prismaMock.productVariant.update).toHaveBeenCalledWith({
       where: { id: 'var-1' },
-      data: { quantity: 8 },
+      data: { quantity: 8, lowStockNotifiedAt: null },
     });
     expect(prismaMock.product.update).not.toHaveBeenCalled();
     expect(prismaMock.stockMovement.create).toHaveBeenCalledWith({

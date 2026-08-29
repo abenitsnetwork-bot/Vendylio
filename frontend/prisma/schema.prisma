@@ -580,6 +580,12 @@ model Product {
   status            String    @default("ACTIVE") // ACTIVE | ARCHIVED
   // Phase 3 — inventory. null = use the store's defaultLowStockThreshold.
   lowStockThreshold Int?
+  // Phase 4 — low-stock alert re-arm gate. Set to now() when a low/out
+  // notification is sent; reset to null by applyStockChange() the moment
+  // stock climbs back above the effective threshold. A notification is only
+  // (re-)emitted while this is null, so recovering + dropping again alerts
+  // once per episode instead of on every decrement.
+  lowStockNotifiedAt DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -604,6 +610,8 @@ model ProductVariant {
   value           String // the specific option, e.g. "Large" or "1kg bag"
   priceDeltaCents Int      @default(0) // added to Product.priceCents when selected
   quantity        Float    @default(0) // same Float-for-fractional-weight reasoning as Product.quantity
+  // Phase 4 — per-variant low-stock alert re-arm gate (see Product.lowStockNotifiedAt).
+  lowStockNotifiedAt DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

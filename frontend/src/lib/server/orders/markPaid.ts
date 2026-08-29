@@ -13,13 +13,16 @@ import { Prisma } from '@prisma/client';
 import type { PrismaTransactionClient } from '@/lib/server/webhook/handler';
 import { computeCommission, resolveCommissionRateBp } from '@/lib/server/payments/commission';
 import { getPlatformCommissionRates } from '@/lib/server/payments/platform-settings';
-import { enqueueOutbox } from '@/lib/server/outbox';
+import { enqueueOutbox, type OutboxEvent } from '@/lib/server/outbox';
 import { applyStockChange } from '@/lib/server/inventory/adjust';
 
 interface OrderLineItem {
   productId: string;
   quantity: number;
   variantId?: string;
+  /** Denormalised at checkout (api/orders/route.ts) — used for the low-stock alert. */
+  name?: string;
+  variantLabel?: string;
 }
 
 export interface OrderForPaidEffects {
@@ -84,6 +87,14 @@ export async function applyOrderPaidEffects(
   // A lineItem carrying a variantId decrements that ProductVariant's own
   // quantity instead of the parent Product's.
   const lineItems = order.lineItems as unknown as OrderLineItem[];
+  // Phase 4 — low-stock crossings collected here, enqueued after the loop
+  // (still inside the caller's Serializable tx) so the alert commits
+  // atomically with the sale. `store` is null only if the store row
+  // vanished mid-payment, in which case there's no owner to notify.
+  const stockAlerts: OutboxEvent[] = [];
+  const ownerId = store?.organization.ownerId ?? null;
+  const detectedAt = new Date().toISOString();
+
   for (const item of lineItems) {
     // Deleted between checkout and payment — skip rather than fail the
     // whole payment (mirrors the pre-Phase-3 behavior).
@@ -92,7 +103,7 @@ export async function applyOrderPaidEffects(
       : await tx.product.findUnique({ where: { id: item.productId }, select: { id: true } });
     if (!exists) continue;
 
-    await applyStockChange(tx, {
+    const change = await applyStockChange(tx, {
       storeId: order.storeId,
       productId: item.productId,
       variantId: item.variantId ?? null,
@@ -103,6 +114,29 @@ export async function applyOrderPaidEffects(
       floorAtZero: true,
       ...(store ? { storeDefaultLowStockThreshold: store.defaultLowStockThreshold } : {}),
     });
+
+    if (ownerId && (change.crossedZero || change.crossedLowThreshold)) {
+      const base = {
+        userId: ownerId,
+        productId: item.productId,
+        variantId: item.variantId ?? null,
+        productName: item.name ?? 'A product',
+        variantLabel: item.variantLabel ?? null,
+        detectedAt,
+      };
+      stockAlerts.push(
+        change.crossedZero
+          ? { kind: 'notification.out_of_stock', payload: base }
+          : {
+              kind: 'notification.low_stock',
+              payload: { ...base, quantity: change.after, threshold: change.effectiveThreshold },
+            },
+      );
+    }
+  }
+
+  for (const alert of stockAlerts) {
+    await enqueueOutbox(tx, alert);
   }
 
   // Phase 6 — upsert the guest-customer directory. Keyed on (storeId,

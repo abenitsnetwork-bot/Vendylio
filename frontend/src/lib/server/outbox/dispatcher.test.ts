@@ -231,4 +231,75 @@ describe('drainOutbox (TEST-02)', () => {
     expect(enqueueArgs).toMatchObject({ to: 'buyer@example.com' });
     expect(enqueueArgs?.html).toContain('order-1');
   });
+
+  // Phase 4 — low-stock alerts.
+  it('dispatches notification.low_stock via createNotification and stamps lowStockNotifiedAt', async () => {
+    const row = makeRow({
+      kind: 'notification.low_stock',
+      payload: {
+        userId: 'seller-1',
+        productId: 'prod-a',
+        variantId: null,
+        productName: 'Shea Butter',
+        variantLabel: null,
+        quantity: 2,
+        threshold: 3,
+        detectedAt: '2026-08-28T10:00:00.000Z',
+      },
+    });
+    prismaMock.outboxEvent.findMany.mockResolvedValue([{ id: 'oe_1' }] as never);
+    prismaMock.outboxEvent.updateMany.mockResolvedValue({ count: 1 } as never);
+    prismaMock.outboxEvent.findUnique.mockResolvedValue(row as never);
+    prismaMock.notification.create.mockResolvedValue({ id: 'n1' } as never);
+    prismaMock.product.updateMany.mockResolvedValue({ count: 1 } as never);
+    prismaMock.outboxEvent.update.mockResolvedValue({} as never);
+
+    const stats = await drainOutbox({ prisma: prismaMock });
+
+    expect(stats.succeeded).toBe(1);
+    const createArgs = prismaMock.notification.create.mock.calls[0]?.[0];
+    expect(createArgs?.data).toMatchObject({
+      userId: 'seller-1',
+      type: 'LOW_STOCK',
+      dedupeKey: 'low-stock:prod-a:base:2026-08-28',
+    });
+    expect(prismaMock.product.updateMany).toHaveBeenCalledWith({
+      where: { id: 'prod-a', lowStockNotifiedAt: null },
+      data: { lowStockNotifiedAt: expect.any(Date) },
+    });
+  });
+
+  it('dispatches notification.out_of_stock for a variant and stamps the variant row', async () => {
+    const row = makeRow({
+      kind: 'notification.out_of_stock',
+      payload: {
+        userId: 'seller-1',
+        productId: 'prod-a',
+        variantId: 'var-1',
+        productName: 'Shea Butter',
+        variantLabel: 'Size / Large',
+        detectedAt: '2026-08-28T10:00:00.000Z',
+      },
+    });
+    prismaMock.outboxEvent.findMany.mockResolvedValue([{ id: 'oe_1' }] as never);
+    prismaMock.outboxEvent.updateMany.mockResolvedValue({ count: 1 } as never);
+    prismaMock.outboxEvent.findUnique.mockResolvedValue(row as never);
+    prismaMock.notification.create.mockResolvedValue({ id: 'n1' } as never);
+    prismaMock.productVariant.updateMany.mockResolvedValue({ count: 1 } as never);
+    prismaMock.outboxEvent.update.mockResolvedValue({} as never);
+
+    const stats = await drainOutbox({ prisma: prismaMock });
+
+    expect(stats.succeeded).toBe(1);
+    const createArgs = prismaMock.notification.create.mock.calls[0]?.[0];
+    expect(createArgs?.data).toMatchObject({
+      type: 'OUT_OF_STOCK',
+      dedupeKey: 'out-of-stock:prod-a:var-1:2026-08-28',
+    });
+    expect(prismaMock.productVariant.updateMany).toHaveBeenCalledWith({
+      where: { id: 'var-1', lowStockNotifiedAt: null },
+      data: { lowStockNotifiedAt: expect.any(Date) },
+    });
+    expect(prismaMock.product.updateMany).not.toHaveBeenCalled();
+  });
 });

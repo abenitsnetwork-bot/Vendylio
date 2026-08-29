@@ -82,10 +82,20 @@ export async function applyStockChange(
   const delta = roundQuantity(after - before);
   const effectiveThreshold = productThreshold ?? storeDefault;
 
+  // Phase 4 — re-arm the low-stock alert the moment stock climbs back above
+  // the threshold, so a later drop alerts the seller again (one alert per
+  // low-stock episode). Only touch the column when it actually recovers —
+  // a no-op `lowStockNotifiedAt: null` on every decrement would be wasteful
+  // and would clobber a concurrent alert send.
+  const recovered = after > effectiveThreshold;
+  const quantityData = recovered
+    ? { quantity: after, lowStockNotifiedAt: null }
+    : { quantity: after };
+
   if (input.variantId) {
-    await tx.productVariant.update({ where: { id: input.variantId }, data: { quantity: after } });
+    await tx.productVariant.update({ where: { id: input.variantId }, data: quantityData });
   } else {
-    await tx.product.update({ where: { id: input.productId }, data: { quantity: after } });
+    await tx.product.update({ where: { id: input.productId }, data: quantityData });
   }
 
   await tx.stockMovement.create({

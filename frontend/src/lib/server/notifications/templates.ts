@@ -88,3 +88,67 @@ export function deliveryFailed(
     dedupeKey: `delivery-failed:${orderId}:${status}`,
   };
 }
+
+/**
+ * Phase 4 — notifies the store owner when a product/variant drops to or
+ * below its effective low-stock threshold (but is not yet out). Emitted
+ * from markPaid.ts (on the crossing decrement) and the low-stock-sweep
+ * cron (safety net for manual adjustments). `detectedAt` (an ISO date-time
+ * fixed at enqueue time) is truncated to a day and folded into the
+ * dedupeKey so the same low-stock episode dedupes across dispatch retries,
+ * but a *new* episode after a restock-then-drop can alert again.
+ */
+export function lowStockNotification(
+  userId: string,
+  args: {
+    productId: string;
+    variantId: string | null;
+    productName: string;
+    variantLabel: string | null;
+    quantity: number;
+    threshold: number;
+    detectedAt: string;
+  },
+): CreateNotificationInput {
+  const label = args.variantLabel ? `${args.productName} (${args.variantLabel})` : args.productName;
+  const day = args.detectedAt.slice(0, 10);
+  return {
+    userId,
+    type: 'LOW_STOCK',
+    title: 'Low stock',
+    body: `${label} is down to ${args.quantity} — at or below your alert threshold of ${args.threshold}. Restock soon.`,
+    data: {
+      productId: args.productId,
+      variantId: args.variantId,
+      quantity: args.quantity,
+      threshold: args.threshold,
+    },
+    dedupeKey: `low-stock:${args.productId}:${args.variantId ?? 'base'}:${day}`,
+  };
+}
+
+/**
+ * Phase 4 — notifies the store owner when a product/variant hits zero (or
+ * below). Same emit sites and dedupe strategy as `lowStockNotification`.
+ */
+export function outOfStockNotification(
+  userId: string,
+  args: {
+    productId: string;
+    variantId: string | null;
+    productName: string;
+    variantLabel: string | null;
+    detectedAt: string;
+  },
+): CreateNotificationInput {
+  const label = args.variantLabel ? `${args.productName} (${args.variantLabel})` : args.productName;
+  const day = args.detectedAt.slice(0, 10);
+  return {
+    userId,
+    type: 'OUT_OF_STOCK',
+    title: 'Out of stock',
+    body: `${label} is out of stock. Buyers can no longer order it until you restock.`,
+    data: { productId: args.productId, variantId: args.variantId },
+    dedupeKey: `out-of-stock:${args.productId}:${args.variantId ?? 'base'}:${day}`,
+  };
+}

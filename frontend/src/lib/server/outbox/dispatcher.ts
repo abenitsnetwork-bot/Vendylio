@@ -21,7 +21,13 @@
  */
 import type { PrismaClient } from '@prisma/client';
 import { createNotification } from '../notifications/index';
-import { orderPaid, deliveryCompleted, deliveryFailed } from '../notifications/templates';
+import {
+  orderPaid,
+  deliveryCompleted,
+  deliveryFailed,
+  lowStockNotification,
+  outOfStockNotification,
+} from '../notifications/templates';
 import type { EmailQueue } from '../queues/email-queue';
 import { createLogger } from '../logger';
 import type { OutboxEvent } from './types';
@@ -122,6 +128,31 @@ export async function drainOutbox(
   return { processed: candidates.length, succeeded, failed, dead };
 }
 
+/**
+ * Phase 4 — stamp `lowStockNotifiedAt = now()` after a low/out-of-stock
+ * notification is sent, so it isn't re-emitted until stock recovers (which
+ * resets it to null — see inventory/adjust.ts). The `lowStockNotifiedAt: null`
+ * guard makes a duplicate dispatch a no-op.
+ */
+async function markLowStockNotified(
+  prisma: PrismaClient,
+  productId: string,
+  variantId: string | null,
+): Promise<void> {
+  const now = new Date();
+  if (variantId) {
+    await prisma.productVariant.updateMany({
+      where: { id: variantId, lowStockNotifiedAt: null },
+      data: { lowStockNotifiedAt: now },
+    });
+  } else {
+    await prisma.product.updateMany({
+      where: { id: productId, lowStockNotifiedAt: null },
+      data: { lowStockNotifiedAt: now },
+    });
+  }
+}
+
 /** Route a single event to the correct handler. */
 async function dispatchEvent(deps: OutboxDispatcherDeps, event: OutboxEvent): Promise<void> {
   switch (event.kind) {
@@ -186,6 +217,41 @@ async function dispatchEvent(deps: OutboxDispatcherDeps, event: OutboxEvent): Pr
       // Uber Direct — emitted by the delivery webhook's onFailed handler.
       const { userId, orderId, status } = event.payload;
       await createNotification(deps.prisma, deliveryFailed(userId, orderId, status));
+      return;
+    }
+    case 'notification.low_stock': {
+      // Phase 4 — emitted by markPaid.ts / the low-stock-sweep cron.
+      const { userId, productId, variantId, productName, variantLabel, quantity, threshold } =
+        event.payload;
+      await createNotification(
+        deps.prisma,
+        lowStockNotification(userId, {
+          productId,
+          variantId,
+          productName,
+          variantLabel,
+          quantity,
+          threshold,
+          detectedAt: event.payload.detectedAt,
+        }),
+      );
+      await markLowStockNotified(deps.prisma, productId, variantId);
+      return;
+    }
+    case 'notification.out_of_stock': {
+      // Phase 4 — emitted by markPaid.ts / the low-stock-sweep cron.
+      const { userId, productId, variantId, productName, variantLabel } = event.payload;
+      await createNotification(
+        deps.prisma,
+        outOfStockNotification(userId, {
+          productId,
+          variantId,
+          productName,
+          variantLabel,
+          detectedAt: event.payload.detectedAt,
+        }),
+      );
+      await markLowStockNotified(deps.prisma, productId, variantId);
       return;
     }
     default: {

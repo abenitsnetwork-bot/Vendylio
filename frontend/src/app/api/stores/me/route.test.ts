@@ -26,6 +26,8 @@ function makeGet(): NextRequest {
 beforeEach(() => {
   vi.clearAllMocks();
   mockRequireAuth.mockResolvedValue(authedCtx);
+  // countLowStock() raw query — default to "nothing low".
+  prismaMock.$queryRaw.mockResolvedValue([{ low: 0, out: 0 }] as never);
 });
 
 describe('GET /api/stores/me', () => {
@@ -61,6 +63,7 @@ describe('GET /api/stores/me', () => {
       _count: { products: 3 },
     } as never);
     prismaMock.order.aggregate.mockResolvedValue({ _sum: { amount: 0 }, _count: 0 } as never);
+    prismaMock.$queryRaw.mockResolvedValueOnce([{ low: 2, out: 1 }] as never);
 
     const res = await GET(makeGet());
     expect(res.status).toBe(200);
@@ -74,6 +77,8 @@ describe('GET /api/stores/me', () => {
       monthSalesCents: 0,
       monthOrdersCount: 0,
       visits: 0,
+      lowStockCount: 2,
+      outOfStockCount: 1,
     });
   });
 

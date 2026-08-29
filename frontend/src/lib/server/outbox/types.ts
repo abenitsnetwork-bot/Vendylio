@@ -16,7 +16,9 @@ export type OutboxEvent =
   | EmailOrderConfirmationEvent
   | EmailOrderRefundedEvent
   | NotificationDeliveryCompletedEvent
-  | NotificationDeliveryFailedEvent;
+  | NotificationDeliveryFailedEvent
+  | NotificationLowStockEvent
+  | NotificationOutOfStockEvent;
 
 /**
  * Phase 1 — emitted by signup + resend-verification routes; consumed by the
@@ -114,6 +116,44 @@ export interface NotificationDeliveryFailedEvent {
     userId: string;
     orderId: string;
     status: string;
+  };
+}
+
+/**
+ * Phase 4 — emitted by markPaid.ts when a paid sale drops a product/variant
+ * to or below its low-stock threshold, and by the low-stock-sweep cron as a
+ * safety net. Targets the store owner. The dispatcher routes it through
+ * `createNotification` and stamps `Product/ProductVariant.lowStockNotifiedAt`.
+ * `detectedAt` is fixed at enqueue time so the dedupeKey is stable across
+ * dispatch retries (see notifications/templates.ts::lowStockNotification).
+ */
+export interface NotificationLowStockEvent {
+  kind: 'notification.low_stock';
+  payload: {
+    userId: string;
+    productId: string;
+    variantId: string | null;
+    productName: string;
+    variantLabel: string | null;
+    quantity: number;
+    threshold: number;
+    detectedAt: string;
+  };
+}
+
+/**
+ * Phase 4 — same emit sites as NotificationLowStockEvent, for the
+ * quantity-hits-zero case.
+ */
+export interface NotificationOutOfStockEvent {
+  kind: 'notification.out_of_stock';
+  payload: {
+    userId: string;
+    productId: string;
+    variantId: string | null;
+    productName: string;
+    variantLabel: string | null;
+    detectedAt: string;
   };
 }
 

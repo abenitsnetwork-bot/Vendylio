@@ -13,6 +13,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { requireAuth } from '@/lib/server/middleware';
 import { prisma } from '@/lib/server/prisma';
 import { resolveOwnStore } from '@/lib/server/org';
+import { countLowStock } from '@/lib/server/inventory/low-stock';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
 function startOfUtcDay(now: Date): Date {
@@ -56,7 +57,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     });
 
     const now = new Date();
-    const [todayAgg, monthAgg] = await Promise.all([
+    const [todayAgg, monthAgg, lowStock] = await Promise.all([
       prisma.order.aggregate({
         where: {
           storeId: store.id,
@@ -75,6 +76,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         _sum: { amount: true },
         _count: true,
       }),
+      countLowStock(prisma, store.id),
     ]);
 
     const { _count, ...storeFields } = store;
@@ -88,6 +90,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           monthSalesCents: monthAgg._sum.amount ?? 0,
           monthOrdersCount: monthAgg._count,
           visits: 0,
+          lowStockCount: lowStock.lowStockCount,
+          outOfStockCount: lowStock.outOfStockCount,
         },
       },
       { headers: { 'x-request-id': ctx.requestId } },

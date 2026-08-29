@@ -184,6 +184,62 @@ describe('applyOrderPaidEffects', () => {
     expect(kinds).toContain('email.order_confirmation');
   });
 
+  it('enqueues notification.low_stock when a SALE crosses the low-stock threshold', async () => {
+    prismaMock.store.findUnique.mockResolvedValueOnce({
+      plan: 'FREE',
+      defaultLowStockThreshold: 3,
+      organization: { ownerId: 'seller-1' },
+    } as never);
+    prismaMock.product.findUnique.mockResolvedValueOnce({ id: 'prod-a' } as never);
+    mockApplyStockChange.mockResolvedValueOnce({
+      before: 4,
+      after: 2,
+      delta: -2,
+      effectiveThreshold: 3,
+      crossedLowThreshold: true,
+      crossedZero: false,
+    });
+
+    await applyOrderPaidEffects(prismaMock, BASE_ORDER, {});
+
+    const lowStock = prismaMock.outboxEvent.create.mock.calls
+      .map((c) => (c[0] as { data: { kind: string; payload: Record<string, unknown> } }).data)
+      .find((d) => d.kind === 'notification.low_stock');
+    expect(lowStock).toBeDefined();
+    expect(lowStock?.payload).toMatchObject({
+      userId: 'seller-1',
+      productId: 'prod-a',
+      productName: 'Shea Butter',
+      quantity: 2,
+      threshold: 3,
+    });
+  });
+
+  it('enqueues notification.out_of_stock when a SALE drives stock to zero', async () => {
+    prismaMock.store.findUnique.mockResolvedValueOnce({
+      plan: 'FREE',
+      defaultLowStockThreshold: 3,
+      organization: { ownerId: 'seller-1' },
+    } as never);
+    prismaMock.product.findUnique.mockResolvedValueOnce({ id: 'prod-a' } as never);
+    mockApplyStockChange.mockResolvedValueOnce({
+      before: 2,
+      after: 0,
+      delta: -2,
+      effectiveThreshold: 3,
+      crossedLowThreshold: false,
+      crossedZero: true,
+    });
+
+    await applyOrderPaidEffects(prismaMock, BASE_ORDER, {});
+
+    const kinds = prismaMock.outboxEvent.create.mock.calls.map(
+      (c) => (c[0] as { data: { kind: string } }).data.kind,
+    );
+    expect(kinds).toContain('notification.out_of_stock');
+    expect(kinds).not.toContain('notification.low_stock');
+  });
+
   it('applies the Phase 12 PRO commission discount when the store is on PRO', async () => {
     prismaMock.store.findUnique.mockResolvedValueOnce({
       plan: 'PRO',
