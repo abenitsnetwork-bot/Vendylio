@@ -24,6 +24,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard/delivery', label: 'Delivery', icon: 'truck' },
   { href: '/dashboard/billing', label: 'Billing & Payouts', icon: 'credit-card' },
   { href: '/dashboard/settings', label: 'Settings', icon: 'settings' },
+  { href: '/dashboard/resources', label: 'Help & Resources', icon: 'life-buoy' },
 ];
 
 // Mobile keeps only the highest-traffic destinations in the fixed bottom
