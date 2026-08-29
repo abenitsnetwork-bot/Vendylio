@@ -20,6 +20,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard/inventory', label: 'Inventory', icon: 'clipboard' },
   { href: '/dashboard/customers', label: 'Customers', icon: 'users' },
   { href: '/dashboard/reviews', label: 'Reviews', icon: 'star' },
+  { href: '/dashboard/discounts', label: 'Promo codes', icon: 'bookmark' },
   { href: '/dashboard/delivery', label: 'Delivery', icon: 'truck' },
   { href: '/dashboard/settings', label: 'Settings', icon: 'settings' },
 ];
@@ -28,11 +29,11 @@ const NAV_ITEMS: NavItem[] = [
 // bar — the full label list doesn't fit a phone width. Everything is still
 // one tap away from the desktop sidebar or the Dashboard home's own cards.
 const MOBILE_NAV_ITEMS: NavItem[] = [
-  NAV_ITEMS[0]!,
-  NAV_ITEMS[1]!,
-  NAV_ITEMS[2]!,
-  NAV_ITEMS[3]!,
-  NAV_ITEMS[7]!,
+  NAV_ITEMS.find((i) => i.href === '/dashboard')!,
+  NAV_ITEMS.find((i) => i.href === '/dashboard/orders')!,
+  NAV_ITEMS.find((i) => i.href === '/dashboard/products')!,
+  NAV_ITEMS.find((i) => i.href === '/dashboard/inventory')!,
+  NAV_ITEMS.find((i) => i.href === '/dashboard/settings')!,
 ];
 
 function isActive(pathname: string, href: string): boolean {

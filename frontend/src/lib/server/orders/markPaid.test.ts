@@ -259,4 +259,29 @@ describe('applyOrderPaidEffects', () => {
       data: expect.objectContaining({ commissionAmount: 108, netAmount: 3492 }),
     });
   });
+
+  it('bumps the promo code redemptionCount when the order carries one (Phase D)', async () => {
+    prismaMock.store.findUnique.mockResolvedValueOnce({
+      plan: 'FREE',
+      organization: { ownerId: 'seller-1' },
+    } as never);
+    prismaMock.product.findUnique.mockResolvedValueOnce({ quantity: 10 } as never);
+
+    await applyOrderPaidEffects(prismaMock, { ...BASE_ORDER, discountCode: 'FREESHIP' }, {});
+    expect(prismaMock.discount.updateMany).toHaveBeenCalledWith({
+      where: { storeId: 'store-1', code: 'FREESHIP' },
+      data: { redemptionCount: { increment: 1 } },
+    });
+  });
+
+  it('does not touch the Discount table when the order has no promo code', async () => {
+    prismaMock.store.findUnique.mockResolvedValueOnce({
+      plan: 'FREE',
+      organization: { ownerId: 'seller-1' },
+    } as never);
+    prismaMock.product.findUnique.mockResolvedValueOnce({ quantity: 10 } as never);
+
+    await applyOrderPaidEffects(prismaMock, BASE_ORDER, {});
+    expect(prismaMock.discount.updateMany).not.toHaveBeenCalled();
+  });
 });

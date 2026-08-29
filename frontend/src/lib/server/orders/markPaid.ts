@@ -35,6 +35,9 @@ export interface OrderForPaidEffects {
   customerName: string | null;
   customerEmail: string | null;
   deliveryAddress: Prisma.JsonValue;
+  /** Phase D — the promo code snapshot; its redemptionCount is bumped here
+   * (at payment, not at checkout — best-effort cap, see the Discount model). */
+  discountCode?: string | null;
 }
 
 export async function applyOrderPaidEffects(
@@ -184,6 +187,16 @@ export async function applyOrderPaidEffects(
         throw err;
       }
     }
+  }
+
+  // Phase D — count the promo redemption now that the order is actually
+  // paid (updateMany, not update: the Discount row may have been deleted
+  // since checkout — that's fine, 0 rows updated).
+  if (order.discountCode) {
+    await tx.discount.updateMany({
+      where: { storeId: order.storeId, code: order.discountCode },
+      data: { redemptionCount: { increment: 1 } },
+    });
   }
 
   // Outbox emits stay inside the caller's Serializable tx so the rows

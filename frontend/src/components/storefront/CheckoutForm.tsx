@@ -55,6 +55,51 @@ function CheckoutFormInner({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Phase D — promo code. `appliedCode` is set only after /validate says OK;
+  // the order POST re-checks authoritatively and can still 400 (expired
+  // between apply and submit), handled in the error map below.
+  const [promoInput, setPromoInput] = useState('');
+  const [appliedCode, setAppliedCode] = useState<string | null>(null);
+  const [promoBusy, setPromoBusy] = useState(false);
+  const [promoMsg, setPromoMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function applyPromo() {
+    const code = promoInput.trim();
+    if (!code) return;
+    setPromoBusy(true);
+    setPromoMsg(null);
+    try {
+      const res = await fetch(
+        `/api/discounts/validate?slug=${encodeURIComponent(storeSlug)}&code=${encodeURIComponent(
+          code,
+        )}&subtotal=${subtotalCents}`,
+        { credentials: 'include' },
+      );
+      const body = (await res.json().catch(() => ({}))) as {
+        valid?: boolean;
+        code?: string;
+        message?: string;
+      };
+      if (res.ok && body.valid) {
+        setAppliedCode(body.code ?? code.toUpperCase());
+        setPromoMsg({ ok: true, text: body.message ?? 'Promo code applied.' });
+      } else {
+        setAppliedCode(null);
+        setPromoMsg({ ok: false, text: body.message ?? 'That promo code is not valid.' });
+      }
+    } catch {
+      setPromoMsg({ ok: false, text: 'Could not check that code. Try again.' });
+    } finally {
+      setPromoBusy(false);
+    }
+  }
+
+  function removePromo() {
+    setAppliedCode(null);
+    setPromoInput('');
+    setPromoMsg(null);
+  }
+
   const deliveryAddress = useMemo(
     () => (street || city || state || zip ? { street, city, state, zip } : undefined),
     [street, city, state, zip],
@@ -117,8 +162,11 @@ function CheckoutFormInner({
     subtotalCents,
   ]);
 
-  const appliedDeliveryFeeCents =
+  const rawDeliveryFeeCents =
     fulfillmentMethod !== 'delivery' ? 0 : (liveDeliveryFeeCents ?? deliveryFeeCents);
+  // V1's only promo mechanism, FREE_DELIVERY, waives the whole delivery fee.
+  const freeDelivery = appliedCode !== null && fulfillmentMethod === 'delivery';
+  const appliedDeliveryFeeCents = freeDelivery ? 0 : rawDeliveryFeeCents;
   const totalCents = subtotalCents + appliedDeliveryFeeCents;
 
   async function onSubmit(e: FormEvent) {
@@ -156,6 +204,7 @@ function CheckoutFormInner({
           ...(customerEmail.trim() ? { customerEmail: customerEmail.trim() } : {}),
           fulfillmentMethod,
           ...(fulfillmentMethod === 'delivery' && deliveryAddress ? { deliveryAddress } : {}),
+          ...(appliedCode ? { discountCode: appliedCode } : {}),
           paymentMethod,
         }),
       });
@@ -177,7 +226,13 @@ function CheckoutFormInner({
           PAYMENT_PROVIDER_UNAVAILABLE:
             'Payment is temporarily unavailable. Please try again shortly.',
           PAYMENT_FAILED: 'Payment could not be started. Please try again.',
+          DISCOUNT_INVALID:
+            body.message ?? 'That promo code can’t be applied — it may have just expired.',
         };
+        if (body.error === 'DISCOUNT_INVALID') {
+          setAppliedCode(null);
+          setPromoMsg({ ok: false, text: 'Promo code removed — it is no longer valid.' });
+        }
         setError((body.error && map[body.error]) ?? body.message ?? 'Something went wrong.');
         setSubmitting(false);
         return;
@@ -432,6 +487,52 @@ function CheckoutFormInner({
                 </div>
               ))}
             </div>
+            <div className="mt-4 border-t border-border pt-4">
+              {appliedCode ? (
+                <div className="flex items-center justify-between rounded-lg bg-secondary px-3 py-2 text-sm">
+                  <span className="font-semibold text-foreground">
+                    Promo <span className="font-mono">{appliedCode}</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={removePromo}
+                    className="text-xs font-medium text-muted-foreground hover:text-foreground"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    aria-label="Promo code"
+                    placeholder="Promo code"
+                    className={`${inputClass} py-2 text-sm`}
+                    value={promoInput}
+                    onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        void applyPromo();
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void applyPromo()}
+                    disabled={promoBusy || !promoInput.trim()}
+                    className="flex-shrink-0 rounded-lg border border-border px-4 text-sm font-semibold text-foreground hover:bg-secondary disabled:opacity-50"
+                  >
+                    {promoBusy ? '…' : 'Apply'}
+                  </button>
+                </div>
+              )}
+              {promoMsg && (
+                <p className={`mt-1.5 text-xs ${promoMsg.ok ? 'text-green-600' : 'text-red-600'}`}>
+                  {promoMsg.text}
+                </p>
+              )}
+            </div>
+
             <div className="mt-4 space-y-2 border-t border-border pt-4 text-sm">
               <div className="flex justify-between text-muted-foreground">
                 <span>Subtotal</span>
@@ -440,11 +541,20 @@ function CheckoutFormInner({
               <div className="flex justify-between text-muted-foreground">
                 <span>{fulfillmentMethod === 'pickup' ? 'Pickup' : 'Delivery'}</span>
                 <span>
-                  {fulfillmentMethod === 'delivery' && quoting
-                    ? 'Calculating…'
-                    : appliedDeliveryFeeCents > 0
-                      ? formatUsd(appliedDeliveryFeeCents)
-                      : 'Free'}
+                  {fulfillmentMethod === 'delivery' && quoting ? (
+                    'Calculating…'
+                  ) : freeDelivery && rawDeliveryFeeCents > 0 ? (
+                    <span>
+                      <span className="mr-1 text-muted-foreground line-through">
+                        {formatUsd(rawDeliveryFeeCents)}
+                      </span>
+                      <span className="font-semibold text-green-600">Free</span>
+                    </span>
+                  ) : appliedDeliveryFeeCents > 0 ? (
+                    formatUsd(appliedDeliveryFeeCents)
+                  ) : (
+                    'Free'
+                  )}
                 </span>
               </div>
               <div className="flex justify-between font-semibold text-foreground">

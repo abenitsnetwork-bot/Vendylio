@@ -14,6 +14,7 @@ function fingerprintBody(input: {
   storeId: string;
   items: { productId: string; quantity: number; variantId?: string }[];
   fulfillmentMethod?: string;
+  discountCode?: string | null;
 }) {
   const sortedItems = [...input.items]
     .map((i) => ({ productId: i.productId, quantity: i.quantity, variantId: i.variantId ?? null }))
@@ -22,6 +23,7 @@ function fingerprintBody(input: {
     storeId: input.storeId,
     items: sortedItems,
     fulfillmentMethod: input.fulfillmentMethod ?? 'delivery',
+    discountCode: input.discountCode ?? null,
   });
   return createHash('sha256').update(canonical).digest('hex');
 }
@@ -129,6 +131,8 @@ function seededOrder(over: Partial<Record<string, unknown>> = {}) {
     subtotalCents: 3600,
     deliveryFeeCents: 0,
     taxCents: 0,
+    discountCents: 0,
+    discountCode: null,
     customerEmail: null,
     customerPhone: '+15551234567',
     customerName: 'Amara',
@@ -596,6 +600,81 @@ describe('POST /api/orders — fulfillmentMethod (Pickup vs Delivery)', () => {
     expect(res.status).toBe(422);
     const body = await res.json();
     expect(body.error).toBe('IDEMPOTENCY_KEY_BODY_MISMATCH');
+  });
+});
+
+describe('POST /api/orders — promo code (Phase D)', () => {
+  const ACTIVE_FREE_DELIVERY = {
+    kind: 'FREE_DELIVERY',
+    active: true,
+    startsAt: null,
+    endsAt: null,
+    minSubtotalCents: 0,
+    maxRedemptions: null,
+    redemptionCount: 0,
+  };
+
+  it('applies a valid FREE_DELIVERY code: fee zeroed, code + savings stored', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({ ...STORE, deliveryFeeCents: 500 } as never);
+    prismaMock.discount.findUnique.mockResolvedValue(ACTIVE_FREE_DELIVERY as never);
+    prismaMock.order.create.mockResolvedValue(seededOrder() as never);
+    prismaMock.order.update.mockResolvedValue(seededOrder() as never);
+
+    await POST(makePost({ ...validBody, discountCode: 'freeship' }));
+
+    expect(prismaMock.discount.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { storeId_code: { storeId: 'store-1', code: 'FREESHIP' } },
+      }),
+    );
+    const data = prismaMock.order.create.mock.calls[0]?.[0]?.data;
+    expect(data).toMatchObject({
+      deliveryFeeCents: 0,
+      discountCents: 500,
+      discountCode: 'FREESHIP',
+      amount: 3600,
+    });
+  });
+
+  it('400 DISCOUNT_INVALID when the code is unknown', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({ ...STORE, deliveryFeeCents: 500 } as never);
+    prismaMock.discount.findUnique.mockResolvedValue(null as never);
+
+    const res = await POST(makePost({ ...validBody, discountCode: 'NOPE' }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('DISCOUNT_INVALID');
+    expect(prismaMock.order.create).not.toHaveBeenCalled();
+  });
+
+  it('400 DISCOUNT_INVALID when the cart is under the code minimum', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({ ...STORE, deliveryFeeCents: 500 } as never);
+    prismaMock.discount.findUnique.mockResolvedValue({
+      ...ACTIVE_FREE_DELIVERY,
+      minSubtotalCents: 999999,
+    } as never);
+
+    const res = await POST(makePost({ ...validBody, discountCode: 'FREESHIP' }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('MIN_SUBTOTAL');
+  });
+
+  it('adding a promo code makes it a different logical attempt under the same key', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({ ...STORE, deliveryFeeCents: 500 } as never);
+    prismaMock.order.findUnique.mockResolvedValue(
+      seededOrder({
+        idempotencyBodyHash: fingerprintBody({
+          storeId: 'store-1',
+          items: [{ productId: 'prod-a', quantity: 2 }],
+          discountCode: null,
+        }),
+      }) as never,
+    );
+
+    const res = await POST(
+      makePost({ ...validBody, discountCode: 'FREESHIP' }, { idempotencyKey: 'idem-key-1' }),
+    );
+    expect(res.status).toBe(422);
+    expect((await res.json()).error).toBe('IDEMPOTENCY_KEY_BODY_MISMATCH');
   });
 });
 

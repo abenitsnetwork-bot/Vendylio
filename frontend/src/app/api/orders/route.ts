@@ -55,6 +55,7 @@ import { newTrackingToken } from '@/lib/server/orders/trackingToken';
 import { storeAcceptsOrders } from '@/lib/server/store/availability';
 import { roundQuantity } from '@/lib/quantity';
 import { getUberDirectDeliveryFeeCents } from '@/lib/server/delivery/uber-direct';
+import { evaluateDiscount, normalizeDiscountCode } from '@/lib/server/discounts/evaluate';
 
 const IDEM_KEY_MAX_LEN = 200;
 const ORDER_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24h PENDING window
@@ -79,6 +80,7 @@ function fingerprintBody(input: {
   storeId: string;
   items: CartLine[];
   fulfillmentMethod: string;
+  discountCode: string | null;
 }): string {
   const sortedItems = [...input.items]
     .map((i) => ({ productId: i.productId, quantity: i.quantity, variantId: i.variantId ?? null }))
@@ -87,6 +89,9 @@ function fingerprintBody(input: {
     storeId: input.storeId,
     items: sortedItems,
     fulfillmentMethod: input.fulfillmentMethod,
+    // Phase D — a re-submit that adds/removes/swaps the promo code changes
+    // what's charged, so it must not silently reuse the old amount.
+    discountCode: input.discountCode,
   });
   return createHash('sha256').update(canonical).digest('hex');
 }
@@ -119,6 +124,9 @@ const Body = z.object({
   // deliveryFeeCents applies. 'pickup' zeroes the fee regardless of the
   // store's configured deliveryFeeCents.
   fulfillmentMethod: z.enum(['pickup', 'delivery']).default('delivery'),
+  // Phase D — optional promo code. Validated + priced server-side below; an
+  // invalid/expired code 400s (DISCOUNT_INVALID) rather than being ignored.
+  discountCode: z.string().trim().min(1).max(40).optional(),
 });
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -170,6 +178,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       paymentMethod,
       fulfillmentMethod,
     } = parsed.data;
+    const discountCode = parsed.data.discountCode
+      ? normalizeDiscountCode(parsed.data.discountCode)
+      : null;
     // Round every incoming quantity before it touches the fingerprint, the
     // stock check, or the stored lineItem snapshot — a client sending
     // 12.0900000001 must fingerprint/store identically to one sending 12.09.
@@ -217,7 +228,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const bodyHash = fingerprintBody({ storeId: store.id, items, fulfillmentMethod });
+    const bodyHash = fingerprintBody({ storeId: store.id, items, fulfillmentMethod, discountCode });
 
     // 6. Replay (echo the outcome, not a re-derivation of the row)
     const existing = await prisma.order.findUnique({ where: { idempotencyKey: idemKey } });
@@ -354,6 +365,41 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             })) ?? store.deliveryFeeCents)
           : store.deliveryFeeCents;
     }
+    // Phase D — apply a promo code AFTER the delivery fee is known (V1's
+    // only mechanism, FREE_DELIVERY, zeroes it). An invalid/expired code is
+    // a hard 400 so the buyer knows to remove it, rather than silently
+    // charging them the fee they thought was waived.
+    let discountCents = 0;
+    let appliedDiscountCode: string | null = null;
+    if (discountCode) {
+      const discount = await prisma.discount.findUnique({
+        where: { storeId_code: { storeId: store.id, code: discountCode } },
+        select: {
+          kind: true,
+          active: true,
+          startsAt: true,
+          endsAt: true,
+          minSubtotalCents: true,
+          maxRedemptions: true,
+          redemptionCount: true,
+        },
+      });
+      const result = evaluateDiscount(discount, { subtotalCents, deliveryFeeCents });
+      if (!result.ok) {
+        return NextResponse.json(
+          {
+            error: 'DISCOUNT_INVALID',
+            code: result.reason,
+            message: 'That promo code can’t be applied to this order.',
+          },
+          { status: 400, headers: { 'x-request-id': ctx.requestId } },
+        );
+      }
+      discountCents = result.discountCents;
+      deliveryFeeCents = result.deliveryFeeCents;
+      appliedDiscountCode = discountCode;
+    }
+
     const taxCents = 0; // no tax engine in the MVP
     const amount = subtotalCents + deliveryFeeCents + taxCents;
 
@@ -368,6 +414,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       subtotalCents,
       deliveryFeeCents,
       taxCents,
+      discountCents,
+      ...(appliedDiscountCode ? { discountCode: appliedDiscountCode } : {}),
       fulfillmentMethod: fulfillmentMethod.toUpperCase(),
       customerName,
       customerPhone,

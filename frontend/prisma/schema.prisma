@@ -338,6 +338,13 @@ model Order {
   subtotalCents     Int
   deliveryFeeCents  Int     @default(0)
   taxCents          Int     @default(0) // column ready; MVP always computes 0 (no tax engine)
+  // Phase D — promo code applied at checkout (uppercased snapshot; the
+  // Discount row may later be edited/deleted, this preserves history).
+  // `discountCents` is what the buyer saved — for FREE_DELIVERY it equals
+  // the delivery fee that would otherwise have applied. `amount` already
+  // has the discount subtracted.
+  discountCode      String?
+  discountCents     Int     @default(0)
   // Buyer's checkout choice — PICKUP: deliveryFeeCents forced to 0 and no
   // courier is ever involved (seller hands the order over in person, marked
   // done via the generic READY→DELIVERED transition). DELIVERY: existing
@@ -567,6 +574,36 @@ model Store {
   reviews        Review[]
   categories     Category[]
   stockMovements StockMovement[]
+  discounts      Discount[]
+}
+
+// Phase D — seller-managed promo codes. V1 ships one mechanism:
+// FREE_DELIVERY (waives the order's delivery fee). PERCENT / FIXED are
+// planned and the `kind` column is already free-text to accept them without
+// a migration. A code applies at checkout only when `active` is true, `now`
+// is within [startsAt, endsAt] (null bounds = open-ended), the cart subtotal
+// clears `minSubtotalCents`, and `redemptionCount < maxRedemptions` (null =
+// unlimited). The seller can edit / disable / re-schedule any of this at
+// will. `redemptionCount` is incremented at payment (markPaid), not at
+// PENDING creation — same "only counts once paid" rule as stock/customers,
+// so the cap is best-effort under heavy concurrency (documented).
+model Discount {
+  id               String    @id @default(cuid())
+  storeId          String
+  store            Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  code             String // stored UPPERCASE; unique per store
+  kind             String    @default("FREE_DELIVERY") // FREE_DELIVERY (PERCENT | FIXED later)
+  active           Boolean   @default(true)
+  startsAt         DateTime?
+  endsAt           DateTime?
+  minSubtotalCents Int       @default(0)
+  maxRedemptions   Int?
+  redemptionCount  Int       @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([storeId, code])
+  @@index([storeId])
 }
 
 // Per-store product categories. Replaced the old hard-coded 4-value
