@@ -319,6 +319,20 @@ export function SellerDashboard({
                 View Reviews
               </Link>
             </Card>
+
+            <Card>
+              <Icon i="message-circle" size={20} className="mb-4 text-foreground" />
+              <p className="mb-2 text-sm font-semibold text-foreground">Share Your Story</p>
+              <p className="mb-4 text-xs text-muted-foreground">
+                Love Vendylio? Send us a few words — we might feature you on the homepage.
+              </p>
+              <Link
+                href="/dashboard/testimonial"
+                className="block w-full rounded-md border border-border py-2 text-center text-xs font-semibold text-foreground hover:bg-secondary"
+              >
+                Write a Testimonial
+              </Link>
+            </Card>
           </div>
         </div>
 
