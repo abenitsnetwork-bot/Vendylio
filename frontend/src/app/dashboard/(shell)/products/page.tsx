@@ -19,6 +19,8 @@ const STATUS_FILTERS = [
 ] as const;
 
 const UNCATEGORIZED = '__none__';
+const VIEW_STORAGE_KEY = 'vendylio-products-view';
+type ViewMode = 'grid' | 'list';
 
 interface Group {
   key: string;
@@ -61,6 +63,27 @@ export default function ProductsPage() {
   const [categoryId, setCategoryId] = useState('');
   const [status, setStatus] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  const [view, setView] = useState<ViewMode>('grid');
+
+  // Hydrate the view preference after mount (localStorage isn't available
+  // during SSR).
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(VIEW_STORAGE_KEY);
+      if (saved === 'grid' || saved === 'list') setView(saved);
+    } catch {
+      /* private mode / storage blocked — keep the default */
+    }
+  }, []);
+
+  function chooseView(next: ViewMode) {
+    setView(next);
+    try {
+      localStorage.setItem(VIEW_STORAGE_KEY, next);
+    } catch {
+      /* ignore */
+    }
+  }
 
   useEffect(() => {
     if (!user) return;
@@ -199,6 +222,28 @@ export default function ProductsPage() {
                 </button>
               ))}
             </div>
+
+            <div className="flex gap-1 rounded-lg border border-border bg-card p-0.5 sm:ml-auto">
+              {[
+                { mode: 'grid' as const, icon: 'layout-grid' as const, label: 'Grid view' },
+                { mode: 'list' as const, icon: 'list' as const, label: 'List view' },
+              ].map((v) => (
+                <button
+                  key={v.mode}
+                  type="button"
+                  aria-label={v.label}
+                  aria-pressed={view === v.mode}
+                  onClick={() => chooseView(v.mode)}
+                  className={`flex h-8 w-8 items-center justify-center rounded-md ${
+                    view === v.mode
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:bg-secondary'
+                  }`}
+                >
+                  <Icon i={v.icon} size={16} />
+                </button>
+              ))}
+            </div>
           </div>
 
           {error && (
@@ -270,51 +315,99 @@ export default function ProductsPage() {
                       {group.products.length}
                     </span>
                   </h2>
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                    {group.products.map((product) => (
-                      <Link
-                        key={product.id}
-                        href={`/dashboard/products/${product.id}/edit`}
-                        className="overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-primary"
-                      >
-                        <div className="relative">
-                          {product.imageUrl ? (
-                            <img
-                              src={product.imageUrl}
-                              alt={product.name}
-                              className="aspect-square w-full object-cover"
-                            />
-                          ) : (
-                            <ImagePlaceholder icon="package" className="aspect-square w-full" />
-                          )}
-                          {product.status === 'ARCHIVED' ? (
-                            <span className="absolute right-2 top-2 rounded bg-foreground px-1.5 py-0.5 text-[10px] font-semibold text-background">
-                              Inactive
-                            </span>
-                          ) : (
-                            product.quantity <= 0 && (
+                  {view === 'grid' ? (
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                      {group.products.map((product) => (
+                        <Link
+                          key={product.id}
+                          href={`/dashboard/products/${product.id}/edit`}
+                          className="overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-primary"
+                        >
+                          <div className="relative">
+                            {product.imageUrl ? (
+                              <img
+                                src={product.imageUrl}
+                                alt={product.name}
+                                className="aspect-square w-full object-cover"
+                              />
+                            ) : (
+                              <ImagePlaceholder icon="package" className="aspect-square w-full" />
+                            )}
+                            {product.status === 'ARCHIVED' ? (
                               <span className="absolute right-2 top-2 rounded bg-foreground px-1.5 py-0.5 text-[10px] font-semibold text-background">
-                                Sold out
+                                Inactive
                               </span>
-                            )
-                          )}
-                        </div>
-                        <div className="p-2.5">
-                          <p className="mb-0.5 truncate text-sm font-semibold text-foreground">
-                            {product.name}
-                          </p>
-                          <div className="flex items-center justify-between gap-2 text-xs">
-                            <span className="font-bold text-foreground">
+                            ) : (
+                              product.quantity <= 0 && (
+                                <span className="absolute right-2 top-2 rounded bg-foreground px-1.5 py-0.5 text-[10px] font-semibold text-background">
+                                  Sold out
+                                </span>
+                              )
+                            )}
+                          </div>
+                          <div className="p-2.5">
+                            <p className="mb-0.5 truncate text-sm font-semibold text-foreground">
+                              {product.name}
+                            </p>
+                            <div className="flex items-center justify-between gap-2 text-xs">
+                              <span className="font-bold text-foreground">
+                                {formatUsdPerUnit(product.priceCents, product.unit)}
+                              </span>
+                              <span className="truncate text-muted-foreground">
+                                {formatQuantityWithUnit(product.quantity, product.unit)} in stock
+                              </span>
+                            </div>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  ) : (
+                    <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
+                      {group.products.map((product) => (
+                        <li key={product.id}>
+                          <Link
+                            href={`/dashboard/products/${product.id}/edit`}
+                            className="flex items-center gap-3 p-2.5 transition-colors hover:bg-secondary"
+                          >
+                            {product.imageUrl ? (
+                              <img
+                                src={product.imageUrl}
+                                alt=""
+                                className="h-10 w-10 flex-shrink-0 rounded object-cover"
+                              />
+                            ) : (
+                              <ImagePlaceholder
+                                icon="package"
+                                className="h-10 w-10 flex-shrink-0 rounded"
+                              />
+                            )}
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-semibold text-foreground">
+                                {product.name}
+                              </span>
+                              <span className="block truncate text-xs text-muted-foreground">
+                                {formatQuantityWithUnit(product.quantity, product.unit)} in stock
+                              </span>
+                            </span>
+                            {product.status === 'ARCHIVED' ? (
+                              <span className="flex-shrink-0 rounded bg-secondary px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                Inactive
+                              </span>
+                            ) : (
+                              product.quantity <= 0 && (
+                                <span className="flex-shrink-0 rounded bg-foreground px-1.5 py-0.5 text-[10px] font-semibold text-background">
+                                  Sold out
+                                </span>
+                              )
+                            )}
+                            <span className="flex-shrink-0 text-sm font-bold text-foreground">
                               {formatUsdPerUnit(product.priceCents, product.unit)}
                             </span>
-                            <span className="truncate text-muted-foreground">
-                              {formatQuantityWithUnit(product.quantity, product.unit)} in stock
-                            </span>
-                          </div>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </section>
               ))}
 
