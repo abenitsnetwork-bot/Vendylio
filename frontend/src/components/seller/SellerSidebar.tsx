@@ -22,6 +22,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard/reviews', label: 'Reviews', icon: 'star' },
   { href: '/dashboard/discounts', label: 'Promo codes', icon: 'bookmark' },
   { href: '/dashboard/delivery', label: 'Delivery', icon: 'truck' },
+  { href: '/dashboard/billing', label: 'Billing & Payouts', icon: 'credit-card' },
   { href: '/dashboard/settings', label: 'Settings', icon: 'settings' },
 ];
 
