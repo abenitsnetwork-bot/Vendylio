@@ -11,6 +11,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
 import { OrderStatusTracker } from '@/components/storefront/OrderStatusTracker';
+import { ClearStoreCart } from '@/components/storefront/ClearStoreCart';
 
 export const runtime = 'nodejs';
 
@@ -28,6 +29,7 @@ export default async function OrderSuccessPage({ params }: Params) {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center px-4 text-center font-body">
+      <ClearStoreCart storeSlug={slug} />
       <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary">
         <Icon i="check" size={24} className="text-primary-foreground" />
       </div>

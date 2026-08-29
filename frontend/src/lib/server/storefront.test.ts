@@ -289,6 +289,7 @@ describe('getPublicProduct', () => {
     prismaMock.store.findFirst.mockResolvedValue({
       slug: 'shea-store',
       name: 'Shea Store',
+      published: true,
       logoUrl: 'https://cdn/logo.jpg',
       phone: '+1 555-0100',
       template: 'BOLD',
@@ -312,6 +313,7 @@ describe('getPublicProduct', () => {
       store: {
         slug: 'shea-store',
         name: 'Shea Store',
+        published: true,
         logoUrl: 'https://cdn/logo.jpg',
         phone: '+1 555-0100',
         template: 'BOLD',
@@ -354,5 +356,33 @@ describe('getPublicProduct', () => {
 
     const result = await getPublicProduct('shea-store', 'p1');
     expect(result?.store.template).toBe('MODERN');
+  });
+
+  it('with includeUnpublished, drops the published filter and reports published:false', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({
+      slug: 'draft-store',
+      name: 'Draft Store',
+      published: false,
+      logoUrl: null,
+      phone: null,
+      template: 'MODERN',
+      products: [
+        {
+          id: 'p1',
+          name: 'Draft Product',
+          description: null,
+          priceCents: 500,
+          quantity: 3,
+          category: null,
+          unit: 'UNIT',
+          imageUrl: null,
+          variants: [],
+        },
+      ],
+    } as never);
+
+    const result = await getPublicProduct('draft-store', 'p1', { includeUnpublished: true });
+    expect(prismaMock.store.findFirst.mock.calls[0]?.[0]?.where).toEqual({ slug: 'draft-store' });
+    expect(result?.store.published).toBe(false);
   });
 });

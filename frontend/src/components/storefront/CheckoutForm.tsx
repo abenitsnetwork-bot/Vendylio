@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Field, inputClass } from '@/components/ui/Field';
@@ -20,6 +20,44 @@ interface OrderErrorBody {
 }
 
 type PaymentMethod = 'card' | 'cashapp' | 'zelle';
+
+type CartChange =
+  | 'REMOVED'
+  | 'OPTION_UNAVAILABLE'
+  | 'OUT_OF_STOCK'
+  | 'STOCK_REDUCED'
+  | 'PRICE_INCREASED'
+  | 'PRICE_DECREASED';
+
+interface CartValidation {
+  storeOk: boolean;
+  acceptingOrders: boolean;
+  pauseMessage: string | null;
+  hasBlockingChange: boolean;
+  hasPriceIncrease: boolean;
+  lines: {
+    productId: string;
+    variantId: string | null;
+    ok: boolean;
+    name: string;
+    currentPriceCents: number;
+    availableQuantity: number;
+    adjustedQuantity: number;
+    changes: CartChange[];
+  }[];
+}
+
+const CHANGE_COPY: Record<
+  CartChange,
+  (name: string, line: CartValidation['lines'][number]) => string
+> = {
+  REMOVED: (n) => `${n} is no longer available and was removed.`,
+  OPTION_UNAVAILABLE: (n) => `The option you chose for ${n} is no longer available.`,
+  OUT_OF_STOCK: (n) => `${n} just sold out.`,
+  STOCK_REDUCED: (n, l) => `Only ${l.availableQuantity} of ${n} left — we lowered your quantity.`,
+  PRICE_INCREASED: (n, l) => `The price of ${n} changed to ${formatUsd(l.currentPriceCents)}.`,
+  PRICE_DECREASED: (n, l) => `Good news — ${n} is now ${formatUsd(l.currentPriceCents)}.`,
+};
 
 /** A colourful radio option row — a branded icon chip on the left, a custom
  * dot on the right, tinted card when selected. Shared by the Fulfillment
@@ -92,7 +130,8 @@ function CheckoutFormInner({
   const router = useRouter();
   // fulfillmentMethod lives on the cart context so the buyer's choice on the
   // storefront (StorefrontUtilityBar) carries through to here.
-  const { items, subtotalCents, clear, fulfillmentMethod, setFulfillmentMethod } = useCart();
+  const { items, subtotalCents, fulfillmentMethod, setFulfillmentMethod, updateItem, removeItem } =
+    useCart();
   const [idempotencyKey] = useState(() => crypto.randomUUID());
 
   const [customerName, setCustomerName] = useState('');
@@ -149,6 +188,68 @@ function CheckoutFormInner({
     setAppliedCode(null);
     setPromoInput('');
     setPromoMsg(null);
+  }
+
+  // Pre-payment cart revalidation (§38-41 / §115-117). POST /api/orders is
+  // still the gate — this reconciles localStorage prices/stock with the DB so
+  // the buyer sees and fixes any drift before paying, not at the "Pay" click.
+  const [validation, setValidation] = useState<CartValidation | null>(null);
+  const [priceAck, setPriceAck] = useState(false);
+
+  const runValidation = useCallback(async () => {
+    if (items.length === 0) return;
+    try {
+      const res = await fetch('/api/cart/validate', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-csrf-token': guestCsrfHeaderValue() },
+        body: JSON.stringify({
+          storeSlug,
+          items: items.map((i) => ({
+            productId: i.productId,
+            ...(i.variantId ? { variantId: i.variantId } : {}),
+            quantity: i.quantity,
+            priceCents: i.priceCents,
+          })),
+        }),
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as CartValidation;
+      setValidation(data);
+      // Silently reconcile the cart to the live numbers: new price, lowered
+      // stock cap. Removals stay flagged for the buyer to confirm.
+      for (const line of data.lines) {
+        const patch: Parameters<typeof updateItem>[2] = {};
+        if (line.changes.includes('PRICE_INCREASED') || line.changes.includes('PRICE_DECREASED')) {
+          patch.priceCents = line.currentPriceCents;
+        }
+        if (line.changes.includes('STOCK_REDUCED')) {
+          patch.maxQuantity = line.availableQuantity;
+        }
+        if (Object.keys(patch).length > 0) {
+          updateItem(line.productId, line.variantId ?? undefined, patch);
+        }
+      }
+      if (!data.lines.some((l) => l.changes.includes('PRICE_INCREASED'))) setPriceAck(false);
+    } catch {
+      // Offline / transient — the order POST still revalidates authoritatively.
+    }
+  }, [items, storeSlug, updateItem]);
+
+  useEffect(() => {
+    const t = setTimeout(runValidation, 400);
+    return () => clearTimeout(t);
+  }, [runValidation]);
+
+  const blockedLines = validation?.lines.filter((l) => !l.ok) ?? [];
+  const adjustedLines = validation?.lines.filter((l) => l.ok && l.changes.length > 0) ?? [];
+  const storePaused = validation ? !validation.acceptingOrders : false;
+  const needsPriceAck = Boolean(validation?.hasPriceIncrease) && !priceAck;
+  const checkoutBlocked = Boolean(validation?.hasBlockingChange) || storePaused;
+
+  function removeBlockedItems() {
+    for (const line of blockedLines) {
+      removeItem(line.productId, line.variantId ?? undefined);
+    }
   }
 
   const deliveryAddress = useMemo(
@@ -232,6 +333,10 @@ function CheckoutFormInner({
       setError('A delivery address is required, or choose Pickup instead.');
       return;
     }
+    if (checkoutBlocked || needsPriceAck) {
+      setError('Please resolve the changes to your cart above before continuing.');
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -284,7 +389,14 @@ function CheckoutFormInner({
           setAppliedCode(null);
           setPromoMsg({ ok: false, text: 'Promo code removed — it is no longer valid.' });
         }
-        setError((body.error && map[body.error]) ?? body.message ?? 'Something went wrong.');
+        // Let the revalidation banner take over with per-item specifics
+        // instead of a single flat line.
+        if (body.error === 'PRODUCT_UNAVAILABLE' || body.error === 'INVALID_QUANTITY') {
+          void runValidation();
+          setError('Some items in your cart changed — see the note above and try again.');
+        } else {
+          setError((body.error && map[body.error]) ?? body.message ?? 'Something went wrong.');
+        }
         setSubmitting(false);
         return;
       }
@@ -293,18 +405,19 @@ function CheckoutFormInner({
       // no external payment page to visit — the buyer pays via the QR/contact
       // info shown on the order's own tracking page (OrderStatusTracker),
       // which is also where they'll see the seller's manual confirmation land.
+      // The cart is NOT cleared here — it must survive the trip to Stripe's
+      // hosted page so a buyer who cancels can come back and retry. It's
+      // cleared on the order success page instead (ClearStoreCart).
       if (paymentMethod === 'card') {
         if (!body.paymentUrl) {
           setError('Payment could not be started. Please try again.');
           setSubmitting(false);
           return;
         }
-        clear();
         window.location.href = body.paymentUrl;
         return;
       }
 
-      clear();
       router.push(`/s/${storeSlug}/orders/${body.trackingToken}/success`);
     } catch {
       setError('Network error. Please try again.');
@@ -339,6 +452,55 @@ function CheckoutFormInner({
       >
         Checkout
       </h1>
+
+      {storePaused && (
+        <div
+          role="alert"
+          className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
+        >
+          <p className="font-semibold">{storeName} stopped taking orders.</p>
+          <p className="mt-0.5 text-amber-800">
+            {validation?.pauseMessage || 'Please check back soon.'}
+          </p>
+        </div>
+      )}
+
+      {(blockedLines.length > 0 || adjustedLines.length > 0) && (
+        <div
+          role="alert"
+          className="mb-6 space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
+        >
+          <p className="font-semibold">Your cart changed since you added these items</p>
+          <ul className="space-y-1.5">
+            {[...blockedLines, ...adjustedLines].map((line) => (
+              <li key={`${line.productId}:${line.variantId ?? ''}`} className="flex gap-2">
+                <Icon i="alert-circle" size={15} className="mt-0.5 flex-shrink-0" />
+                <span>{line.changes.map((c) => CHANGE_COPY[c](line.name, line)).join(' ')}</span>
+              </li>
+            ))}
+          </ul>
+          {blockedLines.length > 0 && (
+            <button
+              type="button"
+              onClick={removeBlockedItems}
+              className="rounded-lg bg-amber-900 px-3 py-1.5 text-xs font-semibold text-amber-50"
+            >
+              Remove unavailable {blockedLines.length === 1 ? 'item' : 'items'}
+            </button>
+          )}
+          {validation?.hasPriceIncrease && (
+            <label className="flex items-start gap-2 pt-1 text-xs">
+              <input
+                type="checkbox"
+                checked={priceAck}
+                onChange={(e) => setPriceAck(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>I understand the updated prices and want to continue.</span>
+            </label>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-5">
         <form onSubmit={onSubmit} className="space-y-6 lg:col-span-3">
@@ -491,7 +653,11 @@ function CheckoutFormInner({
             </p>
           )}
 
-          <Button type="submit" disabled={submitting || quoting} className="w-full py-3.5">
+          <Button
+            type="submit"
+            disabled={submitting || quoting || checkoutBlocked || needsPriceAck}
+            className="w-full py-3.5"
+          >
             {submitting
               ? 'Please wait…'
               : paymentMethod === 'card'

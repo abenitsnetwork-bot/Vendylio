@@ -97,6 +97,8 @@ export interface PublicStoreHeader {
   logoUrl: string | null;
   phone: string | null;
   template: StoreTemplate;
+  /** False only on the owner's preview of a draft store (see getPublicProduct opts). */
+  published: boolean;
 }
 
 /**
@@ -227,17 +229,21 @@ export interface PublicProductDetail {
  * Public product-detail read — no auth. Scoped to a published store's own
  * ACTIVE products only, same visibility rules as getPublicStore (a product
  * belonging to someone else's store, or an unpublished/archived one, reads
- * as null → the route 404s, never leaks existence).
+ * as null → the route 404s, never leaks existence). `includeUnpublished` is
+ * only passed by the product page after it confirms the caller owns the slug
+ * (the "preview my draft" path), mirroring getPublicStore.
  */
 export async function getPublicProduct(
   slug: string,
   productId: string,
+  opts: { includeUnpublished?: boolean } = {},
 ): Promise<PublicProductDetail | null> {
   const store = await prisma.store.findFirst({
-    where: { slug, published: true },
+    where: opts.includeUnpublished ? { slug } : { slug, published: true },
     select: {
       slug: true,
       name: true,
+      published: true,
       logoUrl: true,
       phone: true,
       template: true,
@@ -267,6 +273,7 @@ export async function getPublicProduct(
     store: {
       slug: store.slug,
       name: store.name,
+      published: store.published,
       logoUrl: store.logoUrl,
       phone: store.phone,
       template: isStoreTemplate(store.template) ? store.template : 'MODERN',

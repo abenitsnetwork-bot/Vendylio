@@ -54,6 +54,13 @@ interface CartContextValue {
   addItem: (product: AddableProduct, qty?: number) => void;
   removeItem: (productId: string, variantId?: string) => void;
   setQuantity: (productId: string, quantity: number, variantId?: string) => void;
+  /** Reconcile a line with fresh server data (price / stock cap / name) — used
+   * by the checkout page's pre-payment revalidation. No-op if the line is gone. */
+  updateItem: (
+    productId: string,
+    variantId: string | undefined,
+    patch: Partial<Pick<CartItem, 'priceCents' | 'maxQuantity' | 'name'>>,
+  ) => void;
   clear: () => void;
   fulfillmentMethod: FulfillmentMethod;
   setFulfillmentMethod: (method: FulfillmentMethod) => void;
@@ -170,6 +177,31 @@ export function CartProvider({ storeSlug, children }: { storeSlug: string; child
     );
   }, []);
 
+  const updateItem = useCallback<CartContextValue['updateItem']>((productId, variantId, patch) => {
+    setItems((prev) => {
+      let changed = false;
+      const next = prev.map((i) => {
+        if (!sameLine(i, productId, variantId)) return i;
+        const merged = { ...i, ...patch };
+        // Keep quantity within a freshly-lowered stock cap.
+        if (patch.maxQuantity !== undefined && merged.quantity > patch.maxQuantity) {
+          merged.quantity = roundQuantity(Math.max(0, patch.maxQuantity));
+        }
+        // No-op guard — returning a new array on every call would spin the
+        // checkout page's revalidation effect.
+        const same =
+          merged.priceCents === i.priceCents &&
+          merged.maxQuantity === i.maxQuantity &&
+          merged.name === i.name &&
+          merged.quantity === i.quantity;
+        if (same) return i;
+        changed = true;
+        return merged;
+      });
+      return changed ? next : prev;
+    });
+  }, []);
+
   const clear = useCallback(() => setItems([]), []);
 
   const itemCount = useMemo(() => items.reduce((sum, i) => sum + i.quantity, 0), [items]);
@@ -186,6 +218,7 @@ export function CartProvider({ storeSlug, children }: { storeSlug: string; child
       addItem,
       removeItem,
       setQuantity,
+      updateItem,
       clear,
       fulfillmentMethod,
       setFulfillmentMethod,
@@ -197,6 +230,7 @@ export function CartProvider({ storeSlug, children }: { storeSlug: string; child
       addItem,
       removeItem,
       setQuantity,
+      updateItem,
       clear,
       fulfillmentMethod,
       setFulfillmentMethod,

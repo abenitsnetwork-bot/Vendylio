@@ -9,9 +9,7 @@
 // StorefrontShell this page hands the data to.
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { cookies } from 'next/headers';
-import { COOKIE_NAME, verifyToken } from '@/lib/server/auth';
-import { resolveOwnStore } from '@/lib/server/org';
+import { viewerOwnsSlug } from '@/lib/server/storePreview';
 import { getPublicStore, type PublicStore } from '@/lib/server/storefront';
 import { StorefrontShell } from '@/components/storefront/StorefrontShell';
 import { JsonLd } from '@/components/JsonLd';
@@ -29,15 +27,7 @@ interface Params {
 async function resolveStoreForViewer(slug: string): Promise<PublicStore | null> {
   const live = await getPublicStore(slug);
   if (live) return live;
-
-  const token = (await cookies()).get(COOKIE_NAME)?.value;
-  if (!token) return null;
-  const payload = await verifyToken(token);
-  if (!payload) return null;
-
-  const ownStore = await resolveOwnStore(payload.sub);
-  if (!ownStore || ownStore.slug !== slug) return null;
-
+  if (!(await viewerOwnsSlug(slug))) return null;
   return getPublicStore(slug, { includeUnpublished: true });
 }
 

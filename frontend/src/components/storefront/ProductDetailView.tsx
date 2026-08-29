@@ -29,6 +29,7 @@ export function ProductDetailView({
     product.variants[0]?.id ?? null,
   );
   const [qty, setQty] = useState(1);
+  const [justAdded, setJustAdded] = useState(false);
 
   const hasVariants = product.variants.length > 0;
   const addable = toAddableProduct(product, selectedVariantId);
@@ -37,6 +38,8 @@ export function ProductDetailView({
 
   function handleAddToCart() {
     addItem(addable, effectiveQty);
+    setJustAdded(true);
+    setTimeout(() => setJustAdded(false), 1800);
   }
 
   function handleBuyNow() {
@@ -46,6 +49,11 @@ export function ProductDetailView({
 
   return (
     <div className="min-h-screen bg-background font-body">
+      {!store.published && (
+        <div className="bg-primary px-4 py-2.5 text-center text-sm font-semibold text-primary-foreground lg:px-14">
+          Preview — this product isn&apos;t live yet. Launch your store from setup to sell it.
+        </div>
+      )}
       <StorefrontTopBar phone={store.phone} />
       <StorefrontHeader
         storeSlug={store.slug}
@@ -140,9 +148,10 @@ export function ProductDetailView({
               type="button"
               disabled={soldOut}
               onClick={handleAddToCart}
+              aria-live="polite"
               className="flex-1 rounded-full border border-border bg-card px-6 py-3.5 text-sm font-semibold text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {soldOut ? 'Sold out' : 'Add to Cart'}
+              {soldOut ? 'Sold out' : justAdded ? 'Added ✓' : 'Add to Cart'}
             </button>
           </div>
         </div>
