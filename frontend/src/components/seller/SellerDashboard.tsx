@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
 import { Card } from '@/components/ui/Card';
@@ -48,6 +48,7 @@ export function SellerDashboard({
   store,
   stats,
   recentOrders,
+  topBanner,
   onLogout,
 }: {
   greetingName: string;
@@ -55,6 +56,8 @@ export function SellerDashboard({
   store: DashboardStore;
   stats: DashboardStats;
   recentOrders: RecentOrder[];
+  /** Optional slot rendered between the header and the "Welcome" heading — e.g. a "finish setup" nudge. */
+  topBanner?: ReactNode;
   onLogout: () => void;
 }) {
   const [shareOpen, setShareOpen] = useState(false);
@@ -69,6 +72,7 @@ export function SellerDashboard({
 
       {/* Main content */}
       <div className="px-4 py-8 font-body lg:px-14">
+        {topBanner}
         <div className="mb-10">
           <h1
             className="mb-2 font-headings font-bold text-foreground"
@@ -188,6 +192,18 @@ export function SellerDashboard({
                 className="block w-full rounded-md bg-foreground py-2 text-center text-xs font-semibold text-background"
               >
                 Add Now
+              </Link>
+            </Card>
+
+            <Card>
+              <Icon i="store" size={20} className="mb-4 text-foreground" />
+              <p className="mb-2 text-sm font-semibold text-foreground">Customize Store</p>
+              <p className="mb-4 text-xs text-muted-foreground">Logo, template, and store link.</p>
+              <Link
+                href="/dashboard/settings"
+                className="block w-full rounded-md border border-border py-2 text-center text-xs font-semibold text-foreground hover:bg-secondary"
+              >
+                Customize
               </Link>
             </Card>
 

@@ -153,6 +153,47 @@ describe('POST /api/stores', () => {
     const storeCreateArg = prismaMock.store.create.mock.calls[0]?.[0];
     expect(storeCreateArg?.data?.phone).toBe('+1 555-0100');
   });
+
+  it('seeds ensureUniqueSlug from a merchant-supplied slug instead of the name', async () => {
+    mockResolveOwnStore.mockResolvedValue(null);
+    prismaMock.organization.create.mockResolvedValue({ id: 'org-1' } as never);
+    prismaMock.store.create.mockResolvedValue({
+      id: 'store-1',
+      organizationId: 'org-1',
+      slug: 'my-custom-link',
+      name: "Adaeze's Shea Butter",
+    } as never);
+
+    const res = await POST(makePost({ name: "Adaeze's Shea Butter", slug: 'My Custom Link!' }));
+    expect(res.status).toBe(201);
+
+    const orgCreateArg = prismaMock.organization.create.mock.calls[0]?.[0];
+    // ensureUniqueSlug's candidate is derived from slugify('My Custom Link!'),
+    // not slugify(name) — confirms the custom slug wins over the name-derived one.
+    expect(orgCreateArg?.data?.slug).toBe('my-custom-link');
+  });
+
+  it('still derives the slug from name when no custom slug is supplied (regression)', async () => {
+    mockResolveOwnStore.mockResolvedValue(null);
+    prismaMock.organization.create.mockResolvedValue({ id: 'org-1' } as never);
+    prismaMock.store.create.mockResolvedValue({
+      id: 'store-1',
+      organizationId: 'org-1',
+      slug: 'adaeze-s-shea-butter',
+      name: "Adaeze's Shea Butter",
+    } as never);
+
+    await POST(makePost({ name: "Adaeze's Shea Butter" }));
+    const orgCreateArg = prismaMock.organization.create.mock.calls[0]?.[0];
+    expect(orgCreateArg?.data?.slug).toBe('adaeze-s-shea-butter');
+  });
+
+  it('a second caller cannot use a custom slug to influence anything once they already have a store', async () => {
+    mockResolveOwnStore.mockResolvedValue({ id: 'someone-elses-store' } as never);
+    const res = await POST(makePost({ name: 'New Attempt', slug: 'stolen-link' }));
+    expect(res.status).toBe(409);
+    expect(prismaMock.organization.create).not.toHaveBeenCalled();
+  });
 });
 
 describe('PATCH /api/stores', () => {

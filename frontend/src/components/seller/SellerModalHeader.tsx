@@ -7,7 +7,7 @@ import { Icon } from '@/components/ui/Icon';
 export function SellerModalHeader({ closeHref }: { closeHref: string }) {
   return (
     <header className="flex items-center justify-between border-b border-border bg-card px-4 py-4 lg:px-14">
-      <span className="font-headings text-xl font-bold text-foreground">Vendylio</span>
+      <img src="/vendylio-logo.svg" alt="Vendylio" className="h-7 w-auto" />
       <Link href={closeHref} className="text-muted-foreground" aria-label="Close">
         <Icon i="x" size={18} />
       </Link>

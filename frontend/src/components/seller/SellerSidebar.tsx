@@ -68,11 +68,8 @@ export function SellerSidebar() {
         aria-label="Seller navigation"
         className="fixed inset-y-0 left-0 z-30 hidden w-56 flex-col border-r border-border bg-card lg:flex"
       >
-        <Link
-          href="/dashboard"
-          className="flex h-16 items-center border-b border-border px-6 font-headings text-lg font-bold text-foreground"
-        >
-          Vendylio
+        <Link href="/dashboard" className="flex h-16 items-center border-b border-border px-6">
+          <img src="/vendylio-logo.svg" alt="Vendylio" className="h-7 w-auto" />
         </Link>
         <div className="flex-1 overflow-y-auto py-4">
           {NAV_ITEMS.map((item) => (

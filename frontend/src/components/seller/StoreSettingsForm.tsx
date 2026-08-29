@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { Field, inputClass } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { ImageDropzone } from '@/components/ui/ImageDropzone';
 import { Card } from '@/components/ui/Card';
+import { Icon } from '@/components/ui/Icon';
 import { cn } from '@/lib/utils';
 import { STORE_TEMPLATES, type StoreTemplate } from '@/lib/storeTemplates';
 import type { DashboardStore } from '@/components/seller/SellerDashboard';
@@ -72,6 +73,42 @@ export function StoreSettingsForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const isDirty =
+    name !== store.name ||
+    description !== (store.description ?? '') ||
+    city !== (store.city ?? '') ||
+    state !== (store.state ?? '') ||
+    phone !== (store.phone ?? '') ||
+    cashAppCashtag.trim().replace(/^\$/, '') !== (store.cashAppCashtag ?? '') ||
+    zelleContact !== (store.zelleContact ?? '') ||
+    logoUrl !== store.logoUrl ||
+    template !== store.template;
+
+  useEffect(() => {
+    if (!isDirty) return;
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      e.preventDefault();
+    }
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [isDirty]);
+
+  const storeUrl =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/s/${store.slug}`
+      : `/s/${store.slug}`;
+
+  async function onCopyLink() {
+    try {
+      await navigator.clipboard.writeText(storeUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard API unavailable — the link is already visible on screen.
+    }
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -220,16 +257,8 @@ export function StoreSettingsForm({
       </Card>
 
       <Card className="p-8">
-        <div className="mb-6 flex items-center justify-between border-b border-border pb-6">
+        <div className="mb-6 border-b border-border pb-6">
           <h2 className="font-headings text-lg font-bold text-foreground">Storefront Template</h2>
-          <a
-            href={`/s/${store.slug}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm font-medium text-primary"
-          >
-            View your store →
-          </a>
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {STORE_TEMPLATES.map((t) => (
@@ -247,6 +276,44 @@ export function StoreSettingsForm({
               <p className="mt-1 text-xs text-muted-foreground">{t.description}</p>
             </button>
           ))}
+        </div>
+      </Card>
+
+      <Card className="p-8">
+        <div className="mb-6 border-b border-border pb-6">
+          <h2 className="font-headings text-lg font-bold text-foreground">Preview & Share</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            This is the real, live link customers use to shop with you.
+          </p>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Your store link
+            </p>
+            <p className="break-all rounded-lg border border-border bg-background px-4 py-3 font-mono text-sm text-foreground">
+              {storeUrl}
+            </p>
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <a
+              href={`/s/${store.slug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground"
+            >
+              <Icon i="store" size={16} />
+              View My Store
+            </a>
+            <button
+              type="button"
+              onClick={onCopyLink}
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-border px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-secondary"
+            >
+              <Icon i="clipboard" size={16} />
+              {copied ? 'Copied!' : 'Copy Store Link'}
+            </button>
+          </div>
         </div>
       </Card>
 

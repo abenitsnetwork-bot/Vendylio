@@ -45,11 +45,11 @@ export function AdminSidebar() {
         aria-label="Admin navigation"
         className="fixed inset-y-0 left-0 z-30 hidden w-56 flex-col border-r border-border bg-card lg:flex"
       >
-        <Link
-          href="/admin"
-          className="flex h-16 items-center border-b border-border px-6 font-headings text-lg font-bold text-foreground"
-        >
-          Vendylio Admin
+        <Link href="/admin" className="flex h-16 items-center gap-2 border-b border-border px-6">
+          <img src="/vendylio-logo.svg" alt="Vendylio" className="h-6 w-auto" />
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Admin
+          </span>
         </Link>
         <div className="flex-1 overflow-y-auto py-4">
           {items.map((item) => (

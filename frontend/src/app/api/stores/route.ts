@@ -31,6 +31,12 @@ const Body = z.object({
   // and this is display-only (shown in the storefront's top bar), never
   // dialed programmatically. See Store.phone in schema.prisma.
   phone: z.string().trim().max(40).optional(),
+  // Onboarding lets the merchant edit the suggested store link before
+  // creation (never after — see PATCH below). Optional: omitting it keeps
+  // the original behavior of deriving the slug from `name`. Still goes
+  // through slugify + ensureUniqueSlug below, so this can't be used to
+  // bypass uniqueness/reserved-word checks.
+  slug: z.string().trim().min(2).max(64).optional(),
 });
 
 // PATCH allows re-editing name/description/city/state/logoUrl but never the
@@ -97,9 +103,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const { name, description, city, state, logoUrl, phone } = parsed.data;
+    const { name, description, city, state, logoUrl, phone, slug } = parsed.data;
     let store: Awaited<ReturnType<typeof prisma.store.create>> | null = null;
-    await ensureUniqueSlug(slugify(name) || 'store', async (candidate) => {
+    await ensureUniqueSlug(slugify(slug || name) || 'store', async (candidate) => {
       store = await prisma.$transaction(async (tx) => {
         const organization = await tx.organization.create({
           data: { slug: candidate, name, ownerId: auth.user.sub },

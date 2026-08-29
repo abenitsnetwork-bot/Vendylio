@@ -164,6 +164,18 @@ describe('GET /api/products', () => {
     expect(args?.where).toEqual({ storeId: 'store-1' });
     expect(args?.orderBy).toEqual({ createdAt: 'desc' });
   });
+
+  it('includes ARCHIVED products alongside ACTIVE ones — this is the seller management view, not the public storefront', async () => {
+    prismaMock.product.findMany.mockResolvedValue([
+      { id: 'prod-1', storeId: 'store-1', status: 'ACTIVE' },
+      { id: 'prod-2', storeId: 'store-1', status: 'ARCHIVED' },
+    ] as never);
+    const res = await GET(makeGet());
+    const body = await res.json();
+    expect(body.products.map((p: { status: string }) => p.status)).toEqual(['ACTIVE', 'ARCHIVED']);
+    const args = prismaMock.product.findMany.mock.calls[0]?.[0];
+    expect(args?.where).not.toHaveProperty('status');
+  });
 });
 
 describe('source invariants', () => {

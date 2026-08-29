@@ -17,15 +17,17 @@ export default function ProductsPage() {
   const { logout } = useAuth();
   const [products, setProducts] = useState<ProductFields[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!user) return;
+    setError(null);
     api<{ products: ProductFields[] }>('/api/products')
       .then((res) => setProducts(res.products))
       .catch((err) => {
-        setError(err instanceof ApiError ? err.message : 'Could not load your products.');
+        setError(err instanceof ApiError ? err.message : "We couldn't load your products.");
       });
-  }, [user]);
+  }, [user, reloadKey]);
 
   if (!user) return null;
 
@@ -67,8 +69,21 @@ export default function ProductsPage() {
             </Link>
           </div>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          {!error && products === null && <p className="text-sm text-muted-foreground">Loading…</p>}
+          {error && (
+            <div className="rounded-lg border border-border bg-card py-12 text-center">
+              <p className="mb-4 text-sm text-red-600">{error}</p>
+              <button
+                type="button"
+                onClick={() => setReloadKey((k) => k + 1)}
+                className="text-sm font-medium text-primary"
+              >
+                Try again
+              </button>
+            </div>
+          )}
+          {!error && products === null && (
+            <p className="text-sm text-muted-foreground">Loading products…</p>
+          )}
           {!error && products !== null && products.length === 0 && (
             <div className="rounded-lg border border-border bg-card py-16 text-center">
               <Icon
@@ -76,9 +91,18 @@ export default function ProductsPage() {
                 size={32}
                 className="mx-auto mb-4 text-muted-foreground opacity-50"
               />
-              <p className="mb-4 text-sm text-muted-foreground">No products yet.</p>
-              <Link href="/dashboard/products/new" className="text-sm font-medium text-primary">
-                Add your first product
+              <p className="mb-2 font-headings text-base font-bold text-foreground">
+                Your store needs products
+              </p>
+              <p className="mb-6 text-sm text-muted-foreground">
+                Add your first product to start selling — physical goods, services, or local
+                offerings all work.
+              </p>
+              <Link
+                href="/dashboard/products/new"
+                className="inline-block rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground"
+              >
+                + Add Your First Product
               </Link>
             </div>
           )}
@@ -100,10 +124,16 @@ export default function ProductsPage() {
                     ) : (
                       <ImagePlaceholder icon="package" className="h-40 w-full" />
                     )}
-                    {product.quantity <= 0 && (
+                    {product.status === 'ARCHIVED' ? (
                       <span className="absolute right-3 top-3 rounded bg-foreground px-2 py-1 text-xs font-semibold text-background">
-                        Sold out
+                        Inactive
                       </span>
+                    ) : (
+                      product.quantity <= 0 && (
+                        <span className="absolute right-3 top-3 rounded bg-foreground px-2 py-1 text-xs font-semibold text-background">
+                          Sold out
+                        </span>
+                      )
                     )}
                   </div>
                   <div className="p-4">

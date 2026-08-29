@@ -1,5 +1,5 @@
 // POST /api/ai/generate-description — Phase 11. Powers the "Generate with
-// AI" button in ProductForm.tsx and StoreSetupForm.tsx. Auth-only (no
+// AI" button in ProductForm.tsx and the onboarding business step. Auth-only (no
 // ownership check): the model never touches a stored row, it only sees the
 // handful of fields already visible in the caller's own form, so there is
 // nothing here to scope to a particular product/store id.

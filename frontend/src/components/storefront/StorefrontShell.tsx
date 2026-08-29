@@ -43,7 +43,11 @@ export function StorefrontShell({ store }: { store: PublicStore }) {
       <div className="min-h-screen bg-background font-body">
         <Template store={store} onOpenCart={() => setCartOpen(true)} />
         <footer className="border-t border-border px-4 py-6 text-center lg:px-14">
-          <Link href="/" className="text-xs text-muted-foreground hover:text-foreground">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <img src="/vendylio-icon.svg" alt="" className="h-4 w-4" />
             Powered by Vendylio
           </Link>
         </footer>

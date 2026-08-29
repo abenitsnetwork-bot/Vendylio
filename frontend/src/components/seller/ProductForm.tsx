@@ -26,6 +26,7 @@ export interface ProductFields {
   category: string;
   unit: string;
   imageUrl: string | null;
+  status: string;
 }
 
 interface CreateProps {
@@ -53,6 +54,9 @@ export function ProductForm(props: CreateProps | EditProps) {
   );
   const [unit, setUnit] = useState<ProductUnit>((initial?.unit as ProductUnit) ?? 'UNIT');
   const [imageUrl, setImageUrl] = useState<string | null>(initial?.imageUrl ?? null);
+  const [status, setStatus] = useState<'ACTIVE' | 'ARCHIVED'>(
+    initial?.status === 'ARCHIVED' ? 'ARCHIVED' : 'ACTIVE',
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -134,6 +138,7 @@ export function ProductForm(props: CreateProps | EditProps) {
             category,
             unit,
             imageUrl,
+            status,
           },
         });
         props.onSaved(res.product);
@@ -310,6 +315,41 @@ export function ProductForm(props: CreateProps | EditProps) {
             ))}
           </div>
         </Field>
+
+        {props.mode === 'edit' && (
+          <Field label="Availability" htmlFor="status">
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setStatus('ACTIVE')}
+                className={cn(
+                  'rounded-lg border px-4 py-3 text-left',
+                  status === 'ACTIVE'
+                    ? 'border-primary bg-secondary'
+                    : 'border-border text-muted-foreground',
+                )}
+              >
+                <p className="text-sm font-medium text-foreground">Active</p>
+                <p className="text-xs text-muted-foreground">Customers can see and buy this.</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatus('ARCHIVED')}
+                className={cn(
+                  'rounded-lg border px-4 py-3 text-left',
+                  status === 'ARCHIVED'
+                    ? 'border-primary bg-secondary'
+                    : 'border-border text-muted-foreground',
+                )}
+              >
+                <p className="text-sm font-medium text-foreground">Inactive</p>
+                <p className="text-xs text-muted-foreground">
+                  Hidden from customers. Turn it back on anytime.
+                </p>
+              </button>
+            </div>
+          </Field>
+        )}
 
         {props.mode === 'edit' && (
           <div className="border-t border-border pt-8">

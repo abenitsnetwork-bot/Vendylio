@@ -175,6 +175,36 @@ describe('PATCH /api/products/[id]', () => {
     const res = await PATCH(makeReq('PATCH', { unit: 'UNIT', quantity: 3.5 }), ctx);
     expect(res.status).toBe(400);
   });
+
+  it('deactivates a product by setting status to ARCHIVED', async () => {
+    prismaMock.product.findFirst.mockResolvedValue({ id: 'prod-1', storeId: 'store-1' } as never);
+    prismaMock.product.update.mockResolvedValue({ id: 'prod-1', status: 'ARCHIVED' } as never);
+
+    const res = await PATCH(makeReq('PATCH', { status: 'ARCHIVED' }), ctx);
+    expect(res.status).toBe(200);
+    const updateArg = prismaMock.product.update.mock.calls[0]?.[0];
+    expect(updateArg?.data).toEqual({ status: 'ARCHIVED' });
+  });
+
+  it('reactivates a product by setting status back to ACTIVE', async () => {
+    prismaMock.product.findFirst.mockResolvedValue({
+      id: 'prod-1',
+      storeId: 'store-1',
+      status: 'ARCHIVED',
+    } as never);
+    prismaMock.product.update.mockResolvedValue({ id: 'prod-1', status: 'ACTIVE' } as never);
+
+    const res = await PATCH(makeReq('PATCH', { status: 'ACTIVE' }), ctx);
+    expect(res.status).toBe(200);
+    const updateArg = prismaMock.product.update.mock.calls[0]?.[0];
+    expect(updateArg?.data).toEqual({ status: 'ACTIVE' });
+  });
+
+  it('400s on an invalid status value', async () => {
+    prismaMock.product.findFirst.mockResolvedValue({ id: 'prod-1', storeId: 'store-1' } as never);
+    const res = await PATCH(makeReq('PATCH', { status: 'DELETED' }), ctx);
+    expect(res.status).toBe(400);
+  });
 });
 
 describe('DELETE /api/products/[id]', () => {

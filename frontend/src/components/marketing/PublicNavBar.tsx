@@ -16,13 +16,8 @@ export function PublicNavBar() {
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-card font-body">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 lg:px-14">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
-            <span className="font-headings text-lg font-bold text-primary-foreground">V</span>
-          </div>
-          <span className="font-headings text-lg font-bold tracking-tight text-foreground">
-            Vendylio
-          </span>
+        <Link href="/" className="flex items-center">
+          <img src="/vendylio-logo.svg" alt="Vendylio" className="h-8 w-auto" />
         </Link>
 
         <nav className="hidden items-center gap-8 lg:flex">

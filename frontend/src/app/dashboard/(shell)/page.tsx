@@ -2,9 +2,12 @@
 
 import { sellerFirstName } from '@/lib/utils';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth, useUser } from '@/contexts/AuthContext';
 import { api, ApiError } from '@/lib/api';
+import { computeOnboardingProgress, type OnboardingStoreInput } from '@/lib/onboardingProgress';
+import { Icon } from '@/components/ui/Icon';
 import {
   SellerDashboard,
   type DashboardStats,
@@ -18,9 +21,30 @@ type LoadState =
   | {
       status: 'ready';
       store: DashboardStore;
+      onboardingStore: OnboardingStoreInput;
       stats: DashboardStats;
       recentOrders: RecentOrder[];
     };
+
+function FinishSetupBanner({ incompleteOptionalCount }: { incompleteOptionalCount: number }) {
+  const stepsAway = 1 + incompleteOptionalCount; // the mandatory Products step, plus optional ones still open
+  return (
+    <Link
+      href="/onboarding"
+      className="mb-6 flex items-center justify-between gap-4 rounded-xl border border-primary bg-secondary p-5 hover:opacity-90"
+    >
+      <div>
+        <p className="text-sm font-semibold text-foreground">Finish setting up your store</p>
+        <p className="text-xs text-muted-foreground">
+          You&apos;re {stepsAway} step{stepsAway === 1 ? '' : 's'} away from going live.
+        </p>
+      </div>
+      <span className="flex flex-shrink-0 items-center gap-1 text-sm font-semibold text-primary">
+        Continue setup <Icon i="arrow-right" size={14} />
+      </span>
+    </Link>
+  );
+}
 
 export default function DashboardPage() {
   const user = useUser();
@@ -34,7 +58,9 @@ export default function DashboardPage() {
     let cancelled = false;
     setState({ status: 'loading' });
     Promise.all([
-      api<{ store: DashboardStore; stats: DashboardStats }>('/api/stores/me'),
+      api<{ store: DashboardStore & OnboardingStoreInput; stats: DashboardStats }>(
+        '/api/stores/me',
+      ),
       api<{ items: RecentOrder[] }>('/api/orders?limit=5'),
     ])
       .then(([storeRes, ordersRes]) => {
@@ -42,6 +68,7 @@ export default function DashboardPage() {
           setState({
             status: 'ready',
             store: storeRes.store,
+            onboardingStore: storeRes.store,
             stats: storeRes.stats,
             recentOrders: ordersRes.items,
           });
@@ -89,6 +116,7 @@ export default function DashboardPage() {
   }
 
   const greetingName = sellerFirstName(user);
+  const progress = computeOnboardingProgress(state.onboardingStore, state.stats.productCount);
 
   return (
     <SellerDashboard
@@ -97,6 +125,11 @@ export default function DashboardPage() {
       store={state.store}
       stats={state.stats}
       recentOrders={state.recentOrders}
+      topBanner={
+        !progress.mandatoryComplete ? (
+          <FinishSetupBanner incompleteOptionalCount={progress.incompleteOptionalCount} />
+        ) : undefined
+      }
       onLogout={async () => {
         await logout();
         router.push('/');

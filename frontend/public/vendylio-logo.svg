@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 70" width="280" height="70">
+  <circle cx="35" cy="35" r="33" fill="#16201D"></circle>
+  <text x="35" y="37" text-anchor="middle" dominant-baseline="central" font-family="Lora, Georgia, serif" font-weight="700" font-size="36" fill="#EDF1EA">V</text>
+  <text x="82" y="40" font-family="Lora, Georgia, serif" font-weight="700" font-size="34" fill="#16201D">Vendylio</text>
+  <rect x="82" y="50" width="180" height="3" rx="1.5" fill="#CD5B31"></rect>
+</svg>
