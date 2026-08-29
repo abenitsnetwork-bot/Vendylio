@@ -22,6 +22,7 @@ import { Icon, type IconName } from '@/components/ui/Icon';
 import { formatUsdPerUnit } from '@/lib/productUnits';
 import { StatusBadge, formatUsd } from '@/components/seller/OrdersTable';
 import { formatOrderNumber } from '@/lib/orderNumber';
+import { StoreOverviewSection } from '@/components/admin/StoreOverviewSection';
 
 interface Stats {
   merchantCount: number;
@@ -143,6 +144,8 @@ export default function AdminDashboardPage() {
           ))}
         </div>
       )}
+
+      <StoreOverviewSection />
 
       {analytics && (
         <>
