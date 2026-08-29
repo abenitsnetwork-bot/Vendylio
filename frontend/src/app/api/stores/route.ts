@@ -64,7 +64,9 @@ const PatchBody = z.object({
     .transform((v) => (v ? v.replace(/^\$/, '') : v)),
   zelleContact: z.string().trim().max(120).nullable().optional(),
   template: z.enum(STORE_TEMPLATE_VALUES).optional(),
-  published: z.boolean().optional(),
+  // `published` is deliberately NOT patchable here — going live re-validates
+  // readiness server-side, so it flows only through POST /api/stores/publish
+  // and POST /api/stores/unpublish.
   // Flat delivery fee added to every checkout at this store, smallest
   // currency unit (cents).
   deliveryFeeCents: z.number().int().min(0).optional(),

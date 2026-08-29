@@ -35,6 +35,34 @@ describe('getPublicStore', () => {
     });
   });
 
+  it('by default filters to published stores only', async () => {
+    prismaMock.store.findFirst.mockResolvedValue(null);
+    await getPublicStore('draft-store');
+    expect(prismaMock.store.findFirst.mock.calls[0]?.[0]?.where).toEqual({
+      slug: 'draft-store',
+      published: true,
+    });
+  });
+
+  it('with includeUnpublished, drops the published filter (owner preview path)', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({
+      slug: 'draft-store',
+      name: 'Draft Store',
+      published: false,
+      description: null,
+      city: null,
+      state: null,
+      logoUrl: null,
+      products: [],
+      reviews: [],
+    } as never);
+
+    const result = await getPublicStore('draft-store', { includeUnpublished: true });
+
+    expect(prismaMock.store.findFirst.mock.calls[0]?.[0]?.where).toEqual({ slug: 'draft-store' });
+    expect(result?.published).toBe(false);
+  });
+
   it('selects unit and variants on each product (Phase 7)', async () => {
     prismaMock.store.findFirst.mockResolvedValue({
       slug: 'shea-store',

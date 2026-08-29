@@ -28,6 +28,8 @@ export interface OnboardingStore {
   deliveryProvider: string;
   deliveryFeeCents: number;
   pickupAddress: string | null;
+  published: boolean;
+  publishedAt: string | null;
 }
 
 interface OnboardingContextValue {

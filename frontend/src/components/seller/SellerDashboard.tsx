@@ -83,6 +83,7 @@ export function SellerDashboard({
   openState,
   recentOrders,
   topBanner,
+  published = true,
   onLogout,
 }: {
   greetingName: string;
@@ -93,6 +94,8 @@ export function SellerDashboard({
   recentOrders: RecentOrder[];
   /** Optional slot rendered between the header and the "Welcome" heading — e.g. a "finish setup" nudge. */
   topBanner?: ReactNode;
+  /** Phase 14 — the store has been launched. Drives the "get your first order" nudge. */
+  published?: boolean;
   onLogout: () => void;
 }) {
   const status = storeStatusLabel(openState);
@@ -109,6 +112,23 @@ export function SellerDashboard({
       {/* Main content */}
       <div className="px-4 py-8 font-body lg:px-14">
         {topBanner}
+        {published && recentOrders.length === 0 && (
+          <div className="mb-6 flex flex-col gap-3 rounded-xl border border-primary bg-secondary p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Your store is live 🎉</p>
+              <p className="text-xs text-muted-foreground">
+                Share your link to get your first order — every order lands right here.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShareOpen(true)}
+              className="flex-shrink-0 rounded-md bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground"
+            >
+              Share your store
+            </button>
+          </div>
+        )}
         <div className="mb-10">
           <h1
             className="mb-2 font-headings font-bold text-foreground"

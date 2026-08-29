@@ -1,7 +1,7 @@
 'use client';
 
 import { sellerFirstName } from '@/lib/utils';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth, useUser } from '@/contexts/AuthContext';
@@ -28,21 +28,28 @@ type LoadState =
       recentOrders: RecentOrder[];
     };
 
-function FinishSetupBanner({ incompleteOptionalCount }: { incompleteOptionalCount: number }) {
-  const stepsAway = 1 + incompleteOptionalCount; // the mandatory Products step, plus optional ones still open
+function SetupBanner({
+  href,
+  title,
+  subtitle,
+  cta,
+}: {
+  href: string;
+  title: string;
+  subtitle: string;
+  cta: string;
+}) {
   return (
     <Link
-      href="/onboarding"
+      href={href}
       className="mb-6 flex items-center justify-between gap-4 rounded-xl border border-primary bg-secondary p-5 hover:opacity-90"
     >
       <div>
-        <p className="text-sm font-semibold text-foreground">Finish setting up your store</p>
-        <p className="text-xs text-muted-foreground">
-          You&apos;re {stepsAway} step{stepsAway === 1 ? '' : 's'} away from going live.
-        </p>
+        <p className="text-sm font-semibold text-foreground">{title}</p>
+        <p className="text-xs text-muted-foreground">{subtitle}</p>
       </div>
       <span className="flex flex-shrink-0 items-center gap-1 text-sm font-semibold text-primary">
-        Continue setup <Icon i="arrow-right" size={14} />
+        {cta} <Icon i="arrow-right" size={14} />
       </span>
     </Link>
   );
@@ -123,6 +130,28 @@ export default function DashboardPage() {
   const greetingName = sellerFirstName(user);
   const progress = computeOnboardingProgress(state.onboardingStore, state.stats.productCount);
 
+  let topBanner: ReactNode;
+  if (!progress.mandatoryComplete) {
+    const stepsAway = 1 + progress.incompleteOptionalCount;
+    topBanner = (
+      <SetupBanner
+        href="/onboarding"
+        title="Finish setting up your store"
+        subtitle={`You're ${stepsAway} step${stepsAway === 1 ? '' : 's'} away from going live.`}
+        cta="Continue setup"
+      />
+    );
+  } else if (progress.readyToLaunch) {
+    topBanner = (
+      <SetupBanner
+        href="/onboarding/launch"
+        title="Your store is ready to launch"
+        subtitle="Everything required is done — publish it so customers can start ordering."
+        cta="Review & launch"
+      />
+    );
+  }
+
   return (
     <SellerDashboard
       greetingName={greetingName}
@@ -131,11 +160,8 @@ export default function DashboardPage() {
       stats={state.stats}
       openState={state.openState}
       recentOrders={state.recentOrders}
-      topBanner={
-        !progress.mandatoryComplete ? (
-          <FinishSetupBanner incompleteOptionalCount={progress.incompleteOptionalCount} />
-        ) : undefined
-      }
+      published={progress.launched}
+      topBanner={topBanner}
       onLogout={async () => {
         await logout();
         router.push('/');

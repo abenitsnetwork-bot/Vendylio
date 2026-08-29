@@ -9,7 +9,10 @@
 // StorefrontShell this page hands the data to.
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { getPublicStore } from '@/lib/server/storefront';
+import { cookies } from 'next/headers';
+import { COOKIE_NAME, verifyToken } from '@/lib/server/auth';
+import { resolveOwnStore } from '@/lib/server/org';
+import { getPublicStore, type PublicStore } from '@/lib/server/storefront';
 import { StorefrontShell } from '@/components/storefront/StorefrontShell';
 import { JsonLd } from '@/components/JsonLd';
 import { storeMetadata, storeJsonLd } from '@/lib/seo';
@@ -20,21 +23,43 @@ interface Params {
   params: Promise<{ slug: string }>;
 }
 
+// A draft store 404s for the public, but its own owner can preview it: if the
+// signed-in seller owns a store with this exact slug, fetch it including the
+// unpublished state so they can walk the "Review your store" step for real.
+async function resolveStoreForViewer(slug: string): Promise<PublicStore | null> {
+  const live = await getPublicStore(slug);
+  if (live) return live;
+
+  const token = (await cookies()).get(COOKIE_NAME)?.value;
+  if (!token) return null;
+  const payload = await verifyToken(token);
+  if (!payload) return null;
+
+  const ownStore = await resolveOwnStore(payload.sub);
+  if (!ownStore || ownStore.slug !== slug) return null;
+
+  return getPublicStore(slug, { includeUnpublished: true });
+}
+
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { slug } = await params;
-  const store = await getPublicStore(slug);
+  const store = await resolveStoreForViewer(slug);
   if (!store) return { title: 'Store not found', robots: { index: false, follow: false } };
+  // A preview (draft) storefront must never be indexed.
+  if (!store.published) {
+    return { title: `Preview — ${store.name}`, robots: { index: false, follow: false } };
+  }
   return storeMetadata(store);
 }
 
 export default async function StorefrontPage({ params }: Params) {
   const { slug } = await params;
-  const store = await getPublicStore(slug);
+  const store = await resolveStoreForViewer(slug);
   if (!store) notFound();
 
   return (
     <>
-      <JsonLd data={storeJsonLd(store)} />
+      {store.published && <JsonLd data={storeJsonLd(store)} />}
       <StorefrontShell store={store} />
     </>
   );

@@ -502,10 +502,16 @@ model Store {
   // Storefront layout — MODERN (grid), MINIMAL (single-column list), or
   // BOLD (large imagery, editorial). See src/components/storefront/templates/.
   template                 String       @default("MODERN")
-  // Gates visibility on /s/[slug]. Defaults true so onboarding (which has no
-  // separate "Publish" step yet) keeps working end-to-end; a future
-  // publish/unpublish toggle just flips this.
-  published                Boolean      @default(true)
+  // Gates visibility on /s/[slug] AND POST /api/orders. Phase 14: a new store
+  // starts as a DRAFT (published=false) and only goes live when the merchant
+  // finishes onboarding and clicks "Launch" — POST /api/stores/publish
+  // re-validates readiness server-side before flipping this. publishedAt is
+  // the launch moment (null while a draft; backfilled to createdAt for every
+  // store that predates this phase). POST /api/stores/unpublish flips it back;
+  // that is distinct from `ordersPaused` (which keeps the store visible but
+  // refuses new orders).
+  published                Boolean      @default(false)
+  publishedAt              DateTime?
   // Phase 3 — Stripe Connect (direct-to-seller payouts, optional). A Store
   // without a connected account still sells fine via the Phase 2 platform
   // charge path — see api/orders/route.ts's routing check on

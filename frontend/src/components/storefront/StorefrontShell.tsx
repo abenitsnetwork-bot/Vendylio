@@ -40,6 +40,18 @@ function AnnouncementStrip({ text }: { text: string | null }) {
   );
 }
 
+function PreviewBanner() {
+  return (
+    <div className="bg-primary px-4 py-2.5 text-center text-sm font-semibold text-primary-foreground lg:px-14">
+      Preview — this is your draft store. Customers can&apos;t see it until you launch it from{' '}
+      <Link href="/onboarding/launch" className="underline">
+        setup
+      </Link>
+      .
+    </div>
+  );
+}
+
 function StoreStatusBanner({ store }: { store: PublicStore }) {
   if (!store.acceptingOrders) {
     return (
@@ -79,6 +91,7 @@ export function StorefrontShell({ store }: { store: PublicStore }) {
   return (
     <CartProvider storeSlug={store.slug}>
       <div className="min-h-screen bg-background font-body">
+        {!store.published && <PreviewBanner />}
         <AnnouncementStrip text={store.announcement} />
         <StoreStatusBanner store={store} />
         <StorefrontUtilityBar

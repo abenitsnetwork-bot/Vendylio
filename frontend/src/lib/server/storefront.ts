@@ -44,6 +44,11 @@ export interface PublicReview {
 export interface PublicStore {
   slug: string;
   name: string;
+  // Almost always true on this read (an unpublished store 404s publicly).
+  // It comes back false only on the owner's own preview of a draft store
+  // (getPublicStore(slug, { includeUnpublished: true })) so the shell can
+  // show a "not live yet" banner.
+  published: boolean;
   description: string | null;
   city: string | null;
   state: string | null;
@@ -98,14 +103,20 @@ export interface PublicStoreHeader {
  * Public storefront read — no auth, no seller-only fields (organizationId,
  * id, timestamps). Only ACTIVE products are shown; ARCHIVED ones stay hidden
  * from customers but remain in the seller's own product history. Unpublished
- * stores 404 here just like a nonexistent slug would.
+ * stores 404 here just like a nonexistent slug would — UNLESS
+ * `includeUnpublished` is passed, which the storefront page only does after
+ * confirming the caller owns this exact store (the "preview my draft" path).
  */
-export async function getPublicStore(slug: string): Promise<PublicStore | null> {
+export async function getPublicStore(
+  slug: string,
+  opts: { includeUnpublished?: boolean } = {},
+): Promise<PublicStore | null> {
   const store = await prisma.store.findFirst({
-    where: { slug, published: true },
+    where: opts.includeUnpublished ? { slug } : { slug, published: true },
     select: {
       slug: true,
       name: true,
+      published: true,
       description: true,
       city: true,
       state: true,

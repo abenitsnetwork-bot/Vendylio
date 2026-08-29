@@ -7,6 +7,7 @@ const DEFAULT_STORE = {
   stripeOnboardingStatus: 'NOT_STARTED',
   deliveryProvider: 'self_manual',
   pickupAddress: null,
+  published: false,
 };
 
 describe('computeOnboardingProgress', () => {
@@ -111,9 +112,38 @@ describe('computeOnboardingProgress', () => {
         stripeOnboardingStatus: 'ACTIVE',
         deliveryProvider: 'self_manual',
         pickupAddress: null,
+        published: false,
       },
       1,
     );
     expect(allDone.incompleteOptionalCount).toBe(0);
+  });
+
+  it('store + product but still a draft: readyToLaunch, not launched, resumes at launch', () => {
+    const progress = computeOnboardingProgress(DEFAULT_STORE, 1);
+    expect(progress.mandatoryComplete).toBe(true);
+    expect(progress.launched).toBe(false);
+    expect(progress.readyToLaunch).toBe(true);
+    expect(progress.resumeRoute).toBe(ONBOARDING_ROUTES.launch);
+  });
+
+  it('published store: launched, no longer readyToLaunch, resumes at the dashboard', () => {
+    const progress = computeOnboardingProgress({ ...DEFAULT_STORE, published: true }, 1);
+    expect(progress.launched).toBe(true);
+    expect(progress.readyToLaunch).toBe(false);
+    expect(progress.resumeRoute).toBe('/dashboard');
+  });
+
+  it('published but a product was archived down to zero: still counts as launched', () => {
+    const progress = computeOnboardingProgress({ ...DEFAULT_STORE, published: true }, 0);
+    expect(progress.launched).toBe(true);
+    expect(progress.mandatoryComplete).toBe(false);
+    expect(progress.readyToLaunch).toBe(false);
+  });
+
+  it('no store: never launched, not ready to launch', () => {
+    const progress = computeOnboardingProgress(null, 0);
+    expect(progress.launched).toBe(false);
+    expect(progress.readyToLaunch).toBe(false);
   });
 });

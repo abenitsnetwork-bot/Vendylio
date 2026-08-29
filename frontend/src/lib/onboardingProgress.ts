@@ -39,6 +39,8 @@ export interface OnboardingStoreInput {
   stripeOnboardingStatus: string;
   deliveryProvider: string;
   pickupAddress: string | null;
+  /** Phase 14 — a draft store is not yet public; `true` once the merchant has launched. */
+  published: boolean;
 }
 
 export interface OnboardingProgress {
@@ -51,8 +53,12 @@ export interface OnboardingProgress {
   paymentsReady: boolean;
   /** self_manual needs zero config; uber_direct needs a pickup address. */
   deliveryReady: boolean;
-  /** Everything required to consider the store "launched." */
+  /** Everything required before the merchant is allowed to launch (store + ≥1 product). */
   mandatoryComplete: boolean;
+  /** The store is live: onboarding is done, don't nag the merchant to finish it. */
+  launched: boolean;
+  /** Ready to go live but hasn't pressed Launch yet — the dashboard nudges toward it. */
+  readyToLaunch: boolean;
   /** Where `/onboarding` should redirect a returning merchant right now. */
   resumeRoute: string;
   /** A step is reachable once a store exists — business is the only hard lock. */
@@ -72,6 +78,8 @@ export function computeOnboardingProgress(
   const deliveryReady =
     hasStore && (store.deliveryProvider !== 'uber_direct' || Boolean(store.pickupAddress));
   const mandatoryComplete = hasStore && productsReady;
+  const launched = hasStore && store.published;
+  const readyToLaunch = mandatoryComplete && !launched;
 
   const canAccess = ONBOARDING_STEP_ORDER.reduce(
     (acc, step) => {
@@ -83,9 +91,11 @@ export function computeOnboardingProgress(
 
   const resumeRoute = !hasStore
     ? ONBOARDING_ROUTES.business
-    : !productsReady
-      ? ONBOARDING_ROUTES.products
-      : ONBOARDING_ROUTES.launch;
+    : launched
+      ? '/dashboard'
+      : !productsReady
+        ? ONBOARDING_ROUTES.products
+        : ONBOARDING_ROUTES.launch;
 
   const incompleteOptionalCount = [brandCustomized, paymentsReady, deliveryReady].filter(
     (done) => !done,
@@ -98,6 +108,8 @@ export function computeOnboardingProgress(
     paymentsReady,
     deliveryReady,
     mandatoryComplete,
+    launched,
+    readyToLaunch,
     resumeRoute,
     canAccess,
     incompleteOptionalCount,

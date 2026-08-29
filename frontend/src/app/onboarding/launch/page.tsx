@@ -7,32 +7,43 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { useOnboarding } from '../layout';
-import type { OnboardingStore } from '../layout';
 
 interface ChecklistItem {
   label: string;
   done: boolean;
   route?: string;
+  required?: boolean;
 }
 
+const PUBLISH_ERROR: Record<string, string> = {
+  NOT_READY_TO_PUBLISH: 'Your store needs at least one active product before it can go live.',
+  NO_STORE: 'Create your store first.',
+};
+
 export default function LaunchStepPage() {
-  const { store, progress } = useOnboarding();
+  const { store, progress, refresh } = useOnboarding();
   const [launching, setLaunching] = useState(false);
-  const [launched, setLaunched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   if (!store) return null;
 
+  const live = progress.launched;
+
   const items: ChecklistItem[] = [
     { label: 'Business information', done: progress.hasStore },
     { label: 'Store name & link', done: progress.hasStore },
-    { label: 'At least one product', done: progress.productsReady, route: '/onboarding/products' },
+    {
+      label: 'At least one product',
+      done: progress.productsReady,
+      route: '/onboarding/products',
+      required: true,
+    },
     { label: 'Store branding', done: progress.brandCustomized, route: '/onboarding/brand' },
     { label: 'Payments', done: progress.paymentsReady, route: '/onboarding/payments' },
     { label: 'Delivery', done: progress.deliveryReady, route: '/onboarding/delivery' },
   ];
-  const missingRequired = items.filter((i) => !i.done && i.label === 'At least one product');
+  const missingRequired = items.filter((i) => i.required && !i.done);
 
   const storeUrl =
     typeof window !== 'undefined'
@@ -43,18 +54,16 @@ export default function LaunchStepPage() {
     setError(null);
     setLaunching(true);
     try {
-      // Never trust locally-cached progress for the final gate — re-check
-      // against a fresh server read right before celebrating.
-      const res = await api<{ store: OnboardingStore; stats: { productCount: number } }>(
-        '/api/stores/me',
-      );
-      if (res.stats.productCount < 1) {
-        setError('You still need at least one product before launching.');
-        return;
-      }
-      setLaunched(true);
+      // The server re-validates readiness — never trust this page's checklist
+      // as the gate (a second tab could have archived the last product).
+      await api('/api/stores/publish', { method: 'POST' });
+      refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not verify your store. Try again.');
+      setError(
+        err instanceof ApiError
+          ? (PUBLISH_ERROR[err.code] ?? err.message)
+          : 'Could not launch your store. Try again.',
+      );
     } finally {
       setLaunching(false);
     }
@@ -70,7 +79,7 @@ export default function LaunchStepPage() {
     }
   }
 
-  if (launched) {
+  if (live) {
     return (
       <div className="mx-auto max-w-lg text-center">
         <p className="mb-2 text-4xl">🎉</p>
@@ -81,7 +90,8 @@ export default function LaunchStepPage() {
           Your store is live!
         </h1>
         <p className="mb-8 text-sm text-muted-foreground">
-          Congratulations! Your store is ready to share with customers.
+          Share your link to start taking orders. That&apos;s the whole job now — every order lands
+          in your dashboard.
         </p>
         <Card className="mb-6 p-4">
           <p className="break-all font-mono text-sm text-foreground">{storeUrl}</p>
@@ -119,8 +129,8 @@ export default function LaunchStepPage() {
         </h1>
         <p className="text-sm text-muted-foreground">
           {progress.mandatoryComplete
-            ? 'Everything looks good — launch when you are.'
-            : `${missingRequired.length} thing${missingRequired.length === 1 ? '' : 's'} still need${missingRequired.length === 1 ? 's' : ''} attention.`}
+            ? 'Review the checklist, then launch. Anything optional you skipped, you can add later from Settings.'
+            : `${missingRequired.length} thing${missingRequired.length === 1 ? '' : 's'} still need${missingRequired.length === 1 ? 's' : ''} your attention.`}
         </p>
       </div>
 
@@ -134,10 +144,15 @@ export default function LaunchStepPage() {
             >
               <Icon i={item.done ? 'check' : 'alert-circle'} size={13} />
             </div>
-            <span className="flex-1 text-sm font-medium text-foreground">{item.label}</span>
+            <span className="flex-1 text-sm font-medium text-foreground">
+              {item.label}
+              {!item.required && !item.done && (
+                <span className="ml-2 text-xs font-normal text-muted-foreground">(optional)</span>
+              )}
+            </span>
             {!item.done && item.route && (
               <Link href={item.route} className="text-xs font-semibold text-primary">
-                Fix this →
+                {item.required ? 'Fix this →' : 'Add →'}
               </Link>
             )}
           </div>
@@ -155,8 +170,11 @@ export default function LaunchStepPage() {
         disabled={!progress.mandatoryComplete || launching}
         className="sm:px-10"
       >
-        {launching ? 'Checking…' : 'Launch My Store'}
+        {launching ? 'Launching…' : 'Launch My Store'}
       </Button>
+      {!progress.mandatoryComplete && (
+        <p className="mt-3 text-xs text-muted-foreground">Add a product to unlock this.</p>
+      )}
     </div>
   );
 }
