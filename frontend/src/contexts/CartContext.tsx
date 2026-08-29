@@ -39,6 +39,12 @@ export interface AddableProduct {
   variantLabel?: string;
 }
 
+/** Phase C — how the buyer wants to receive the order. Chosen on the
+ * storefront (StorefrontFulfillmentToggle), carried through to checkout as
+ * the initial selection. The server re-decides pricing regardless
+ * (api/orders zeroes the delivery fee for pickup). */
+export type FulfillmentMethod = 'pickup' | 'delivery';
+
 interface CartContextValue {
   items: CartItem[];
   itemCount: number;
@@ -49,6 +55,8 @@ interface CartContextValue {
   removeItem: (productId: string, variantId?: string) => void;
   setQuantity: (productId: string, quantity: number, variantId?: string) => void;
   clear: () => void;
+  fulfillmentMethod: FulfillmentMethod;
+  setFulfillmentMethod: (method: FulfillmentMethod) => void;
 }
 
 function sameLine(item: CartItem, productId: string, variantId?: string): boolean {
@@ -65,7 +73,9 @@ const CartContext = createContext<CartContextValue | null>(null);
  */
 export function CartProvider({ storeSlug, children }: { storeSlug: string; children: ReactNode }) {
   const storageKey = `vendylio-cart:${storeSlug}`;
+  const fulfillmentKey = `vendylio-fulfillment:${storeSlug}`;
   const [items, setItems] = useState<CartItem[]>([]);
+  const [fulfillmentMethod, setFulfillmentMethodState] = useState<FulfillmentMethod>('delivery');
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -79,12 +89,16 @@ export function CartProvider({ storeSlug, children }: { storeSlug: string; child
         // downstream on `item.unit.toLowerCase()`.
         setItems(parsed.map((item) => ({ ...item, unit: item.unit || 'UNIT' })));
       }
+      const savedMethod = localStorage.getItem(fulfillmentKey);
+      if (savedMethod === 'pickup' || savedMethod === 'delivery') {
+        setFulfillmentMethodState(savedMethod);
+      }
     } catch {
       // Corrupt or inaccessible storage — start with an empty cart.
     } finally {
       setHydrated(true);
     }
-  }, [storageKey]);
+  }, [storageKey, fulfillmentKey]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -95,6 +109,18 @@ export function CartProvider({ storeSlug, children }: { storeSlug: string; child
       // in-memory for the rest of the session.
     }
   }, [items, hydrated, storageKey]);
+
+  const setFulfillmentMethod = useCallback(
+    (method: FulfillmentMethod) => {
+      setFulfillmentMethodState(method);
+      try {
+        localStorage.setItem(fulfillmentKey, method);
+      } catch {
+        // Storage unavailable — the choice still holds for this session.
+      }
+    },
+    [fulfillmentKey],
+  );
 
   const addItem = useCallback((product: AddableProduct, qty: number = 1) => {
     setItems((prev) => {
@@ -153,8 +179,28 @@ export function CartProvider({ storeSlug, children }: { storeSlug: string; child
   );
 
   const value = useMemo(
-    () => ({ items, itemCount, subtotalCents, addItem, removeItem, setQuantity, clear }),
-    [items, itemCount, subtotalCents, addItem, removeItem, setQuantity, clear],
+    () => ({
+      items,
+      itemCount,
+      subtotalCents,
+      addItem,
+      removeItem,
+      setQuantity,
+      clear,
+      fulfillmentMethod,
+      setFulfillmentMethod,
+    }),
+    [
+      items,
+      itemCount,
+      subtotalCents,
+      addItem,
+      removeItem,
+      setQuantity,
+      clear,
+      fulfillmentMethod,
+      setFulfillmentMethod,
+    ],
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

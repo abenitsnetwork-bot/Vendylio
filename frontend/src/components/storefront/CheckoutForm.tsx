@@ -20,7 +20,6 @@ interface OrderErrorBody {
 }
 
 type PaymentMethod = 'card' | 'cashapp' | 'zelle';
-type FulfillmentMethod = 'pickup' | 'delivery';
 
 function CheckoutFormInner({
   storeSlug,
@@ -40,13 +39,14 @@ function CheckoutFormInner({
   pickupAddress: string | null;
 }) {
   const router = useRouter();
-  const { items, subtotalCents, clear } = useCart();
+  // fulfillmentMethod lives on the cart context so the buyer's choice on the
+  // storefront (StorefrontFulfillmentToggle) carries through to here.
+  const { items, subtotalCents, clear, fulfillmentMethod, setFulfillmentMethod } = useCart();
   const [idempotencyKey] = useState(() => crypto.randomUUID());
 
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
-  const [fulfillmentMethod, setFulfillmentMethod] = useState<FulfillmentMethod>('delivery');
   const [street, setStreet] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
