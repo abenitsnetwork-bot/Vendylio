@@ -12,6 +12,8 @@ import { verifyCsrf } from '@/lib/server/auth';
 import { requireAuth } from '@/lib/server/middleware';
 import { prisma } from '@/lib/server/prisma';
 import { findOwnedOrder } from '@/lib/server/orders/ownership';
+import { enqueueOutbox } from '@/lib/server/outbox';
+import type { EmailOrderStatusEvent } from '@/lib/server/outbox/types';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
 interface RouteCtx {
@@ -138,6 +140,18 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<NextRespon
       );
     }
 
+    // Phase 7 — customer status email for the milestones a buyer cares about.
+    // PENDING→CANCELLED (an unpaid, abandoned order) deliberately emits
+    // nothing: the buyer walked away from checkout, there's no order they're
+    // tracking. Paid-order cancellation always goes through .../refund, which
+    // sends its own email.
+    const CUSTOMER_EMAIL_FOR: Record<string, EmailOrderStatusEvent['payload']['kind']> = {
+      PREPARING: 'PREPARING',
+      READY: 'READY',
+      OUT_FOR_DELIVERY: 'ON_THE_WAY',
+      DELIVERED: 'DELIVERED',
+    };
+
     const updated = await prisma.$transaction(async (tx) => {
       const row = await tx.order.update({
         where: { id: order.id },
@@ -146,6 +160,13 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<NextRespon
       await tx.orderStatusEvent.create({
         data: { orderId: order.id, status: parsed.data.status, actorType: 'SELLER' },
       });
+      const emailKind = CUSTOMER_EMAIL_FOR[parsed.data.status];
+      if (emailKind) {
+        await enqueueOutbox(tx, {
+          kind: 'email.order_status',
+          payload: { orderId: order.id, kind: emailKind },
+        });
+      }
       return row;
     });
 

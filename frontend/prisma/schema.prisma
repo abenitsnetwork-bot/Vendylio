@@ -310,6 +310,18 @@ model WebhookLog {
 // ───────────────────────────────────────────────────────────────────────
 model Order {
   id      String  @id @default(cuid())
+  // Phase 6 — human-friendly order reference shown to customers + merchants
+  // (formatOrderNumber() renders it as "VND-10042"). A Postgres sequence
+  // default: atomic, collision-free under concurrent checkout, and never
+  // the "SELECT MAX(n)+1" anti-pattern. The raw `id` cuid stays the PK and
+  // the internal/URL identifier; this is display-only.
+  orderNumber Int   @unique @default(autoincrement())
+  // Phase 7 — bearer credential for the guest tracking page + email links.
+  // App-generated random 24 bytes (base64url, 32 chars) in POST /api/orders —
+  // NOT the cuid `id`, NOT the sequential `orderNumber`: high-entropy,
+  // non-enumerable, and rotatable (regenerate the column) if a link leaks.
+  // Every guest-facing order read/write is keyed on this, never on `id`.
+  trackingToken String @unique
   storeId String
   store   Store   @relation(fields: [storeId], references: [id], onDelete: Restrict)
   userId  String? // guest checkout is the norm — set only if the buyer happened to be logged in

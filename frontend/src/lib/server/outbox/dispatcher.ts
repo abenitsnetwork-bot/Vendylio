@@ -30,6 +30,7 @@ import {
 } from '../notifications/templates';
 import type { EmailQueue } from '../queues/email-queue';
 import { createLogger } from '../logger';
+import { formatOrderNumber } from '@/lib/orderNumber';
 import type { OutboxEvent } from './types';
 
 const logger = createLogger();
@@ -153,6 +154,18 @@ async function markLowStockNotified(
   }
 }
 
+/**
+ * Phase 7 — resolve the human "VND-…" reference for an order. Falls back to
+ * the raw id if the row vanished (so a notification body is never blank).
+ */
+async function orderReference(prisma: PrismaClient, orderId: string): Promise<string> {
+  const row = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { orderNumber: true },
+  });
+  return row ? formatOrderNumber(row.orderNumber) : orderId;
+}
+
 /** Route a single event to the correct handler. */
 async function dispatchEvent(deps: OutboxDispatcherDeps, event: OutboxEvent): Promise<void> {
   switch (event.kind) {
@@ -179,31 +192,62 @@ async function dispatchEvent(deps: OutboxDispatcherDeps, event: OutboxEvent): Pr
       return;
     }
     case 'notification.order_paid': {
-      // Phase 2 — emitted by the Stripe webhook's onPaid handler.
+      // Phase 2 — emitted by the Stripe webhook's onPaid handler. Phase 7 —
+      // render the human "VND-…" reference in the notification body.
       const { userId, orderId, amount, currency } = event.payload;
-      await createNotification(deps.prisma, orderPaid(userId, orderId, amount, currency));
+      const ref = await orderReference(deps.prisma, orderId);
+      await createNotification(deps.prisma, orderPaid(userId, orderId, amount, currency, ref));
       return;
     }
     case 'email.order_confirmation': {
-      // Phase 2 — emitted by the Stripe webhook's onPaid handler, addressed
-      // to the guest buyer's customerEmail.
+      // Phase 2/7 — emitted by markPaid.ts once payment is authoritative.
+      // Recipient + branded template data come from the order row, never the
+      // payload (§118). No customerEmail on the order → nothing to send.
       if (!deps.emailQueue) throw new Error('email queue not configured');
-      const { to, orderId, amount, currency } = event.payload;
+      const { resolveOrderEmailContext } = await import('../emails/orderEmailContext');
+      const { orderConfirmationEmail } = await import('../emails/orderEmails');
+      const resolved = await resolveOrderEmailContext(deps.prisma, event.payload.orderId);
+      if (!resolved) return;
+      const tpl = orderConfirmationEmail(resolved.context);
       await deps.emailQueue.enqueue({
-        to,
-        subject: 'Your order is confirmed',
-        html: `<p>Your order <strong>${orderId}</strong> for $${(amount / 100).toFixed(2)} ${currency} is confirmed. Thank you!</p>`,
+        to: resolved.to,
+        subject: tpl.subject,
+        html: tpl.html,
+        text: tpl.text,
+      });
+      return;
+    }
+    case 'email.order_status': {
+      // Phase 7 — customer status emails (being prepared / on the way /
+      // delivered / delivery issue). Emitted by the seller status routes and
+      // the Uber Direct webhook.
+      if (!deps.emailQueue) throw new Error('email queue not configured');
+      const { resolveOrderEmailContext } = await import('../emails/orderEmailContext');
+      const { orderStatusUpdateEmail } = await import('../emails/orderEmails');
+      const resolved = await resolveOrderEmailContext(deps.prisma, event.payload.orderId);
+      if (!resolved) return;
+      const tpl = orderStatusUpdateEmail(resolved.context, event.payload.kind);
+      await deps.emailQueue.enqueue({
+        to: resolved.to,
+        subject: tpl.subject,
+        html: tpl.html,
+        text: tpl.text,
       });
       return;
     }
     case 'email.order_refunded': {
       // Phase 7 — emitted by POST /api/orders/[id]/refund.
       if (!deps.emailQueue) throw new Error('email queue not configured');
-      const { to, orderId, amount, currency } = event.payload;
+      const { resolveOrderEmailContext } = await import('../emails/orderEmailContext');
+      const { orderRefundedEmail } = await import('../emails/orderEmails');
+      const resolved = await resolveOrderEmailContext(deps.prisma, event.payload.orderId);
+      if (!resolved) return;
+      const tpl = orderRefundedEmail(resolved.context);
       await deps.emailQueue.enqueue({
-        to,
-        subject: 'Your order has been refunded',
-        html: `<p>Your order <strong>${orderId}</strong> for $${(amount / 100).toFixed(2)} ${currency} has been refunded. The funds should appear back in your original payment method within 5–10 business days.</p>`,
+        to: resolved.to,
+        subject: tpl.subject,
+        html: tpl.html,
+        text: tpl.text,
       });
       return;
     }
@@ -216,7 +260,8 @@ async function dispatchEvent(deps: OutboxDispatcherDeps, event: OutboxEvent): Pr
     case 'notification.delivery_failed': {
       // Uber Direct — emitted by the delivery webhook's onFailed handler.
       const { userId, orderId, status } = event.payload;
-      await createNotification(deps.prisma, deliveryFailed(userId, orderId, status));
+      const ref = await orderReference(deps.prisma, orderId);
+      await createNotification(deps.prisma, deliveryFailed(userId, orderId, status, ref));
       return;
     }
     case 'notification.low_stock': {

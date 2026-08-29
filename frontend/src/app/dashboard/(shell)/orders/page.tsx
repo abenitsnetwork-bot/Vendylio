@@ -24,17 +24,28 @@ export default function OrdersPage() {
   const user = useUser();
   const { logout } = useAuth();
   const [status, setStatus] = useState('');
+  const [search, setSearch] = useState('');
+  const [query, setQuery] = useState('');
   const [orders, setOrders] = useState<SellerOrder[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback((filterStatus: string) => {
+  // Debounce the search box so we don't fire a request per keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setQuery(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const load = useCallback((filterStatus: string, q: string) => {
     setOrders(null);
     setCursor(null);
     setError(null);
-    const qs = filterStatus ? `?status=${filterStatus}` : '';
-    api<{ items: SellerOrder[]; nextCursor: string | null }>(`/api/orders${qs}`)
+    const params = new URLSearchParams();
+    if (filterStatus) params.set('status', filterStatus);
+    if (q) params.set('q', q);
+    const qs = params.toString();
+    api<{ items: SellerOrder[]; nextCursor: string | null }>(`/api/orders${qs ? `?${qs}` : ''}`)
       .then((res) => {
         setOrders(res.items);
         setCursor(res.nextCursor);
@@ -46,8 +57,8 @@ export default function OrdersPage() {
 
   useEffect(() => {
     if (!user) return;
-    load(status);
-  }, [user, status, load]);
+    load(status, query);
+  }, [user, status, query, load]);
 
   async function loadMore() {
     if (!cursor || loadingMore) return;
@@ -55,6 +66,7 @@ export default function OrdersPage() {
     try {
       const qs = new URLSearchParams({ cursor });
       if (status) qs.set('status', status);
+      if (query) qs.set('q', query);
       const res = await api<{ items: SellerOrder[]; nextCursor: string | null }>(
         `/api/orders?${qs.toString()}`,
       );
@@ -97,6 +109,16 @@ export default function OrdersPage() {
             <p className="text-base text-muted-foreground">
               Track and fulfill orders from your storefront.
             </p>
+          </div>
+
+          <div className="mb-4">
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by order number, customer name or email"
+              className="w-full rounded-lg border border-border bg-card px-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+            />
           </div>
 
           <div className="mb-6 flex flex-wrap gap-2">

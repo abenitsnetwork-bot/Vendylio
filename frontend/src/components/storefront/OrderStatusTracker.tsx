@@ -1,68 +1,88 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { StarRatingInput } from '@/components/ui/StarRating';
 import { formatUsdPerUnit } from '@/lib/productUnits';
 import { guestCsrfHeaderValue } from '@/lib/guestCsrf';
 import { CashAppQRCode } from '@/components/storefront/CashAppQRCode';
 import { ZellePaymentInfo } from '@/components/storefront/ZellePaymentInfo';
+import { OrderTimeline } from '@/components/storefront/OrderTimeline';
+
+interface TimelineStep {
+  key: string;
+  label: string;
+  state: 'done' | 'current' | 'upcoming';
+  at: string | null;
+}
 
 interface TrackedOrder {
-  id: string;
-  status: string;
-  amount: number;
-  currency: string;
-  lineItems: { productId: string; name: string; priceCents: number; quantity: number }[];
-  createdAt: string;
+  reference: string;
+  placedAt: string;
   paidAt: string | null;
+  fulfillmentMethod: 'PICKUP' | 'DELIVERY';
+  status: { key: string; label: string; description: string };
+  closed: boolean;
+  isManualPaymentPending: boolean;
   provider: string;
-  fulfillmentMethod: string;
+  items: {
+    name: string;
+    quantity: number;
+    unit: string;
+    variantLabel: string | null;
+    lineTotalCents: number;
+  }[];
+  totals: {
+    subtotalCents: number;
+    deliveryFeeCents: number;
+    taxCents: number;
+    totalCents: number;
+    currency: string;
+  };
+  deliveryAddress: Record<string, unknown> | null;
+  delivery: { status: string; trackingUrl: string | null } | null;
+  timeline: TimelineStep[];
   store: {
+    name: string;
+    slug: string;
+    phone: string | null;
+    pickupAddress: string | null;
     cashAppCashtag: string | null;
     zelleContact: string | null;
-    pickupAddress: string | null;
   };
 }
 
-const MANUAL_POLL_INTERVAL_MS = 5000;
+// Fast poll only while a manual (Cash App / Zelle) payment is pending — the
+// seller confirms it by hand, no webhook, so the buyer is actively waiting.
+const MANUAL_POLL_MS = 5000;
+// Gentle poll while the order is in flight so a merchant status change shows
+// up without a manual refresh — conservative, and it stops at a terminal
+// state (§182). No realtime infra in the stack, so this is the fallback (§17).
+const ACTIVE_POLL_MS = 25000;
 
-const STATUS_COPY: Record<string, { title: string; body: string }> = {
-  PENDING: {
-    title: 'Payment processing',
-    body: "We're confirming your payment — this page updates automatically once it clears.",
-  },
-  PAID: {
-    title: 'Payment received',
-    body: 'The seller will reach out with delivery details.',
-  },
-  PREPARING: { title: 'Being prepared', body: 'The seller is getting your order ready.' },
-  READY: { title: 'Ready', body: 'Your order is ready and will be on its way soon.' },
-  OUT_FOR_DELIVERY: { title: 'Out for delivery', body: 'Your order is on its way.' },
-  DELIVERED: { title: 'Delivered', body: 'Your order has arrived. We hope you loved it!' },
-  CANCELLED: { title: 'Cancelled', body: 'This order was cancelled.' },
-  EXPIRED: { title: 'Expired', body: 'This order was never paid and has expired.' },
-  FAILED: { title: 'Payment failed', body: 'This order could not be paid for.' },
-};
+function usd(cents: number): string {
+  return formatUsdPerUnit(cents, 'UNIT');
+}
 
-// Overrides for the subset of statuses that read differently when the buyer
-// chose Pickup — nothing is ever "out for delivery" or couriered, so those
-// two need their own copy rather than the DELIVERY-flavored defaults above.
-const PICKUP_STATUS_COPY: Partial<Record<string, { title: string; body: string }>> = {
-  READY: { title: 'Ready for pickup', body: 'Your order is ready — come by whenever works.' },
-  DELIVERED: { title: 'Picked up', body: 'Order collected. We hope you loved it!' },
-};
+function addressLines(addr: Record<string, unknown> | null): string[] {
+  if (!addr) return [];
+  const { street, city, state, zip } = addr as Record<string, string | undefined>;
+  return [street, [city, state, zip].filter(Boolean).join(', ')].filter((line): line is string =>
+    Boolean(line),
+  );
+}
 
 /**
  * Guest-facing live order status, shown at
- * /s/[slug]/orders/[orderId]/success — the only page a buyer can revisit
- * (no account, so the URL itself is their "receipt"). Once status reaches
- * DELIVERED, offers the post-delivery review form (Phase 8).
+ * /s/[slug]/orders/[token]/success. The `token` is the buyer's only
+ * credential (no account). Once status reaches DELIVERED, offers the
+ * post-delivery review form.
  */
-export function OrderStatusTracker({ orderId }: { orderId: string }) {
+export function OrderStatusTracker({ token }: { token: string }) {
   const [order, setOrder] = useState<TrackedOrder | null>(null);
   const [hasReview, setHasReview] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [rating, setRating] = useState(0);
   const [text, setText] = useState('');
@@ -70,40 +90,67 @@ export function OrderStatusTracker({ orderId }: { orderId: string }) {
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
+  const announcedStatus = useRef<string | null>(null);
+  const [announcement, setAnnouncement] = useState('');
+
+  const load = useCallback(async (): Promise<TrackedOrder | null> => {
+    const res = await fetch(`/api/orders/track/${token}`);
+    if (!res.ok) throw new Error('not found');
+    const data = (await res.json()) as { order: TrackedOrder; hasReview: boolean };
+    setOrder(data.order);
+    setHasReview(data.hasReview);
+    // Accessible announcement only when the status actually changes (§39).
+    if (announcedStatus.current && announcedStatus.current !== data.order.status.key) {
+      setAnnouncement(`Order status updated: ${data.order.status.label}.`);
+    }
+    announcedStatus.current = data.order.status.key;
+    return data.order;
+  }, [token]);
+
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
-    function load() {
-      fetch(`/api/orders/${orderId}/track`)
-        .then(async (res) => {
-          if (!res.ok) throw new Error('not found');
-          return res.json() as Promise<{ order: TrackedOrder; hasReview: boolean }>;
-        })
-        .then((data) => {
-          if (cancelled) return;
-          setOrder(data.order);
-          setHasReview(data.hasReview);
-          // Manual payment methods (Cash App/Zelle) have no webhook — the
-          // seller confirms receipt from their own dashboard, so this page
-          // polls while PENDING to reflect that the moment it happens,
-          // instead of leaving the buyer staring at a stale "processing"
-          // screen. Stops as soon as the order leaves PENDING.
-          if (data.order.status === 'PENDING') {
-            timer = setTimeout(load, MANUAL_POLL_INTERVAL_MS);
-          }
-        })
-        .catch(() => {
-          if (!cancelled) setError('Could not load this order.');
-        });
+    function schedule(current: TrackedOrder | null) {
+      if (cancelled || !current) return;
+      const done =
+        current.closed ||
+        current.status.key === 'DELIVERED' ||
+        current.status.key === 'PAYMENT_FAILED';
+      if (done) return;
+      const delay = current.isManualPaymentPending ? MANUAL_POLL_MS : ACTIVE_POLL_MS;
+      timer = setTimeout(() => {
+        load()
+          .then((next) => schedule(next))
+          .catch(() => {
+            /* keep the last good render; a manual refresh is always available */
+          });
+      }, delay);
     }
 
-    load();
+    load()
+      .then((next) => schedule(next))
+      .catch(() => {
+        if (!cancelled) setError("We couldn't find this order.");
+      });
+
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [orderId]);
+  }, [load]);
+
+  async function manualRefresh() {
+    setRefreshing(true);
+    try {
+      await load();
+      setError(null);
+    } catch {
+      setError("We couldn't refresh this order. Please try again.");
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   async function submitReview() {
     if (rating < 1) {
@@ -113,7 +160,7 @@ export function OrderStatusTracker({ orderId }: { orderId: string }) {
     setSubmitting(true);
     setReviewError(null);
     try {
-      const res = await fetch(`/api/orders/${orderId}/review`, {
+      const res = await fetch(`/api/orders/track/${token}/review`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-csrf-token': guestCsrfHeaderValue() },
         body: JSON.stringify({ rating, ...(text.trim() ? { text: text.trim() } : {}) }),
@@ -132,42 +179,142 @@ export function OrderStatusTracker({ orderId }: { orderId: string }) {
     }
   }
 
-  if (error) return <p className="mt-2 text-sm text-red-600">{error}</p>;
+  if (error && !order) return <p className="mt-2 text-sm text-red-600">{error}</p>;
   if (!order) return <p className="mt-2 text-sm text-muted-foreground">Loading…</p>;
 
-  const isManualPending =
-    order.status === 'PENDING' &&
-    (order.provider === 'cashapp_manual' || order.provider === 'zelle_manual');
   const isPickup = order.fulfillmentMethod === 'PICKUP';
-  const copy = isManualPending
-    ? {
-        title: 'Awaiting payment',
-        body: 'Complete the payment below, then the seller will confirm it — this page updates on its own once they do.',
-      }
-    : ((isPickup ? PICKUP_STATUS_COPY[order.status] : undefined) ??
-      STATUS_COPY[order.status] ??
-      STATUS_COPY.PAID!);
+  const showTimeline = !order.isManualPaymentPending && !order.closed;
+  const deliveryAddr = addressLines(order.deliveryAddress);
 
   return (
-    <div className="mt-2 w-full">
-      <p className="mb-1 text-sm font-semibold text-foreground">{copy.title}</p>
-      <p className="mb-6 text-xs text-muted-foreground">{copy.body}</p>
+    <div className="mt-2 w-full max-w-md text-left">
+      <p aria-live="polite" className="sr-only">
+        {announcement}
+      </p>
 
-      {isPickup && order.store.pickupAddress && ['READY', 'DELIVERED'].includes(order.status) && (
-        <p className="mb-6 text-xs text-muted-foreground">
-          Pickup location: {order.store.pickupAddress}
+      <p className="text-xs font-medium text-muted-foreground">Order {order.reference}</p>
+      <div className="mt-1 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-base font-semibold text-foreground">{order.status.label}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{order.status.description}</p>
+        </div>
+        {showTimeline && (
+          <button
+            type="button"
+            onClick={manualRefresh}
+            disabled={refreshing}
+            className="flex-shrink-0 rounded-lg border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-secondary disabled:opacity-50"
+          >
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
+        )}
+      </div>
+
+      {isPickup &&
+        order.store.pickupAddress &&
+        ['READY', 'DELIVERED'].includes(order.status.key) && (
+          <p className="mt-3 rounded-lg bg-secondary px-3 py-2 text-xs text-foreground">
+            Pickup location: {order.store.pickupAddress}
+          </p>
+        )}
+
+      {order.isManualPaymentPending &&
+        order.provider === 'cashapp_manual' &&
+        order.store.cashAppCashtag && (
+          <div className="mt-4">
+            <CashAppQRCode
+              cashtag={order.store.cashAppCashtag}
+              amountCents={order.totals.totalCents}
+            />
+          </div>
+        )}
+      {order.isManualPaymentPending &&
+        order.provider === 'zelle_manual' &&
+        order.store.zelleContact && (
+          <div className="mt-4">
+            <ZellePaymentInfo contact={order.store.zelleContact} />
+          </div>
+        )}
+
+      {showTimeline && order.timeline.length > 0 && (
+        <div className="mt-5">
+          <OrderTimeline steps={order.timeline} />
+        </div>
+      )}
+
+      {order.delivery?.trackingUrl && order.status.key === 'ON_THE_WAY' && (
+        <p className="mt-4">
+          <a
+            href={order.delivery.trackingUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+          >
+            Track your delivery
+          </a>
         </p>
       )}
 
-      {isManualPending && order.provider === 'cashapp_manual' && order.store.cashAppCashtag && (
-        <CashAppQRCode cashtag={order.store.cashAppCashtag} amountCents={order.amount} />
-      )}
-      {isManualPending && order.provider === 'zelle_manual' && order.store.zelleContact && (
-        <ZellePaymentInfo contact={order.store.zelleContact} />
+      {order.delivery?.status === 'FAILED' && order.status.key !== 'DELIVERED' && (
+        <p className="mt-4 rounded-lg bg-secondary px-3 py-2 text-xs text-foreground">
+          We&apos;re having trouble completing your delivery. {order.store.name} has been notified
+          and is working on it.
+        </p>
       )}
 
-      {order.status === 'DELIVERED' && !hasReview && !submitted && (
-        <div className="rounded-lg border border-border bg-card p-5 text-left">
+      <div className="mt-5 border-t border-border pt-4">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Order summary
+        </p>
+        <div className="space-y-1.5 text-sm">
+          {order.items.map((it, i) => (
+            <div key={`${it.name}-${i}`} className="flex justify-between gap-3">
+              <span className="text-foreground">
+                {it.name}
+                {it.variantLabel ? ` (${it.variantLabel})` : ''}{' '}
+                <span className="text-muted-foreground">
+                  {it.unit && it.unit !== 'UNIT'
+                    ? `${it.quantity} ${it.unit.toLowerCase()}`
+                    : `×${it.quantity}`}
+                </span>
+              </span>
+              <span className="whitespace-nowrap text-foreground">{usd(it.lineTotalCents)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-2 space-y-1 border-t border-border pt-2 text-xs text-muted-foreground">
+          <div className="flex justify-between">
+            <span>Subtotal</span>
+            <span>{usd(order.totals.subtotalCents)}</span>
+          </div>
+          {order.totals.deliveryFeeCents > 0 && (
+            <div className="flex justify-between">
+              <span>Delivery</span>
+              <span>{usd(order.totals.deliveryFeeCents)}</span>
+            </div>
+          )}
+          <div className="flex justify-between text-sm font-semibold text-foreground">
+            <span>{order.status.key === 'PROCESSING' ? 'Total due' : 'Total'}</span>
+            <span>{usd(order.totals.totalCents)}</span>
+          </div>
+        </div>
+      </div>
+
+      {!isPickup && deliveryAddr.length > 0 && (
+        <div className="mt-4 border-t border-border pt-4">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Delivery to
+          </p>
+          {deliveryAddr.map((line) => (
+            <p key={line} className="text-sm text-foreground">
+              {line}
+            </p>
+          ))}
+        </div>
+      )}
+
+      {order.status.key === 'DELIVERED' && !hasReview && !submitted && (
+        <div className="mt-5 rounded-lg border border-border bg-card p-5">
           <p className="mb-3 text-sm font-semibold text-foreground">How was your order?</p>
           <StarRatingInput value={rating} onChange={setRating} />
           <textarea
@@ -189,16 +336,22 @@ export function OrderStatusTracker({ orderId }: { orderId: string }) {
         </div>
       )}
 
-      {order.status === 'DELIVERED' && (hasReview || submitted) && (
-        <div className="flex items-center justify-center gap-2 rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
+      {order.status.key === 'DELIVERED' && (hasReview || submitted) && (
+        <div className="mt-5 flex items-center justify-center gap-2 rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
           <Icon i="check-circle" size={16} className="text-primary" />
           Thanks for your review!
         </div>
       )}
 
-      <p className="mt-6 text-xs text-muted-foreground">
-        {order.status === 'PENDING' ? 'Total due' : 'Total paid'}:{' '}
-        {formatUsdPerUnit(order.amount, 'UNIT')}
+      <p className="mt-5 text-xs text-muted-foreground">
+        Need help with your order?{' '}
+        {order.store.phone ? (
+          <>
+            Call {order.store.name} at {order.store.phone}.
+          </>
+        ) : (
+          <>Contact {order.store.name}.</>
+        )}
       </p>
     </div>
   );

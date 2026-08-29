@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
+import { formatOrderNumber } from '@/lib/orderNumber';
 
 export interface SellerOrderLineItem {
   productId: string;
@@ -13,6 +14,7 @@ export interface SellerOrderLineItem {
 
 export interface SellerOrder {
   id: string;
+  orderNumber: number;
   status: string;
   amount: number;
   currency: string;
@@ -81,6 +83,9 @@ export function OrdersTable({ orders }: { orders: SellerOrder[] }) {
           className="flex items-center justify-between gap-4 rounded-lg border border-border bg-card p-4 hover:border-primary"
         >
           <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium text-muted-foreground">
+              {formatOrderNumber(order.orderNumber)}
+            </p>
             <p className="truncate text-sm font-semibold text-foreground">
               {order.customerName ?? 'Guest'}
             </p>

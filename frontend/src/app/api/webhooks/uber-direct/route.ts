@@ -68,6 +68,11 @@ export const POST = createWebhookHandler<UberDirectWebhookPayload>({
         payload: { userId: store.organization.ownerId, orderId: delivery.orderId },
       });
     }
+    // Phase 7 — customer "your order has been delivered" email.
+    await enqueueOutbox(tx, {
+      kind: 'email.order_status',
+      payload: { orderId: delivery.orderId, kind: 'DELIVERED' },
+    });
 
     return {};
   },
@@ -106,6 +111,12 @@ export const POST = createWebhookHandler<UberDirectWebhookPayload>({
         },
       });
     }
+    // Phase 7 — calm customer-facing "there's a delay, the store has been
+    // notified" email. Never exposes the provider status or a raw error.
+    await enqueueOutbox(tx, {
+      kind: 'email.order_status',
+      payload: { orderId: delivery.orderId, kind: 'DELIVERY_ISSUE' },
+    });
 
     return {};
   },

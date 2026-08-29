@@ -162,6 +162,7 @@ function CheckoutFormInner({
 
       const body = (await res.json().catch(() => ({}))) as OrderErrorBody & {
         id?: string;
+        trackingToken?: string;
         paymentUrl?: string | null;
       };
 
@@ -196,7 +197,7 @@ function CheckoutFormInner({
       }
 
       clear();
-      router.push(`/s/${storeSlug}/orders/${body.id}/success`);
+      router.push(`/s/${storeSlug}/orders/${body.trackingToken}/success`);
     } catch {
       setError('Network error. Please try again.');
       setSubmitting(false);

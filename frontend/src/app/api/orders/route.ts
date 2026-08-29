@@ -50,6 +50,8 @@ import {
 } from '@/lib/server/payments/provider-singleton';
 import { clampLimit, cursorWhere, buildPage, decodeCursor } from '@/lib/server/pagination/paginate';
 import { effectivePriceCents, variantLabel } from '@/lib/productVariants';
+import { parseOrderNumberQuery } from '@/lib/orderNumber';
+import { newTrackingToken } from '@/lib/server/orders/trackingToken';
 import { roundQuantity } from '@/lib/quantity';
 import { getUberDirectDeliveryFeeCents } from '@/lib/server/delivery/uber-direct';
 
@@ -223,7 +225,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           );
         }
         return NextResponse.json(
-          { id: existing.id, paymentUrl: existing.paymentUrl, status: existing.status },
+          {
+            id: existing.id,
+            trackingToken: existing.trackingToken,
+            paymentUrl: existing.paymentUrl,
+            status: existing.status,
+          },
           { status: 200, headers: { 'x-request-id': ctx.requestId } },
         );
       }
@@ -352,6 +359,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       lineItems: lineItems as unknown as Prisma.InputJsonValue,
       idempotencyKey: idemKey,
       idempotencyBodyHash: bodyHash,
+      // Phase 7 — the guest tracking bearer credential. Generated here so it
+      // exists on the row from creation; every customer-facing URL + email
+      // link uses this, never `order.id`.
+      trackingToken: newTrackingToken(),
       expiresAt: new Date(Date.now() + ORDER_EXPIRY_MS),
     };
 
@@ -369,7 +380,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         },
       });
       return NextResponse.json(
-        { id: order.id, paymentUrl: null, status: 'PENDING' },
+        { id: order.id, trackingToken: order.trackingToken, paymentUrl: null, status: 'PENDING' },
         { status: 201, headers: { 'x-request-id': ctx.requestId } },
       );
     }
@@ -411,8 +422,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           phone: customerPhone,
           ...(customerEmail ? { email: customerEmail } : {}),
         },
-        successUrl: `${appUrl}/s/${store.slug}/orders/${order.id}/success`,
-        failureUrl: `${appUrl}/s/${store.slug}/orders/${order.id}/failed`,
+        successUrl: `${appUrl}/s/${store.slug}/orders/${order.trackingToken}/success`,
+        failureUrl: `${appUrl}/s/${store.slug}/orders/${order.trackingToken}/failed`,
         externalRef: order.id,
       };
 
@@ -436,7 +447,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       });
 
       return NextResponse.json(
-        { id: order.id, paymentUrl: result.paymentUrl, status: 'PENDING' },
+        {
+          id: order.id,
+          trackingToken: order.trackingToken,
+          paymentUrl: result.paymentUrl,
+          status: 'PENDING',
+        },
         { status: 201, headers: { 'x-request-id': ctx.requestId } },
       );
     } catch (err) {
@@ -471,6 +487,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 // lib/server/pagination/paginate.ts.
 const SELLER_ORDER_SELECT = {
   id: true,
+  orderNumber: true,
   status: true,
   amount: true,
   currency: true,
@@ -508,12 +525,35 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const url = req.nextUrl;
     const limit = clampLimit(url.searchParams.get('limit'));
     const status = url.searchParams.get('status');
+    const q = url.searchParams.get('q')?.trim();
     const cursor = decodeCursor(url.searchParams.get('cursor'));
 
+    // ?q= — a merchant looking for one order. Matches the order number
+    // ("VND-10042", "10042" or the bare internal value) OR a substring of
+    // the customer's name / email. All server-side; no external search.
+    let searchWhere: Prisma.OrderWhereInput | undefined;
+    if (q) {
+      const parsedNumber = parseOrderNumberQuery(q);
+      searchWhere = {
+        OR: [
+          ...(parsedNumber !== null ? [{ orderNumber: parsedNumber }] : []),
+          { customerName: { contains: q, mode: 'insensitive' as const } },
+          { customerEmail: { contains: q, mode: 'insensitive' as const } },
+        ],
+      };
+    }
+
+    // Both searchWhere and cursorWhere use a top-level `OR` — merge them
+    // under `AND` so one can't clobber the other during pagination.
+    const cursorClause = cursorWhere(cursor) as Prisma.OrderWhereInput;
+    const andClauses: Prisma.OrderWhereInput[] = [
+      ...(searchWhere ? [searchWhere] : []),
+      ...(Object.keys(cursorClause).length ? [cursorClause] : []),
+    ];
     const where: Prisma.OrderWhereInput = {
       storeId: store.id,
       ...(status ? { status } : {}),
-      ...cursorWhere(cursor),
+      ...(andClauses.length ? { AND: andClauses } : {}),
     };
 
     const rows = await prisma.order.findMany({

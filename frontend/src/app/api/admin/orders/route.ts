@@ -20,6 +20,7 @@ import { makeRequestContext, withRequestContext } from '@/lib/server/observabili
 
 const ORDER_SELECT = {
   id: true,
+  orderNumber: true,
   userId: true,
   amount: true,
   currency: true,

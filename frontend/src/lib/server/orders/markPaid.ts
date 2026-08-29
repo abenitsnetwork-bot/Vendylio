@@ -201,14 +201,11 @@ export async function applyOrderPaidEffects(
     });
   }
   if (order.customerEmail) {
+    // Phase 7 — the dispatcher renders the branded template + resolves the
+    // recipient from the order row (never a payload-supplied address).
     await enqueueOutbox(tx, {
       kind: 'email.order_confirmation',
-      payload: {
-        to: order.customerEmail,
-        orderId: order.id,
-        amount: order.amount,
-        currency: order.currency,
-      },
+      payload: { orderId: order.id },
     });
   }
 }

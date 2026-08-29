@@ -14,6 +14,7 @@ import { requireAuth } from '@/lib/server/middleware';
 import { prisma } from '@/lib/server/prisma';
 import { findOwnedOrder } from '@/lib/server/orders/ownership';
 import { getDeliveryProviderFor } from '@/lib/server/delivery';
+import { enqueueOutbox } from '@/lib/server/outbox';
 import { formatQuantityWithUnit } from '@/lib/productUnits';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
@@ -150,6 +151,10 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       await tx.orderStatusEvent.create({
         data: { orderId: order.id, status: 'OUT_FOR_DELIVERY', actorType: 'SELLER' },
       });
+      await enqueueOutbox(tx, {
+        kind: 'email.order_status',
+        payload: { orderId: order.id, kind: 'ON_THE_WAY' },
+      });
       return { delivery: createdDelivery, order: updated };
     });
 
@@ -219,6 +224,10 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<NextRespon
       });
       await tx.orderStatusEvent.create({
         data: { orderId: order.id, status: 'DELIVERED', actorType: 'SELLER' },
+      });
+      await enqueueOutbox(tx, {
+        kind: 'email.order_status',
+        payload: { orderId: order.id, kind: 'DELIVERED' },
       });
       return { updatedDelivery: nextDelivery, updatedOrder: nextOrder };
     });

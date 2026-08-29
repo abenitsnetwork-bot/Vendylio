@@ -119,6 +119,8 @@ const validBody = {
 function seededOrder(over: Partial<Record<string, unknown>> = {}) {
   return {
     id: 'order_seed_1',
+    orderNumber: 1,
+    trackingToken: 'tok_seed_abcdefabcdefabcdef1234',
     storeId: 'store-1',
     userId: null,
     amount: 3600,
@@ -412,7 +414,19 @@ describe('POST /api/orders — happy path', () => {
       status: 'PENDING',
       provider: 'stripe_platform',
     });
+    // Phase 7 — a secure tracking token is minted at creation, never the cuid.
+    expect(createArgs?.data?.trackingToken).toMatch(/^[A-Za-z0-9_-]{32}$/);
+    expect(body).toMatchObject({ trackingToken: 'tok_seed_abcdefabcdefabcdef1234' });
     expect(mockExecute).toHaveBeenCalledOnce();
+
+    // Stripe success/cancel URLs carry the token, never the order id.
+    const provider = mockGetProvider.mock.results[0]?.value as { charge: ReturnType<typeof vi.fn> };
+    const chargeArgs = provider.charge.mock.calls[0]?.[0] as {
+      successUrl: string;
+      failureUrl: string;
+    };
+    expect(chargeArgs.successUrl).toContain('/orders/tok_seed_abcdefabcdefabcdef1234/success');
+    expect(chargeArgs.failureUrl).toContain('/orders/tok_seed_abcdefabcdefabcdef1234/failed');
 
     const updateArgs = prismaMock.order.update.mock.calls[0]?.[0];
     expect(updateArgs?.data).toMatchObject({
@@ -825,6 +839,57 @@ describe('GET /api/orders — seller-facing list (Phase 4)', () => {
     expect(body.items.map((o: { id: string }) => o.id)).toEqual(['o1', 'o2']);
     expect(body.nextCursor).toBeNull();
   });
+
+  it('?q= with a display order number matches orderNumber, name and email', async () => {
+    mockRequireAuth.mockResolvedValue({ user: { sub: 'user-1', email: 'me@example.com' } });
+    mockResolveOwnStore.mockResolvedValue({ id: 'store-1' } as never);
+    prismaMock.order.findMany.mockResolvedValue([]);
+
+    await GET(makeGetReq('?q=VND-10042'));
+
+    const args = prismaMock.order.findMany.mock.calls[0]?.[0] as {
+      where: { AND?: Array<{ OR?: unknown[] }> };
+    };
+    expect(args.where.AND?.[0]?.OR).toEqual([
+      { orderNumber: 42 },
+      { customerName: { contains: 'VND-10042', mode: 'insensitive' } },
+      { customerEmail: { contains: 'VND-10042', mode: 'insensitive' } },
+    ]);
+  });
+
+  it('?q= with a non-numeric term searches name/email only', async () => {
+    mockRequireAuth.mockResolvedValue({ user: { sub: 'user-1', email: 'me@example.com' } });
+    mockResolveOwnStore.mockResolvedValue({ id: 'store-1' } as never);
+    prismaMock.order.findMany.mockResolvedValue([]);
+
+    await GET(makeGetReq('?q=smith'));
+
+    const args = prismaMock.order.findMany.mock.calls[0]?.[0] as {
+      where: { AND?: Array<{ OR?: unknown[] }> };
+    };
+    expect(args.where.AND?.[0]?.OR).toEqual([
+      { customerName: { contains: 'smith', mode: 'insensitive' } },
+      { customerEmail: { contains: 'smith', mode: 'insensitive' } },
+    ]);
+  });
+
+  it('merges ?q= search with the pagination cursor under AND (neither OR clobbers the other)', async () => {
+    mockRequireAuth.mockResolvedValue({ user: { sub: 'user-1', email: 'me@example.com' } });
+    mockResolveOwnStore.mockResolvedValue({ id: 'store-1' } as never);
+    prismaMock.order.findMany.mockResolvedValue([]);
+
+    const cursor = Buffer.from(
+      JSON.stringify({ createdAt: new Date('2026-01-01T00:00:00Z').toISOString(), id: 'o9' }),
+    ).toString('base64');
+    await GET(makeGetReq(`?q=smith&cursor=${cursor}`));
+
+    const args = prismaMock.order.findMany.mock.calls[0]?.[0] as {
+      where: { AND?: Array<Record<string, unknown>> };
+    };
+    expect(args.where.AND).toHaveLength(2);
+    expect(args.where.AND?.[0]).toHaveProperty('OR');
+    expect(args.where.AND?.[1]).toHaveProperty('OR');
+  });
 });
 
 describe('POST /api/orders — manual payment methods (Cash App / Zelle)', () => {
@@ -855,7 +920,12 @@ describe('POST /api/orders — manual payment methods (Cash App / Zelle)', () =>
     const res = await POST(makePost({ ...validBody, paymentMethod: 'cashapp' }));
     expect(res.status).toBe(201);
     const body = await res.json();
-    expect(body).toEqual({ id: 'order_seed_1', paymentUrl: null, status: 'PENDING' });
+    expect(body).toEqual({
+      id: 'order_seed_1',
+      trackingToken: 'tok_seed_abcdefabcdefabcdef1234',
+      paymentUrl: null,
+      status: 'PENDING',
+    });
 
     const createArgs = prismaMock.order.create.mock.calls[0]?.[0];
     expect(createArgs?.data).toMatchObject({ provider: 'cashapp_manual', status: 'PENDING' });

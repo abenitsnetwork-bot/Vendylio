@@ -9,6 +9,7 @@ import { Icon } from '@/components/ui/Icon';
 import { Card } from '@/components/ui/Card';
 import { SellerHeader } from '@/components/seller/SellerHeader';
 import { StatusBadge, formatUsd, type SellerOrder } from '@/components/seller/OrdersTable';
+import { formatOrderNumber } from '@/lib/orderNumber';
 import type { SellerCustomer } from '@/components/seller/CustomersTable';
 
 function addressLines(addr: Record<string, unknown> | null): string[] {
@@ -123,9 +124,14 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                         href={`/dashboard/orders/${order.id}`}
                         className="flex items-center justify-between gap-4 rounded-lg border border-border p-4 hover:border-primary"
                       >
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(order.createdAt).toLocaleString()}
-                        </p>
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-muted-foreground">
+                            {formatOrderNumber(order.orderNumber)}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(order.createdAt).toLocaleString()}
+                          </p>
+                        </div>
                         <p className="text-sm font-bold text-foreground">
                           {formatUsd(order.amount)}
                         </p>

@@ -14,6 +14,7 @@ export type OutboxEvent =
   | EmailPasswordResetEvent
   | NotificationOrderPaidEvent
   | EmailOrderConfirmationEvent
+  | EmailOrderStatusEvent
   | EmailOrderRefundedEvent
   | NotificationDeliveryCompletedEvent
   | NotificationDeliveryFailedEvent
@@ -63,30 +64,42 @@ export interface NotificationOrderPaidEvent {
 }
 
 /**
- * Phase 2 — emitted by the Stripe webhook's onPaid handler, targeting the
- * guest buyer's `customerEmail` (skipped if the buyer didn't provide one).
+ * Phase 2/7 — emitted by markPaid.ts once payment is authoritative, for the
+ * guest buyer's confirmation email. The dispatcher resolves the recipient +
+ * the branded template data from the order row (never trusts a payload-
+ * supplied address — §118); a payload without `customerEmail` on the order is
+ * a no-op. Legacy rows may still carry `to`/`amount`/`currency` — ignored.
  */
 export interface EmailOrderConfirmationEvent {
   kind: 'email.order_confirmation';
   payload: {
-    to: string;
     orderId: string;
-    amount: number;
-    currency: string;
   };
 }
 
 /**
- * Phase 7 — emitted by POST /api/orders/[id]/refund, addressed to the guest
- * buyer's `customerEmail` (skipped if the buyer didn't provide one).
+ * Phase 7 — emitted by the seller status routes (api/orders/[id]/route.ts,
+ * api/orders/[id]/delivery/route.ts) and the Uber Direct webhook, for the
+ * per-milestone customer status emails ("being prepared", "on the way",
+ * "delivered", delivery issue). `kind` selects the template copy. The
+ * dispatcher resolves recipient + template data from the order row.
+ */
+export interface EmailOrderStatusEvent {
+  kind: 'email.order_status';
+  payload: {
+    orderId: string;
+    kind: 'PREPARING' | 'READY' | 'ON_THE_WAY' | 'DELIVERED' | 'CANCELLED' | 'DELIVERY_ISSUE';
+  };
+}
+
+/**
+ * Phase 7 — emitted by POST /api/orders/[id]/refund. Dispatcher resolves
+ * recipient + template data from the order row.
  */
 export interface EmailOrderRefundedEvent {
   kind: 'email.order_refunded';
   payload: {
-    to: string;
     orderId: string;
-    amount: number;
-    currency: string;
   };
 }
 

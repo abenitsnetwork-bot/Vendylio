@@ -4,9 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { Icon } from '@/components/ui/Icon';
 import { StatusBadge, formatUsd } from '@/components/seller/OrdersTable';
+import { formatOrderNumber } from '@/lib/orderNumber';
 
 interface AdminOrder {
   id: string;
+  orderNumber: number;
   userId: string | null;
   amount: number;
   currency: string;
@@ -120,7 +122,8 @@ export default function AdminOrdersPage() {
                     {o.customerEmail ?? 'Guest'}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {o.provider} · {new Date(o.createdAt).toLocaleString()}
+                    {formatOrderNumber(o.orderNumber)} · {o.provider} ·{' '}
+                    {new Date(o.createdAt).toLocaleString()}
                   </p>
                 </div>
                 <p className="w-20 flex-shrink-0 text-right text-sm font-bold text-foreground">

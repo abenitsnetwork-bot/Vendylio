@@ -20,6 +20,7 @@ interface RouteCtx {
 
 const CUSTOMER_ORDER_SELECT = {
   id: true,
+  orderNumber: true,
   status: true,
   amount: true,
   currency: true,

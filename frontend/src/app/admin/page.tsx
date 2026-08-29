@@ -21,6 +21,7 @@ import { Card } from '@/components/ui/Card';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { formatUsdPerUnit } from '@/lib/productUnits';
 import { StatusBadge, formatUsd } from '@/components/seller/OrdersTable';
+import { formatOrderNumber } from '@/lib/orderNumber';
 
 interface Stats {
   merchantCount: number;
@@ -41,6 +42,7 @@ interface Analytics {
 
 interface RecentOrder {
   id: string;
+  orderNumber: number;
   amount: number;
   status: string;
   customerEmail: string | null;
@@ -277,7 +279,8 @@ export default function AdminDashboardPage() {
                     {o.customerEmail ?? 'Guest'}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {o.provider} · {new Date(o.createdAt).toLocaleString()}
+                    {formatOrderNumber(o.orderNumber)} · {o.provider} ·{' '}
+                    {new Date(o.createdAt).toLocaleString()}
                   </p>
                 </div>
                 <p className="w-20 flex-shrink-0 text-right text-sm font-bold text-foreground">

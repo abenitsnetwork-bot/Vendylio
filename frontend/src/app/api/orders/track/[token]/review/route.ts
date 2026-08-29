@@ -1,9 +1,7 @@
-// POST /api/orders/[id]/review — Phase 8, guest-submitted, no account
-// needed. Same trust model as the checkout success/tracking pages: knowing
-// the unguessable Order id is the only "auth" a buyer has (see
-// api/orders/[id]/track/route.ts). Gated to status === 'DELIVERED' — a
-// buyer can't review an order that hasn't arrived yet — and to one review
-// per order via the Review.orderId unique constraint.
+// POST /api/orders/track/[token]/review — Phase 7 (moved from
+// /api/orders/[id]/review). Guest-submitted, no account: the high-entropy
+// trackingToken in the URL is the buyer's credential (§29). Gated to
+// status === 'DELIVERED' and to one review per order (Review.orderId unique).
 export const runtime = 'nodejs';
 
 import 'server-only';
@@ -14,7 +12,7 @@ import { prisma } from '@/lib/server/prisma';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
 interface RouteCtx {
-  params: Promise<{ id: string }>;
+  params: Promise<{ token: string }>;
 }
 
 const Body = z.object({
@@ -28,8 +26,8 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     const csrfFail = verifyCsrf(req);
     if (csrfFail) return csrfFail;
 
-    const { id } = await ctx.params;
-    const order = await prisma.order.findUnique({ where: { id } });
+    const { token } = await ctx.params;
+    const order = await prisma.order.findUnique({ where: { trackingToken: token } });
     if (!order) {
       return NextResponse.json(
         { error: 'ORDER_NOT_FOUND', message: 'No such order.' },

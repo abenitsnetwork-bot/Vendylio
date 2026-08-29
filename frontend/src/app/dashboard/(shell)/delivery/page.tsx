@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/Button';
 import { Field, inputClass } from '@/components/ui/Field';
 import { SellerHeader } from '@/components/seller/SellerHeader';
 import { formatUsd, type SellerOrder } from '@/components/seller/OrdersTable';
+import { formatOrderNumber } from '@/lib/orderNumber';
 
 interface DashboardStore {
   id: string;
@@ -38,6 +39,9 @@ function OrderRow({
   return (
     <div className="flex items-center justify-between gap-4 rounded-lg border border-border p-4">
       <div className="min-w-0 flex-1">
+        <p className="text-xs font-medium text-muted-foreground">
+          {formatOrderNumber(order.orderNumber)}
+        </p>
         <Link
           href={`/dashboard/orders/${order.id}`}
           className="truncate text-sm font-semibold text-foreground hover:text-primary"

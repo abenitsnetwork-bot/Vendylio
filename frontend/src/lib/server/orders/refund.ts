@@ -61,14 +61,11 @@ export async function applyOrderRefundedEffects(
   }
 
   if (order.customerEmail) {
+    // Phase 7 — the dispatcher renders the branded template + resolves the
+    // recipient from the order row.
     await enqueueOutbox(tx, {
       kind: 'email.order_refunded',
-      payload: {
-        to: order.customerEmail,
-        orderId: order.id,
-        amount: order.amount,
-        currency: order.currency,
-      },
+      payload: { orderId: order.id },
     });
   }
 }

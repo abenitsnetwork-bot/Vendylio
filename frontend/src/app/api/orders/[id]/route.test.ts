@@ -139,6 +139,43 @@ describe('PATCH /api/orders/[id] — status transitions', () => {
   });
 
   it.each([
+    ['PAID', 'PREPARING', 'PREPARING'],
+    ['PREPARING', 'READY', 'READY'],
+    ['READY', 'OUT_FOR_DELIVERY', 'ON_THE_WAY'],
+    ['OUT_FOR_DELIVERY', 'DELIVERED', 'DELIVERED'],
+  ])('%s -> %s enqueues a customer email.order_status (%s)', async (from, to, kind) => {
+    prismaMock.order.findFirst.mockResolvedValue({ ...OWNED_ORDER, status: from } as never);
+    prismaMock.$transaction.mockImplementation(async (fn: unknown) =>
+      (fn as (tx: typeof prismaMock) => unknown)(prismaMock),
+    );
+    prismaMock.order.update.mockResolvedValue({ ...OWNED_ORDER, status: to } as never);
+    prismaMock.outboxEvent.create.mockResolvedValue({ id: 'oe1' } as never);
+
+    await PATCH(makeReq('PATCH', { status: to }), ctx);
+
+    expect(prismaMock.outboxEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          kind: 'email.order_status',
+          payload: { orderId: 'order-1', kind },
+        }),
+      }),
+    );
+  });
+
+  it('PENDING -> CANCELLED does not email the customer (abandoned, unpaid order)', async () => {
+    prismaMock.order.findFirst.mockResolvedValue({ ...OWNED_ORDER, status: 'PENDING' } as never);
+    prismaMock.$transaction.mockImplementation(async (fn: unknown) =>
+      (fn as (tx: typeof prismaMock) => unknown)(prismaMock),
+    );
+    prismaMock.order.update.mockResolvedValue({ ...OWNED_ORDER, status: 'CANCELLED' } as never);
+
+    await PATCH(makeReq('PATCH', { status: 'CANCELLED' }), ctx);
+
+    expect(prismaMock.outboxEvent.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
     ['PAID', 'READY'], // skips PREPARING
     ['PAID', 'DELIVERED'], // skips everything
     ['DELIVERED', 'CANCELLED'], // terminal — no transitions out

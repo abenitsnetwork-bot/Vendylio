@@ -41,12 +41,15 @@ export function orderPaid(
   orderId: string,
   amount: number,
   currency: string,
+  /** Phase 7 — human "VND-…" reference; falls back to the raw id. */
+  reference?: string,
 ): CreateNotificationInput {
+  const ref = reference ?? orderId;
   return {
     userId,
     type: 'ORDER_PAID',
     title: 'New order paid',
-    body: `Order ${orderId} for ${(amount / 100).toFixed(2)} ${currency} was just paid.`,
+    body: `Order ${ref} for ${(amount / 100).toFixed(2)} ${currency} was just paid.`,
     data: { orderId, amount, currency },
     dedupeKey: `order-paid:${orderId}`,
   };
@@ -78,12 +81,15 @@ export function deliveryFailed(
   userId: string,
   orderId: string,
   status: string,
+  /** Phase 7 — human "VND-…" reference; falls back to the raw id. */
+  reference?: string,
 ): CreateNotificationInput {
+  const ref = reference ?? orderId;
   return {
     userId,
     type: 'DELIVERY_FAILED',
     title: 'Delivery needs attention',
-    body: `Order ${orderId}'s Uber Direct delivery was ${status}. The order is back to Ready — request delivery again once you've checked in with the customer.`,
+    body: `Order ${ref}'s Uber Direct delivery was ${status}. The order is back to Ready — request delivery again once you've checked in with the customer.`,
     data: { orderId, status },
     dedupeKey: `delivery-failed:${orderId}:${status}`,
   };

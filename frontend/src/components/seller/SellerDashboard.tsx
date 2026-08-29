@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
 import { SellerHeader } from '@/components/seller/SellerHeader';
 import { ShareStoreModal } from '@/components/seller/ShareStoreModal';
+import { formatOrderNumber } from '@/lib/orderNumber';
 
 export interface DashboardStore {
   id: string;
@@ -29,6 +30,7 @@ export interface DashboardStats {
 
 export interface RecentOrder {
   id: string;
+  orderNumber: number;
   status: string;
   amount: number;
   currency: string;
@@ -165,6 +167,9 @@ export function SellerDashboard({
                     className="flex items-center justify-between rounded-lg border border-border p-4 hover:border-primary"
                   >
                     <div>
+                      <p className="text-xs font-medium text-muted-foreground">
+                        {formatOrderNumber(order.orderNumber)}
+                      </p>
                       <p className="text-sm font-semibold text-foreground">
                         {order.customerName ?? 'Guest'}
                       </p>

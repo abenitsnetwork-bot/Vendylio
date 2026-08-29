@@ -1,9 +1,10 @@
-// Stripe redirects here when the buyer cancels/abandons the hosted
-// Checkout page — a reliable "gave up" signal, so this cancels the Order
-// immediately (cancelAbandonedOrder) instead of leaving it PENDING for the
+// Stripe redirects here when the buyer cancels/abandons the hosted Checkout
+// page — a reliable "gave up" signal, so this cancels the Order immediately
+// (cancelAbandonedOrder) instead of leaving it PENDING for the
 // order-expiration cron to clean up ORDER_EXPIRATION_MINUTES later. Guest
-// checkout means the order id in the URL is the only "auth" here, same
-// trust model as the success/tracking pages.
+// checkout means the high-entropy `token` in the URL is the only credential
+// here, same trust model as the success/tracking page.
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
 import { prisma } from '@/lib/server/prisma';
@@ -11,17 +12,26 @@ import { cancelAbandonedOrder } from '@/lib/server/orders/cancelAbandoned';
 
 export const runtime = 'nodejs';
 
+// Private order page — never indexed (§87/§125).
+export const metadata: Metadata = {
+  robots: { index: false, follow: false, nocache: true },
+};
+
 interface Params {
-  params: Promise<{ slug: string; orderId: string }>;
+  params: Promise<{ slug: string; token: string }>;
 }
 
 export default async function OrderFailedPage({ params }: Params) {
-  const { slug, orderId } = await params;
+  const { slug, token } = await params;
 
   // Best-effort — a DB hiccup here must never break rendering the page the
   // buyer is actively looking at. Worst case the cron catches it later.
   try {
-    await cancelAbandonedOrder(prisma, orderId);
+    const order = await prisma.order.findUnique({
+      where: { trackingToken: token },
+      select: { id: true },
+    });
+    if (order) await cancelAbandonedOrder(prisma, order.id);
   } catch {
     // swallow — see comment above
   }

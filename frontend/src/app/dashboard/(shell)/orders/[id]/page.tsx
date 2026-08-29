@@ -9,6 +9,7 @@ import { Icon } from '@/components/ui/Icon';
 import { Card } from '@/components/ui/Card';
 import { SellerHeader } from '@/components/seller/SellerHeader';
 import { StatusBadge, formatUsd, type SellerOrder } from '@/components/seller/OrdersTable';
+import { formatOrderNumber } from '@/lib/orderNumber';
 import { formatQuantityWithUnit } from '@/lib/productUnits';
 
 interface StatusEvent {
@@ -195,7 +196,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     className="mb-2 font-headings font-bold text-foreground"
                     style={{ fontSize: 'clamp(22px, 4vw, 30px)', letterSpacing: '-0.6px' }}
                   >
-                    Order #{order.id.slice(-8)}
+                    Order {formatOrderNumber(order.orderNumber)}
                   </h1>
                   <div className="flex items-center gap-2">
                     <StatusBadge status={order.status} />
