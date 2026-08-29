@@ -12,6 +12,8 @@ export interface CategoryOption {
   name: string;
   slug: string;
   sortOrder: number;
+  /** Phase 9b — optional emoji; only used by the storefront, not required here. */
+  icon?: string | null;
 }
 
 /** Seeded for every new store. Names only — slug/sortOrder are derived. */

@@ -29,6 +29,16 @@ function CartButton({ onClick }: { onClick: () => void }) {
   );
 }
 
+function AnnouncementStrip({ text }: { text: string | null }) {
+  const value = text?.trim();
+  if (!value) return null;
+  return (
+    <div className="bg-accent px-4 py-2 text-center text-xs font-semibold text-accent-foreground lg:px-14">
+      {value}
+    </div>
+  );
+}
+
 function StoreStatusBanner({ store }: { store: PublicStore }) {
   if (!store.acceptingOrders) {
     return (
@@ -68,6 +78,7 @@ export function StorefrontShell({ store }: { store: PublicStore }) {
   return (
     <CartProvider storeSlug={store.slug}>
       <div className="min-h-screen bg-background font-body">
+        <AnnouncementStrip text={store.announcement} />
         <StoreStatusBanner store={store} />
         <Template store={store} onOpenCart={() => setCartOpen(true)} />
         <footer className="border-t border-border px-4 py-6 text-center lg:px-14">

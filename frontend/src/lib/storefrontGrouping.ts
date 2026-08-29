@@ -59,3 +59,8 @@ export function groupProductsByCategory(
 export function sectionTitle(section: StorefrontSection): string {
   return section.category?.name ?? UNCATEGORIZED_TITLE;
 }
+
+/** Phase 9b — the category's emoji, if the seller set one. */
+export function sectionIcon(section: StorefrontSection): string | null {
+  return section.category?.icon?.trim() || null;
+}

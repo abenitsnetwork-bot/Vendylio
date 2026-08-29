@@ -17,6 +17,8 @@ export interface PublicCategory {
   name: string;
   slug: string;
   sortOrder: number;
+  /** Phase 9b — optional emoji shown before the name in nav + headings. */
+  icon: string | null;
 }
 
 export interface PublicProduct {
@@ -60,6 +62,8 @@ export interface PublicStore {
   deliveryProvider: string;
   pickupAddress: string | null;
   template: StoreTemplate;
+  /** Phase 9b — thin promo strip at the top of the storefront; null = none. */
+  announcement: string | null;
   // Phase 9 — storefront hero carousel. `images` empty = no hero (storefront
   // renders exactly as before). `headline`/`subhead` are one global promo
   // message overlaid on every slide.
@@ -113,6 +117,7 @@ export async function getPublicStore(slug: string): Promise<PublicStore | null> 
       deliveryProvider: true,
       pickupAddress: true,
       template: true,
+      announcement: true,
       heroImages: true,
       heroHeadline: true,
       heroSubhead: true,
@@ -122,7 +127,7 @@ export async function getPublicStore(slug: string): Promise<PublicStore | null> 
       hours: true,
       categories: {
         orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-        select: { id: true, name: true, slug: true, sortOrder: true },
+        select: { id: true, name: true, slug: true, sortOrder: true, icon: true },
       },
       products: {
         where: { status: 'ACTIVE' },

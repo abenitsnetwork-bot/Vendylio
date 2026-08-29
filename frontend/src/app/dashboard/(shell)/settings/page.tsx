@@ -31,6 +31,7 @@ interface StoreDetails {
   heroImages: string[];
   heroHeadline: string | null;
   heroSubhead: string | null;
+  announcement: string | null;
   timezone: string;
   ordersPaused: boolean;
   pauseMessage: string | null;

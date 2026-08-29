@@ -298,6 +298,19 @@ describe('PATCH /api/stores', () => {
     });
   });
 
+  it('updates the storefront announcement, and clears it with null', async () => {
+    mockResolveOwnStore.mockResolvedValue({ id: 'store-1', organizationId: 'org-1' } as never);
+    prismaMock.store.update.mockResolvedValue({ id: 'store-1' } as never);
+
+    await PATCH(makeReq('PATCH', { announcement: 'Free delivery over $30' }));
+    expect(prismaMock.store.update.mock.calls[0]?.[0]?.data).toMatchObject({
+      announcement: 'Free delivery over $30',
+    });
+
+    await PATCH(makeReq('PATCH', { announcement: null }));
+    expect(prismaMock.store.update.mock.calls[1]?.[0]?.data).toMatchObject({ announcement: null });
+  });
+
   it('400s on more than 3 hero images', async () => {
     mockResolveOwnStore.mockResolvedValue({ id: 'store-1', organizationId: 'org-1' } as never);
     const res = await PATCH(

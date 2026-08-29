@@ -102,6 +102,22 @@ describe('POST /api/categories', () => {
     });
   });
 
+  it('persists an emoji icon when supplied', async () => {
+    prismaMock.category.findFirst.mockResolvedValue({ sortOrder: 0 } as never);
+    prismaMock.category.create.mockResolvedValue({
+      id: 'c9',
+      name: 'Breads',
+      slug: 'breads',
+      icon: '🍞',
+      sortOrder: 1,
+    } as never);
+
+    const res = await POST(makeReq('POST', { name: 'Breads', icon: '🍞' }));
+    expect(res.status).toBe(201);
+    expect(prismaMock.category.create.mock.calls[0]?.[0]?.data).toMatchObject({ icon: '🍞' });
+    expect((await res.json()).category.icon).toBe('🍞');
+  });
+
   it('auto-suffixes the slug on a collision with an existing category', async () => {
     prismaMock.category.findFirst.mockResolvedValue(null);
     let attempt = 0;

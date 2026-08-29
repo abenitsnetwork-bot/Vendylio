@@ -8,7 +8,7 @@ import { Icon } from '@/components/ui/Icon';
 import { formatQuantityWithUnit } from '@/lib/productUnits';
 import { PriceTag } from '@/components/storefront/PriceTag';
 import { toAddableProduct } from '@/lib/productVariants';
-import { groupProductsByCategory, sectionTitle } from '@/lib/storefrontGrouping';
+import { groupProductsByCategory, sectionTitle, sectionIcon } from '@/lib/storefrontGrouping';
 import { useCart } from '@/contexts/CartContext';
 import { StoreReviews } from '@/components/storefront/StoreReviews';
 import { StorefrontCategoryNav } from '@/components/storefront/StorefrontCategoryNav';
@@ -82,7 +82,8 @@ export function ModernTemplate({
             <StorefrontCategoryNav sections={sections} />
             {sections.map((section) => (
               <section key={section.anchor} id={section.anchor} className="mb-12 scroll-mt-20">
-                <h2 className="mb-5 font-headings text-xl font-bold text-foreground">
+                <h2 className="mb-5 flex items-center gap-2 font-headings text-xl font-bold text-foreground">
+                  {sectionIcon(section) && <span aria-hidden="true">{sectionIcon(section)}</span>}
                   {sectionTitle(section)}
                 </h2>
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">

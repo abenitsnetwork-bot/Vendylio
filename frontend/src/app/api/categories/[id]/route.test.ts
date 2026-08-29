@@ -85,6 +85,30 @@ describe('PATCH /api/categories/[id]', () => {
     expect(res.status).toBe(200);
     expect(prismaMock.category.update.mock.calls[0]?.[0]?.data).toEqual({ sortOrder: 5 });
   });
+
+  it('updates the icon only, and clears it with an empty string', async () => {
+    prismaMock.category.findFirst.mockResolvedValue({
+      id: 'c1',
+      storeId: 'store-1',
+      name: 'Breads',
+      slug: 'breads',
+      icon: null,
+      sortOrder: 0,
+    } as never);
+    prismaMock.category.update.mockResolvedValue({
+      id: 'c1',
+      name: 'Breads',
+      slug: 'breads',
+      icon: '🍞',
+      sortOrder: 0,
+    } as never);
+
+    await PATCH(makeReq('PATCH', { icon: '🍞' }), params('c1'));
+    expect(prismaMock.category.update.mock.calls[0]?.[0]?.data).toEqual({ icon: '🍞' });
+
+    await PATCH(makeReq('PATCH', { icon: '   ' }), params('c1'));
+    expect(prismaMock.category.update.mock.calls[1]?.[0]?.data).toEqual({ icon: null });
+  });
 });
 
 describe('DELETE /api/categories/[id]', () => {

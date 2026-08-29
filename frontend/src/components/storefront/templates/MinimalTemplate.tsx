@@ -7,7 +7,7 @@ import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 import { Icon } from '@/components/ui/Icon';
 import { PriceTag } from '@/components/storefront/PriceTag';
 import { toAddableProduct } from '@/lib/productVariants';
-import { groupProductsByCategory, sectionTitle } from '@/lib/storefrontGrouping';
+import { groupProductsByCategory, sectionTitle, sectionIcon } from '@/lib/storefrontGrouping';
 import { useCart } from '@/contexts/CartContext';
 import { StoreReviews } from '@/components/storefront/StoreReviews';
 import { StorefrontCategoryNav } from '@/components/storefront/StorefrontCategoryNav';
@@ -72,7 +72,8 @@ export function MinimalTemplate({
             <StorefrontCategoryNav sections={sections} />
             {sections.map((section) => (
               <section key={section.anchor} id={section.anchor} className="mb-10 scroll-mt-20">
-                <h2 className="mb-2 font-headings text-lg font-bold text-foreground">
+                <h2 className="mb-2 flex items-center gap-2 font-headings text-lg font-bold text-foreground">
+                  {sectionIcon(section) && <span aria-hidden="true">{sectionIcon(section)}</span>}
                   {sectionTitle(section)}
                 </h2>
                 <div className="divide-y divide-border border-t border-border">

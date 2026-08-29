@@ -10,6 +10,7 @@ interface Category {
   id: string;
   name: string;
   slug: string;
+  icon: string | null;
   sortOrder: number;
   productCount: number;
 }
@@ -18,6 +19,7 @@ export function CategoryManager() {
   const [categories, setCategories] = useState<Category[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
+  const [newIcon, setNewIcon] = useState('');
   const [adding, setAdding] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -41,13 +43,33 @@ export function CategoryManager() {
     setAdding(true);
     setError(null);
     try {
-      await api('/api/categories', { method: 'POST', body: { name } });
+      await api('/api/categories', {
+        method: 'POST',
+        body: { name, icon: newIcon.trim() || null },
+      });
       setNewName('');
+      setNewIcon('');
       load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not add this category.');
     } finally {
       setAdding(false);
+    }
+  }
+
+  async function onSetIcon(id: string, raw: string) {
+    const icon = raw.trim();
+    const current = categories?.find((c) => c.id === id)?.icon ?? '';
+    if (icon === current) return;
+    setBusyId(id);
+    setError(null);
+    try {
+      await api(`/api/categories/${id}`, { method: 'PATCH', body: { icon: icon || null } });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not update the icon.');
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -159,6 +181,20 @@ export function CategoryManager() {
                 </button>
               </div>
 
+              <input
+                type="text"
+                maxLength={8}
+                aria-label={`Icon for ${cat.name}`}
+                defaultValue={cat.icon ?? ''}
+                disabled={busyId !== null}
+                onBlur={(e) => onSetIcon(cat.id, e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                }}
+                placeholder="🙂"
+                className="h-9 w-10 flex-shrink-0 rounded-lg border border-border bg-background text-center text-base"
+              />
+
               <div className="min-w-0 flex-1">
                 {editingId === cat.id ? (
                   <input
@@ -229,6 +265,15 @@ export function CategoryManager() {
 
       <div className="flex gap-2">
         <input
+          type="text"
+          maxLength={8}
+          aria-label="Icon for the new category"
+          placeholder="🙂"
+          value={newIcon}
+          onChange={(e) => setNewIcon(e.target.value)}
+          className="h-10 w-12 flex-shrink-0 rounded-lg border border-border bg-background text-center text-base"
+        />
+        <input
           className={`${inputClass} text-sm`}
           placeholder="New category name"
           value={newName}
@@ -246,6 +291,9 @@ export function CategoryManager() {
           Add
         </button>
       </div>
+      <p className="mt-2 text-xs text-muted-foreground">
+        The optional icon shows before the category name on your storefront.
+      </p>
     </Card>
   );
 }

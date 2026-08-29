@@ -25,9 +25,10 @@ interface RouteCtx {
 const PatchBody = z
   .object({
     name: z.string().trim().min(1).max(60).optional(),
+    icon: z.string().trim().max(16).nullable().optional(),
     sortOrder: z.number().int().min(0).optional(),
   })
-  .refine((d) => d.name !== undefined || d.sortOrder !== undefined, {
+  .refine((d) => d.name !== undefined || d.icon !== undefined || d.sortOrder !== undefined, {
     message: 'Nothing to update.',
   });
 
@@ -80,6 +81,12 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<NextRespon
         });
       });
     }
+    if (parsed.data.icon !== undefined) {
+      updated = await prisma.category.update({
+        where: { id: category.id },
+        data: { icon: parsed.data.icon?.trim() || null },
+      });
+    }
     if (parsed.data.sortOrder !== undefined) {
       updated = await prisma.category.update({
         where: { id: category.id },
@@ -93,6 +100,7 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<NextRespon
           id: updated.id,
           name: updated.name,
           slug: updated.slug,
+          icon: updated.icon,
           sortOrder: updated.sortOrder,
         },
       },

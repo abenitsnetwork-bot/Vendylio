@@ -18,6 +18,8 @@ import { makeRequestContext, withRequestContext } from '@/lib/server/observabili
 
 const Body = z.object({
   name: z.string().trim().min(1).max(60),
+  // Phase 9b — optional emoji shown before the name on the storefront.
+  icon: z.string().trim().max(16).nullable().optional(),
 });
 
 function noStore(requestId: string): NextResponse {
@@ -43,6 +45,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         id: true,
         name: true,
         slug: true,
+        icon: true,
         sortOrder: true,
         _count: { select: { products: true } },
       },
@@ -54,6 +57,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           id: c.id,
           name: c.name,
           slug: c.slug,
+          icon: c.icon,
           sortOrder: c.sortOrder,
           productCount: c._count.products,
         })),
@@ -97,6 +101,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           storeId: store.id,
           name: parsed.data.name,
           slug: candidate,
+          icon: parsed.data.icon?.trim() || null,
           sortOrder: nextSortOrder,
         },
       });
@@ -105,7 +110,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const c = created!;
     return NextResponse.json(
       {
-        category: { id: c.id, name: c.name, slug: c.slug, sortOrder: c.sortOrder, productCount: 0 },
+        category: {
+          id: c.id,
+          name: c.name,
+          slug: c.slug,
+          icon: c.icon,
+          sortOrder: c.sortOrder,
+          productCount: 0,
+        },
       },
       { status: 201, headers: { 'x-request-id': ctx.requestId } },
     );

@@ -107,6 +107,8 @@ const PatchBody = z.object({
   heroImages: z.array(z.string().url()).max(HERO_MAX).optional(),
   heroHeadline: z.string().trim().max(80).nullable().optional(),
   heroSubhead: z.string().trim().max(160).nullable().optional(),
+  // Phase 9b — thin promo strip at the top of the storefront.
+  announcement: z.string().trim().max(140).nullable().optional(),
   // Informational opening hours. One entry per open window; a day with no
   // entry is closed. `close` must be after `open` (no overnight windows in V1).
   hours: z

@@ -553,6 +553,11 @@ model Store {
   heroImages               Json         @default("[]")
   heroHeadline             String?
   heroSubhead              String?
+  // Phase 9b — a thin, always-visible promo strip at the very top of the
+  // storefront ("Free delivery over $30", "10% off this week"). Distinct
+  // from the hero (which is images + a headline) and from `pauseMessage`
+  // (which only shows while `ordersPaused`). Null / empty = no strip.
+  announcement             String?
   createdAt                DateTime     @default(now())
   updatedAt                DateTime     @updatedAt
 
@@ -576,6 +581,10 @@ model Category {
   store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   name      String
   slug      String
+  // Phase 9b — optional emoji shown before the name in the storefront
+  // category nav + section headings (the "🍞 Breads" pills in the mockup).
+  // Free text, capped at the zod layer; null = no icon.
+  icon      String?
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

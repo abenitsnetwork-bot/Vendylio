@@ -1,7 +1,7 @@
 'use client';
 
 import type { StorefrontSection } from '@/lib/storefrontGrouping';
-import { sectionTitle } from '@/lib/storefrontGrouping';
+import { sectionTitle, sectionIcon } from '@/lib/storefrontGrouping';
 
 /**
  * Sticky pill row for jumping between category sections on the storefront.
@@ -22,8 +22,13 @@ export function StorefrontCategoryNav({ sections }: { sections: StorefrontSectio
           <li key={section.anchor}>
             <a
               href={`#${section.anchor}`}
-              className="inline-block rounded-full border border-border bg-card px-4 py-2 text-xs font-semibold text-foreground shadow-sm transition-colors hover:border-primary hover:bg-secondary"
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-4 py-2 text-xs font-semibold text-foreground shadow-sm transition-colors hover:border-primary hover:bg-secondary"
             >
+              {sectionIcon(section) && (
+                <span aria-hidden="true" className="text-sm leading-none">
+                  {sectionIcon(section)}
+                </span>
+              )}
               {sectionTitle(section)}
             </a>
           </li>

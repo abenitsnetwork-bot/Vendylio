@@ -7,7 +7,7 @@ import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 import { Icon } from '@/components/ui/Icon';
 import { PriceTag } from '@/components/storefront/PriceTag';
 import { toAddableProduct } from '@/lib/productVariants';
-import { groupProductsByCategory, sectionTitle } from '@/lib/storefrontGrouping';
+import { groupProductsByCategory, sectionTitle, sectionIcon } from '@/lib/storefrontGrouping';
 import { useCart } from '@/contexts/CartContext';
 import { StoreReviews } from '@/components/storefront/StoreReviews';
 import { StorefrontCategoryNav } from '@/components/storefront/StorefrontCategoryNav';
@@ -85,9 +85,10 @@ export function BoldTemplate({
             {sections.map((section) => (
               <section key={section.anchor} id={section.anchor} className="mb-16 scroll-mt-20">
                 <h2
-                  className="mb-6 font-headings font-bold text-foreground"
+                  className="mb-6 flex items-center gap-3 font-headings font-bold text-foreground"
                   style={{ fontSize: 'clamp(24px, 4vw, 34px)', letterSpacing: '-1px' }}
                 >
+                  {sectionIcon(section) && <span aria-hidden="true">{sectionIcon(section)}</span>}
                   {sectionTitle(section)}
                 </h2>
                 <div className="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-4">
