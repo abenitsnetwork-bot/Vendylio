@@ -289,6 +289,29 @@ describe('POST /api/webhooks/stripe', () => {
     );
   });
 
+  it('does NOT fulfil when session.amount_total disagrees with order.amount (financial-integrity gate)', async () => {
+    orderFindFirst.mockResolvedValueOnce(PAID_ORDER); // order.amount = 3600
+    const { POST } = await import('./route');
+    const { req } = stripeFixtureRequest({ amountTotal: 9999 });
+    const res = await POST(req);
+
+    expect(res.status).toBe(200); // acknowledged so Stripe stops retrying
+    expect(orderUpdate).not.toHaveBeenCalled(); // order stays PENDING
+    expect(applyStockChange).not.toHaveBeenCalled();
+    expect(outboxCreate).not.toHaveBeenCalled();
+  });
+
+  it('does NOT fulfil when session.payment_status is not "paid" (financial-integrity gate)', async () => {
+    orderFindFirst.mockResolvedValueOnce(PAID_ORDER);
+    const { POST } = await import('./route');
+    const { req } = stripeFixtureRequest({ paymentStatus: 'unpaid' });
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+    expect(orderUpdate).not.toHaveBeenCalled();
+    expect(outboxCreate).not.toHaveBeenCalled();
+  });
+
   it('is a no-op when the Order is already past PENDING (defense-in-depth alongside WebhookLog dedup)', async () => {
     orderFindFirst.mockResolvedValueOnce({ ...PAID_ORDER, status: 'PAID' });
     const { POST } = await import('./route');

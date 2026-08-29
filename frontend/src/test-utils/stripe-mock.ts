@@ -20,6 +20,7 @@ export interface StripeFixtureOpts {
   amountTotal?: number;
   customerEmail?: string | null;
   paymentMethodTypes?: string[];
+  paymentStatus?: string;
   webhookSecret?: string;
   eventId?: string;
 }
@@ -42,7 +43,7 @@ export function stripeFixture(opts: StripeFixtureOpts = {}): {
         amount_total: opts.amountTotal ?? 3600,
         customer_email: opts.customerEmail ?? null,
         payment_method_types: opts.paymentMethodTypes ?? ['card'],
-        payment_status: 'paid',
+        payment_status: opts.paymentStatus ?? 'paid',
       },
     },
   } as unknown as Stripe.Event;
