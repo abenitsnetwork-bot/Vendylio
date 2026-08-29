@@ -35,7 +35,7 @@ export function ReviewsTable({
         <div
           key={review.id}
           className={`rounded-lg border p-4 ${
-            review.visible ? 'border-border' : 'border-border bg-secondary opacity-70'
+            review.visible ? 'border-border bg-card' : 'border-border bg-secondary opacity-70'
           }`}
         >
           <div className="mb-2 flex items-center justify-between gap-3">

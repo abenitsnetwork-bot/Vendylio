@@ -78,7 +78,7 @@ export function OrdersTable({ orders }: { orders: SellerOrder[] }) {
         <Link
           key={order.id}
           href={`/dashboard/orders/${order.id}`}
-          className="flex items-center justify-between gap-4 rounded-lg border border-border p-4 hover:border-primary"
+          className="flex items-center justify-between gap-4 rounded-lg border border-border bg-card p-4 hover:border-primary"
         >
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-foreground">
