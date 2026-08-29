@@ -1,17 +1,25 @@
 import { prismaMock } from '@/test-utils/prisma-mock';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { getLandingPageContent } from './landing';
+import { getLandingPageContent, getPublishedSellerCount } from './landing';
 
 beforeEach(() => {
   vi.clearAllMocks();
   prismaMock.siteImage.findMany.mockResolvedValue([]);
   prismaMock.testimonial.findMany.mockResolvedValue([]);
+  prismaMock.store.count.mockResolvedValue(0);
 });
 
 describe('getLandingPageContent', () => {
   it('returns an empty images map and empty testimonials when nothing is set', async () => {
     const result = await getLandingPageContent();
-    expect(result).toEqual({ images: {}, testimonials: [] });
+    expect(result).toEqual({ images: {}, testimonials: [], sellerCount: 0 });
+  });
+
+  it('includes a live published-store count', async () => {
+    prismaMock.store.count.mockResolvedValueOnce(1234 as never);
+    const result = await getLandingPageContent();
+    expect(result.sellerCount).toBe(1234);
+    expect(prismaMock.store.count).toHaveBeenCalledWith({ where: { published: true } });
   });
 
   it('keys the images map by SiteImage.key', async () => {
@@ -57,5 +65,13 @@ describe('getLandingPageContent', () => {
         rating: 5,
       },
     ]);
+  });
+});
+
+describe('getPublishedSellerCount', () => {
+  it('counts only published stores', async () => {
+    prismaMock.store.count.mockResolvedValueOnce(42 as never);
+    await expect(getPublishedSellerCount()).resolves.toBe(42);
+    expect(prismaMock.store.count).toHaveBeenCalledWith({ where: { published: true } });
   });
 });

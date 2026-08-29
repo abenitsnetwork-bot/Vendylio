@@ -22,6 +22,14 @@ export interface LandingPageContent {
    * yet — callers fall back to their own placeholder. */
   images: Partial<Record<SiteImageKey, LandingImage>>;
   testimonials: LandingTestimonial[];
+  /** Live count of published stores — drives the social-proof element via
+   * `sellerProof()` (hidden entirely below MIN_SELLERS_FOR_PROOF). */
+  sellerCount: number;
+}
+
+/** Public, unauthenticated: number of published storefronts. */
+export function getPublishedSellerCount(): Promise<number> {
+  return prisma.store.count({ where: { published: true } });
 }
 
 /**
@@ -34,7 +42,7 @@ export interface LandingPageContent {
 export async function getLandingPageContent(): Promise<LandingPageContent> {
   const knownKeys = SITE_IMAGE_KEYS.map((k) => k.key);
 
-  const [imageRows, testimonialRows] = await Promise.all([
+  const [imageRows, testimonialRows, sellerCount] = await Promise.all([
     prisma.siteImage.findMany({
       where: { key: { in: knownKeys } },
       select: { key: true, url: true, altText: true },
@@ -52,6 +60,7 @@ export async function getLandingPageContent(): Promise<LandingPageContent> {
         rating: true,
       },
     }),
+    getPublishedSellerCount(),
   ]);
 
   const images: Partial<Record<SiteImageKey, LandingImage>> = {};
@@ -59,5 +68,5 @@ export async function getLandingPageContent(): Promise<LandingPageContent> {
     images[row.key as SiteImageKey] = { url: row.url, altText: row.altText };
   }
 
-  return { images, testimonials: testimonialRows };
+  return { images, testimonials: testimonialRows, sellerCount };
 }

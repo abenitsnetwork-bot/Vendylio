@@ -2,10 +2,13 @@ import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 import type { LandingImage } from '@/lib/server/landing';
+import { sellerProof } from '@/lib/marketing/socialProof';
 
 interface HeroSectionProps {
   showcaseImage?: LandingImage | undefined;
   productImage?: LandingImage | undefined;
+  /** Live count of published stores. */
+  sellerCount: number;
 }
 
 /** Curved "TRUSTED BY SELLERS" badge arcing over a center arrow — the
@@ -68,7 +71,8 @@ function StoreThemeCard() {
   );
 }
 
-export function HeroSection({ showcaseImage, productImage }: HeroSectionProps) {
+export function HeroSection({ showcaseImage, productImage, sellerCount }: HeroSectionProps) {
+  const proof = sellerProof(sellerCount);
   return (
     <section className="bg-background px-4 pb-16 pt-8 font-body lg:px-14 lg:pt-12">
       <div className="mx-auto max-w-7xl">
@@ -81,7 +85,13 @@ export function HeroSection({ showcaseImage, productImage }: HeroSectionProps) {
             {/* Copy (light side) */}
             <div className="relative z-10 flex flex-col justify-center px-1 py-8 lg:px-4 lg:py-16 lg:pr-16">
               <p className="mb-4 text-xs font-bold uppercase tracking-[0.15em] text-foreground">
-                Join <span className="text-accent">1,200+</span> sellers already selling
+                {proof.show ? (
+                  <>
+                    Join <span className="text-accent">{proof.label}</span> sellers already selling
+                  </>
+                ) : (
+                  'Your storefront, live in minutes'
+                )}
               </p>
               <h1
                 className="mb-5 font-headings font-bold leading-[0.95] text-foreground"
@@ -171,23 +181,25 @@ export function HeroSection({ showcaseImage, productImage }: HeroSectionProps) {
 
           {/* Floating cards straddling the seam — desktop only, siblings of
            * the clipped box above so they can spill past its bottom edge. */}
-          <div
-            className="absolute bottom-10 z-20 hidden rounded-2xl bg-panel px-5 py-4 text-panel-foreground shadow-xl lg:block"
-            style={{ left: '41%' }}
-          >
-            <p className="font-headings text-2xl font-bold">1,200+</p>
-            <p className="mb-2 text-xs opacity-80">Happy Sellers</p>
-            <div className="flex -space-x-2">
-              {['A', 'F', 'K', 'M'].map((letter) => (
-                <div
-                  key={letter}
-                  className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-panel bg-accent text-[10px] font-bold text-accent-foreground"
-                >
-                  {letter}
-                </div>
-              ))}
+          {proof.show && (
+            <div
+              className="absolute bottom-10 z-20 hidden rounded-2xl bg-panel px-5 py-4 text-panel-foreground shadow-xl lg:block"
+              style={{ left: '41%' }}
+            >
+              <p className="font-headings text-2xl font-bold">{proof.label}</p>
+              <p className="mb-2 text-xs opacity-80">Happy Sellers</p>
+              <div className="flex -space-x-2">
+                {['A', 'F', 'K', 'M'].map((letter) => (
+                  <div
+                    key={letter}
+                    className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-panel bg-accent text-[10px] font-bold text-accent-foreground"
+                  >
+                    {letter}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="absolute -bottom-10 left-6 z-20 hidden w-80 items-center gap-4 rounded-2xl border border-border bg-card p-4 shadow-xl lg:flex">
             {productImage ? (

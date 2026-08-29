@@ -1,6 +1,12 @@
 import { PublicNavBar } from '@/components/marketing/PublicNavBar';
 import { RegistrationForm } from '@/components/auth/RegistrationForm';
 import { Icon, type IconName } from '@/components/ui/Icon';
+import { getPublishedSellerCount } from '@/lib/server/landing';
+import { sellerProof } from '@/lib/marketing/socialProof';
+
+// Reads a live DB count — keep it out of the static build (mirrors app/page.tsx).
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
 const BENEFITS: { icon: IconName; title: string; desc: string }[] = [
   {
@@ -27,7 +33,8 @@ const BENEFITS: { icon: IconName; title: string; desc: string }[] = [
 
 const REGIONS = ['Maryland', 'Texas', 'California', 'Minnesota'];
 
-export default function RegisterPage() {
+export default async function RegisterPage() {
+  const proof = sellerProof(await getPublishedSellerCount());
   return (
     <div className="bg-background font-body">
       <PublicNavBar />
@@ -42,7 +49,9 @@ export default function RegisterPage() {
               Create your account
             </h1>
             <p className="text-base text-muted-foreground">
-              Join 1,200+ sellers in the African diaspora. Open your store in 5 minutes.
+              {proof.show
+                ? `Join ${proof.label} sellers already on Vendylio. Open your store in 5 minutes.`
+                : 'Open your store in 5 minutes. No code, no monthly fee.'}
             </p>
           </div>
           <RegistrationForm />

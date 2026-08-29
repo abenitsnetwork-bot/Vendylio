@@ -21,12 +21,16 @@ import { TestimonialSection } from '@/components/marketing/TestimonialSection';
 import { CtaFooter } from '@/components/marketing/CtaFooter';
 
 export default async function HomePage() {
-  const { images, testimonials } = await getLandingPageContent();
+  const { images, testimonials, sellerCount } = await getLandingPageContent();
 
   return (
     <div className="bg-background font-body">
       <PublicNavBar />
-      <HeroSection showcaseImage={images.hero_showcase} productImage={images.hero_product} />
+      <HeroSection
+        showcaseImage={images.hero_showcase}
+        productImage={images.hero_product}
+        sellerCount={sellerCount}
+      />
       <HowItWorksSection />
       <FeaturesSection images={images} />
       <TestimonialSection testimonials={testimonials} />
