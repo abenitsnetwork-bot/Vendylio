@@ -2,8 +2,8 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { Icon } from '@/components/ui/Icon';
 import { AccountMenu } from '@/components/seller/AccountMenu';
+import { NotificationBell } from '@/components/seller/NotificationBell';
 
 /** Shared header for authenticated /dashboard/* pages — logo, notifications,
  * and the account dropdown (profile, settings, billing, security, sign out). */
@@ -33,13 +33,7 @@ export function SellerHeader({
         <img src="/vendylio-logo.svg" alt="Vendylio" className="h-7 w-auto" />
       </Link>
       <div className="flex items-center gap-6">
-        <button
-          type="button"
-          className="flex items-center gap-2 text-muted-foreground"
-          aria-label="Notifications"
-        >
-          <Icon i="bell" size={18} />
-        </button>
+        <NotificationBell />
         <div ref={ref} className="relative">
           <button
             type="button"
