@@ -39,8 +39,8 @@ export function BoldTemplate({
 
       <StorefrontHero hero={store.hero} storeName={store.name} />
 
-      <header className="rounded-b-[2rem] bg-primary px-4 py-16 text-primary-foreground lg:rounded-b-[3rem] lg:px-14">
-        <div className="mx-auto flex max-w-7xl flex-col items-start gap-4">
+      <header className="rounded-b-[2rem] bg-primary px-4 py-12 text-primary-foreground sm:px-6 sm:py-16 lg:rounded-b-[3rem] lg:px-10 xl:px-12">
+        <div className="flex w-full flex-col items-start gap-3 sm:gap-4">
           {store.logoUrl ? (
             <img
               src={store.logoUrl}
@@ -65,7 +65,7 @@ export function BoldTemplate({
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-14 lg:px-14">
+      <main className="w-full px-3 py-8 sm:px-5 sm:py-12 lg:px-8 xl:px-10">
         {store.products.length === 0 ? (
           <div className="py-20 text-center">
             <ImagePlaceholder icon="package" className="mx-auto mb-4 h-16 w-16 rounded-full" />
@@ -89,7 +89,7 @@ export function BoldTemplate({
                   {sectionIcon(section) && <span aria-hidden="true">{sectionIcon(section)}</span>}
                   {sectionTitle(section)}
                 </h2>
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
                   {section.products.map((product) => {
                     const hasVariants = product.variants.length > 0;
                     const addable = toAddableProduct(product, product.variants[0]?.id ?? null);

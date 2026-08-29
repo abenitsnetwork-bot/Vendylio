@@ -46,7 +46,7 @@ export function StorefrontUtilityBar({
 
   return (
     <div className="bg-panel text-panel-foreground">
-      <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between lg:px-14">
+      <div className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-5 lg:px-8 xl:px-10">
         {acceptingOrders ? (
           <div
             role="radiogroup"

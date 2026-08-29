@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Field, inputClass } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
-import { Icon } from '@/components/ui/Icon';
+import { Icon, type IconName } from '@/components/ui/Icon';
 import { CartProvider, useCart } from '@/contexts/CartContext';
 import { formatUsdPerUnit, formatQuantityWithUnit } from '@/lib/productUnits';
 import { guestCsrfHeaderValue } from '@/lib/guestCsrf';
@@ -20,6 +20,57 @@ interface OrderErrorBody {
 }
 
 type PaymentMethod = 'card' | 'cashapp' | 'zelle';
+
+/** A colourful radio option row — a branded icon chip on the left, a custom
+ * dot on the right, tinted card when selected. Shared by the Fulfillment
+ * and Payment Method groups. */
+function OptionCard({
+  name,
+  checked,
+  onSelect,
+  icon,
+  tone,
+  title,
+  subtitle,
+}: {
+  name: string;
+  checked: boolean;
+  onSelect: () => void;
+  icon: IconName;
+  /** brand-ish bg for the icon chip, e.g. "bg-primary", "bg-green-600" */
+  tone: string;
+  title: React.ReactNode;
+  subtitle?: React.ReactNode;
+}) {
+  return (
+    <label
+      className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition-colors ${
+        checked
+          ? 'border-primary bg-secondary shadow-sm'
+          : 'border-border hover:border-primary/50 hover:bg-secondary/40'
+      }`}
+    >
+      <input type="radio" name={name} checked={checked} onChange={onSelect} className="sr-only" />
+      <span
+        className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-white ${tone}`}
+      >
+        <Icon i={icon} size={16} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-foreground">{title}</span>
+        {subtitle && <span className="block text-xs text-muted-foreground">{subtitle}</span>}
+      </span>
+      <span
+        aria-hidden="true"
+        className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 ${
+          checked ? 'border-primary' : 'border-border'
+        }`}
+      >
+        {checked && <span className="h-2.5 w-2.5 rounded-full bg-primary" />}
+      </span>
+    </label>
+  );
+}
 
 function CheckoutFormInner({
   storeSlug,
@@ -323,42 +374,33 @@ function CheckoutFormInner({
           <div>
             <p className="mb-3 text-sm font-medium text-foreground">Fulfillment</p>
             <div className="space-y-2">
-              <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-border p-3 has-[:checked]:border-primary has-[:checked]:bg-secondary">
-                <input
-                  type="radio"
-                  name="fulfillmentMethod"
-                  checked={fulfillmentMethod === 'delivery'}
-                  onChange={() => setFulfillmentMethod('delivery')}
-                />
-                <Icon i="truck" size={16} className="text-muted-foreground" />
-                <span className="text-sm text-foreground">
-                  Delivery
-                  {deliveryProvider === 'uber_direct' ? (
-                    <span className="text-muted-foreground"> — priced by address</span>
-                  ) : (
-                    deliveryFeeCents > 0 && (
-                      <span className="text-muted-foreground">
-                        {' '}
-                        — {formatUsd(deliveryFeeCents)}
-                      </span>
-                    )
-                  )}
-                </span>
-              </label>
-              <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-border p-3 has-[:checked]:border-primary has-[:checked]:bg-secondary">
-                <input
-                  type="radio"
-                  name="fulfillmentMethod"
-                  checked={fulfillmentMethod === 'pickup'}
-                  onChange={() => setFulfillmentMethod('pickup')}
-                />
-                <Icon i="shopping-bag" size={16} className="text-muted-foreground" />
-                <span className="text-sm text-foreground">Pickup — Free</span>
-              </label>
+              <OptionCard
+                name="fulfillmentMethod"
+                checked={fulfillmentMethod === 'delivery'}
+                onSelect={() => setFulfillmentMethod('delivery')}
+                icon="truck"
+                tone="bg-primary"
+                title="Delivery"
+                subtitle={
+                  freeDelivery
+                    ? 'Free with your promo code'
+                    : deliveryProvider === 'uber_direct'
+                      ? 'Priced by address at checkout'
+                      : deliveryFeeCents > 0
+                        ? formatUsd(deliveryFeeCents)
+                        : 'Free'
+                }
+              />
+              <OptionCard
+                name="fulfillmentMethod"
+                checked={fulfillmentMethod === 'pickup'}
+                onSelect={() => setFulfillmentMethod('pickup')}
+                icon="shopping-bag"
+                tone="bg-accent"
+                title="Pickup"
+                subtitle={fulfillmentMethod === 'pickup' && pickupAddress ? pickupAddress : 'Free'}
+              />
             </div>
-            {fulfillmentMethod === 'pickup' && pickupAddress && (
-              <p className="mt-2 text-xs text-muted-foreground">Pickup at: {pickupAddress}</p>
-            )}
           </div>
 
           {fulfillmentMethod === 'delivery' && (
@@ -402,39 +444,36 @@ function CheckoutFormInner({
           <div>
             <p className="mb-3 text-sm font-medium text-foreground">Payment Method</p>
             <div className="space-y-2">
-              <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-border p-3 has-[:checked]:border-primary has-[:checked]:bg-secondary">
-                <input
-                  type="radio"
-                  name="paymentMethod"
-                  checked={paymentMethod === 'card'}
-                  onChange={() => setPaymentMethod('card')}
-                />
-                <Icon i="credit-card" size={16} className="text-muted-foreground" />
-                <span className="text-sm text-foreground">Card</span>
-              </label>
+              <OptionCard
+                name="paymentMethod"
+                checked={paymentMethod === 'card'}
+                onSelect={() => setPaymentMethod('card')}
+                icon="credit-card"
+                tone="bg-primary"
+                title="Card"
+                subtitle="Visa, Mastercard, Amex"
+              />
               {cashAppCashtag && (
-                <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-border p-3 has-[:checked]:border-primary has-[:checked]:bg-secondary">
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    checked={paymentMethod === 'cashapp'}
-                    onChange={() => setPaymentMethod('cashapp')}
-                  />
-                  <Icon i="phone" size={16} className="text-muted-foreground" />
-                  <span className="text-sm text-foreground">Cash App (${cashAppCashtag})</span>
-                </label>
+                <OptionCard
+                  name="paymentMethod"
+                  checked={paymentMethod === 'cashapp'}
+                  onSelect={() => setPaymentMethod('cashapp')}
+                  icon="dollar-sign"
+                  tone="bg-[#00d64f]"
+                  title="Cash App"
+                  subtitle={`$${cashAppCashtag}`}
+                />
               )}
               {zelleContact && (
-                <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-border p-3 has-[:checked]:border-primary has-[:checked]:bg-secondary">
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    checked={paymentMethod === 'zelle'}
-                    onChange={() => setPaymentMethod('zelle')}
-                  />
-                  <Icon i="phone" size={16} className="text-muted-foreground" />
-                  <span className="text-sm text-foreground">Zelle</span>
-                </label>
+                <OptionCard
+                  name="paymentMethod"
+                  checked={paymentMethod === 'zelle'}
+                  onSelect={() => setPaymentMethod('zelle')}
+                  icon="smartphone"
+                  tone="bg-[#6d1ed4]"
+                  title="Zelle"
+                  subtitle="Bank transfer"
+                />
               )}
             </div>
             {paymentMethod !== 'card' && (

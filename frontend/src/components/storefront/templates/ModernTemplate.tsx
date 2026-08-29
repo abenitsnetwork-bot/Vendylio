@@ -42,7 +42,7 @@ export function ModernTemplate({
 
       <StorefrontHero hero={store.hero} storeName={store.name} />
 
-      <main className="mx-auto max-w-7xl px-4 py-10 lg:px-14">
+      <main className="w-full px-3 py-6 sm:px-5 sm:py-8 lg:px-8 xl:px-10">
         {store.products.length === 0 ? (
           <div className="py-20 text-center">
             <ImagePlaceholder icon="package" className="mx-auto mb-4 h-16 w-16 rounded-full" />
@@ -63,7 +63,7 @@ export function ModernTemplate({
                   {sectionIcon(section) && <span aria-hidden="true">{sectionIcon(section)}</span>}
                   {sectionTitle(section)}
                 </h2>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7">
                   {section.products.map((product) => {
                     const hasVariants = product.variants.length > 0;
                     const addable = toAddableProduct(product, product.variants[0]?.id ?? null);

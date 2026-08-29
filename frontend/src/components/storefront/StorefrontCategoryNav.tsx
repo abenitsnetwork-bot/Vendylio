@@ -15,7 +15,7 @@ export function StorefrontCategoryNav({ sections }: { sections: StorefrontSectio
   return (
     <nav
       aria-label="Product categories"
-      className="sticky top-0 z-20 -mx-4 mb-6 overflow-x-auto border-b border-border bg-background/95 px-4 py-3 backdrop-blur lg:-mx-14 lg:px-14"
+      className="sticky top-0 z-20 -mx-3 mb-6 overflow-x-auto border-b border-border bg-background/95 px-3 py-3 backdrop-blur sm:-mx-5 sm:px-5 lg:-mx-8 lg:px-8 xl:-mx-10 xl:px-10"
     >
       <ul className="flex gap-2 whitespace-nowrap">
         {sections.map((section) => (

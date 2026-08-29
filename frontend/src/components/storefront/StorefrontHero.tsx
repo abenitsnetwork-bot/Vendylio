@@ -33,10 +33,10 @@ export function StorefrontHero({ hero, storeName }: { hero: StoreHero; storeName
     <section
       aria-label={`${storeName} — featured`}
       aria-roledescription="carousel"
-      className="mx-auto max-w-7xl px-4 pt-4 lg:px-14"
+      className="w-full px-0 pt-0 sm:px-5 sm:pt-4 lg:px-8 xl:px-10"
     >
-      <div className="relative overflow-hidden rounded-2xl bg-secondary">
-        <div className="relative aspect-[4/3] w-full sm:aspect-[2/1] lg:aspect-[21/9]">
+      <div className="relative overflow-hidden bg-secondary sm:rounded-2xl">
+        <div className="relative aspect-[3/2] w-full sm:aspect-[2/1] lg:aspect-[24/9]">
           {images.map((src, i) => (
             <img
               key={src}

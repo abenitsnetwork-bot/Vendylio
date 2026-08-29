@@ -6,11 +6,9 @@ import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 import { useCart } from '@/contexts/CartContext';
 
 /** Shared header used by all three storefront templates and the product
- * detail page — logo + store identity (name / location) link home, an
- * optional live search box (product listing pages pass one; the detail page
- * doesn't need it), and a cart button reflecting the real cart count. The
- * optional `description` shows as a thin line beneath on sm+ so the main
- * templates don't need a second store-info block. */
+ * detail page. Mobile-first: on a phone the search box drops to its own
+ * full-width row beneath the logo/cart row; from `sm` up it sits inline.
+ * `location` shows beside the name, `description` as a thin line beneath. */
 export function StorefrontHeader({
   storeSlug,
   storeName,
@@ -32,23 +30,40 @@ export function StorefrontHeader({
 }) {
   const { itemCount } = useCart();
 
+  const searchBox = onSearchChange ? (
+    <div className="relative w-full">
+      <Icon
+        i="search"
+        size={15}
+        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+      />
+      <input
+        value={searchQuery ?? ''}
+        onChange={(e) => onSearchChange(e.target.value)}
+        placeholder="Search products…"
+        aria-label="Search products"
+        className="w-full rounded-full border border-border bg-background py-2 pl-9 pr-3 text-sm text-foreground"
+      />
+    </div>
+  ) : null;
+
   return (
-    <header className="border-b border-border bg-card px-4 py-3 lg:px-14">
-      <div className="mx-auto flex max-w-7xl items-center gap-4">
+    <header className="border-b border-border bg-card px-3 py-3 sm:px-5 lg:px-8 xl:px-10">
+      <div className="flex items-center gap-3 sm:gap-4">
         <Link href={`/s/${storeSlug}`} className="flex min-w-0 flex-shrink-0 items-center gap-3">
           {logoUrl ? (
             <img
               src={logoUrl}
               alt={storeName}
-              className="h-14 w-14 rounded-xl object-cover"
+              className="h-12 w-12 rounded-xl object-cover sm:h-14 sm:w-14"
               width={56}
               height={56}
             />
           ) : (
-            <ImagePlaceholder icon="store" className="h-14 w-14 rounded-xl" />
+            <ImagePlaceholder icon="store" className="h-12 w-12 rounded-xl sm:h-14 sm:w-14" />
           )}
           <span className="min-w-0">
-            <span className="block truncate font-headings text-lg font-bold text-foreground">
+            <span className="block truncate font-headings text-base font-bold text-foreground sm:text-lg">
               {storeName}
             </span>
             {location && (
@@ -57,29 +72,14 @@ export function StorefrontHeader({
           </span>
         </Link>
 
-        {onSearchChange && (
-          <div className="relative ml-auto hidden max-w-xs flex-1 sm:block">
-            <Icon
-              i="search"
-              size={15}
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-            />
-            <input
-              value={searchQuery ?? ''}
-              onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Search products…"
-              aria-label="Search products"
-              className="w-full rounded-full border border-border bg-background py-2 pl-9 pr-3 text-sm text-foreground"
-            />
-          </div>
-        )}
+        {searchBox && <div className="ml-auto hidden max-w-xs flex-1 sm:block">{searchBox}</div>}
 
         <button
           type="button"
           onClick={onOpenCart}
           aria-label="Open cart"
           className={`relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-border text-foreground ${
-            onSearchChange ? '' : 'ml-auto'
+            searchBox ? '' : 'ml-auto'
           }`}
         >
           <Icon i="shopping-bag" size={18} />
@@ -91,10 +91,11 @@ export function StorefrontHeader({
         </button>
       </div>
 
+      {/* Mobile-only search row */}
+      {searchBox && <div className="mt-2.5 sm:hidden">{searchBox}</div>}
+
       {description && (
-        <p className="mx-auto mt-2 hidden max-w-7xl truncate text-xs text-muted-foreground sm:block">
-          {description}
-        </p>
+        <p className="mt-2 hidden truncate text-xs text-muted-foreground sm:block">{description}</p>
       )}
     </header>
   );
