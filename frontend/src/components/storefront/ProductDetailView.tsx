@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { PublicProduct, PublicStoreHeader } from '@/lib/server/storefront';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
-import { formatUsdPerUnit, formatQuantityWithUnit } from '@/lib/productUnits';
+import { formatQuantityWithUnit } from '@/lib/productUnits';
+import { PriceTag } from '@/components/storefront/PriceTag';
 import { toAddableProduct } from '@/lib/productVariants';
 import { useCart } from '@/contexts/CartContext';
 import { StorefrontTopBar } from '@/components/storefront/StorefrontTopBar';
@@ -88,9 +89,11 @@ export function ProductDetailView({
             </p>
           )}
 
-          <p className="mb-6 font-headings text-2xl font-bold text-foreground">
-            {formatUsdPerUnit(addable.priceCents, product.unit)}
-          </p>
+          <PriceTag
+            cents={addable.priceCents}
+            unit={product.unit}
+            className="mb-6 block font-headings text-3xl font-bold text-foreground"
+          />
 
           {hasVariants && (
             <div className="mb-6">

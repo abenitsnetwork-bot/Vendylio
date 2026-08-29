@@ -41,6 +41,23 @@ export function formatUsdPerUnit(cents: number, unit: string): string {
   return `$${(cents / 100).toFixed(2)}${productUnitSuffix(unit)}`;
 }
 
+/**
+ * Same price, split for a two-size display — the storefront renders `.cents`
+ * smaller and raised (see components/storefront/PriceTag). `dollars`
+ * includes the "$"; `cents` is always 2 digits; `suffix` is "/kg" etc. or "".
+ */
+export function splitUsdPerUnit(
+  cents: number,
+  unit: string,
+): { dollars: string; cents: string; suffix: string } {
+  const safe = Math.max(0, Math.round(cents));
+  return {
+    dollars: `$${Math.floor(safe / 100)}`,
+    cents: String(safe % 100).padStart(2, '0'),
+    suffix: productUnitSuffix(unit),
+  };
+}
+
 /** "2" for UNIT, "12.09 lb" for a weight unit (always 2 decimals so a
  * float-arithmetic artifact like 12.0899999999999 never reaches the UI) —
  * used wherever a cart/order line shows how much of something was ordered. */

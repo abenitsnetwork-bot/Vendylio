@@ -4,7 +4,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import type { PublicStore } from '@/lib/server/storefront';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
-import { formatUsdPerUnit } from '@/lib/productUnits';
+import { Icon } from '@/components/ui/Icon';
+import { PriceTag } from '@/components/storefront/PriceTag';
 import { toAddableProduct } from '@/lib/productVariants';
 import { groupProductsByCategory, sectionTitle } from '@/lib/storefrontGrouping';
 import { useCart } from '@/contexts/CartContext';
@@ -40,7 +41,7 @@ export function BoldTemplate({
 
       <StorefrontHero hero={store.hero} storeName={store.name} />
 
-      <header className="bg-primary px-4 py-16 text-primary-foreground lg:px-14">
+      <header className="rounded-b-[2rem] bg-primary px-4 py-16 text-primary-foreground lg:rounded-b-[3rem] lg:px-14">
         <div className="mx-auto flex max-w-6xl flex-col items-start gap-4">
           {store.logoUrl ? (
             <img
@@ -125,25 +126,28 @@ export function BoldTemplate({
                             {product.description}
                           </p>
                         )}
-                        <div className="mt-auto flex flex-col gap-2 pt-1">
-                          <p className="font-headings text-lg font-bold text-foreground">
-                            {formatUsdPerUnit(addable.priceCents, product.unit)}
-                          </p>
+                        <div className="mt-auto flex items-end justify-between gap-2 pt-1">
+                          <PriceTag
+                            cents={addable.priceCents}
+                            unit={product.unit}
+                            className="font-headings text-xl font-bold text-foreground"
+                          />
                           {hasVariants ? (
                             <Link
                               href={`/s/${store.slug}/products/${product.id}`}
-                              className="w-full rounded-lg border border-border py-2 text-center text-xs font-semibold text-foreground"
+                              className="flex-shrink-0 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-foreground"
                             >
-                              View Options
+                              Options
                             </Link>
                           ) : (
                             <button
                               type="button"
                               disabled={soldOut}
                               onClick={() => addItem(addable)}
-                              className="w-full rounded-lg bg-primary py-2 text-xs font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                              aria-label={soldOut ? 'Sold out' : `Add ${product.name} to cart`}
+                              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
                             >
-                              {soldOut ? 'Sold out' : 'Add to Cart'}
+                              <Icon i="plus" size={20} />
                             </button>
                           )}
                         </div>

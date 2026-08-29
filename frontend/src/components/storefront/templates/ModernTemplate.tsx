@@ -4,7 +4,9 @@ import { useState } from 'react';
 import Link from 'next/link';
 import type { PublicStore } from '@/lib/server/storefront';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
-import { formatUsdPerUnit, formatQuantityWithUnit } from '@/lib/productUnits';
+import { Icon } from '@/components/ui/Icon';
+import { formatQuantityWithUnit } from '@/lib/productUnits';
+import { PriceTag } from '@/components/storefront/PriceTag';
 import { toAddableProduct } from '@/lib/productVariants';
 import { groupProductsByCategory, sectionTitle } from '@/lib/storefrontGrouping';
 import { useCart } from '@/contexts/CartContext';
@@ -118,33 +120,36 @@ export function ModernTemplate({
                               {product.name}
                             </p>
                           </Link>
-                          <div className="mb-2 mt-1 flex items-baseline justify-between gap-1">
-                            <p className="font-headings text-base font-bold text-foreground">
-                              {formatUsdPerUnit(addable.priceCents, product.unit)}
+                          {!soldOut && !hasVariants && addable.quantity <= 5 && (
+                            <p className="mt-0.5 text-[10px] font-medium text-amber-600">
+                              Only {formatQuantityWithUnit(addable.quantity, product.unit)} left
                             </p>
-                            {!soldOut && !hasVariants && addable.quantity <= 5 && (
-                              <span className="text-[10px] text-muted-foreground">
-                                {formatQuantityWithUnit(addable.quantity, product.unit)} left
-                              </span>
+                          )}
+                          <div className="mt-auto flex items-end justify-between gap-2 pt-2">
+                            <PriceTag
+                              cents={addable.priceCents}
+                              unit={product.unit}
+                              className="font-headings text-lg font-bold text-foreground"
+                            />
+                            {hasVariants ? (
+                              <Link
+                                href={`/s/${store.slug}/products/${product.id}`}
+                                className="flex-shrink-0 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary"
+                              >
+                                Options
+                              </Link>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={soldOut}
+                                onClick={() => addItem(addable)}
+                                aria-label={soldOut ? 'Sold out' : `Add ${product.name} to cart`}
+                                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                <Icon i="plus" size={18} />
+                              </button>
                             )}
                           </div>
-                          {hasVariants ? (
-                            <Link
-                              href={`/s/${store.slug}/products/${product.id}`}
-                              className="mt-auto block w-full rounded-lg border border-border py-2 text-center text-xs font-semibold text-foreground hover:bg-secondary"
-                            >
-                              View Options
-                            </Link>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled={soldOut}
-                              onClick={() => addItem(addable)}
-                              className="mt-auto w-full rounded-lg bg-primary py-2 text-xs font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                            >
-                              {soldOut ? 'Sold out' : 'Add to Cart'}
-                            </button>
-                          )}
                         </div>
                       </div>
                     );

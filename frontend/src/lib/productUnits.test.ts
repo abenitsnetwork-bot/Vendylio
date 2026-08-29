@@ -5,6 +5,7 @@ import {
   productUnitSuffix,
   formatUsdPerUnit,
   formatQuantityWithUnit,
+  splitUsdPerUnit,
 } from './productUnits';
 
 describe('productUnits', () => {
@@ -26,6 +27,15 @@ describe('productUnits', () => {
   it('formatUsdPerUnit appends the unit suffix only for non-UNIT', () => {
     expect(formatUsdPerUnit(500, 'UNIT')).toBe('$5.00');
     expect(formatUsdPerUnit(500, 'KG')).toBe('$5.00/kg');
+  });
+
+  it('splitUsdPerUnit separates dollars, 2-digit cents and the suffix', () => {
+    expect(splitUsdPerUnit(2346, 'UNIT')).toEqual({ dollars: '$23', cents: '46', suffix: '' });
+    expect(splitUsdPerUnit(900, 'LB')).toEqual({ dollars: '$9', cents: '00', suffix: '/lb' });
+    expect(splitUsdPerUnit(5, 'UNIT')).toEqual({ dollars: '$0', cents: '05', suffix: '' });
+    // Never renders a negative or a fractional cent.
+    expect(splitUsdPerUnit(-100, 'UNIT')).toEqual({ dollars: '$0', cents: '00', suffix: '' });
+    expect(splitUsdPerUnit(1299.6, 'UNIT')).toEqual({ dollars: '$13', cents: '00', suffix: '' });
   });
 
   it('formatQuantityWithUnit shows a bare integer for UNIT and always 2 decimals for a weight unit', () => {

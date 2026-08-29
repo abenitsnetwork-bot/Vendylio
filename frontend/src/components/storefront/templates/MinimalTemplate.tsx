@@ -4,7 +4,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import type { PublicStore } from '@/lib/server/storefront';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
-import { formatUsdPerUnit } from '@/lib/productUnits';
+import { Icon } from '@/components/ui/Icon';
+import { PriceTag } from '@/components/storefront/PriceTag';
 import { toAddableProduct } from '@/lib/productVariants';
 import { groupProductsByCategory, sectionTitle } from '@/lib/storefrontGrouping';
 import { useCart } from '@/contexts/CartContext';
@@ -107,14 +108,16 @@ export function MinimalTemplate({
                             </p>
                           )}
                         </div>
-                        <div className="flex flex-shrink-0 items-center gap-3 text-right">
-                          <p className="font-headings text-sm font-bold text-foreground">
-                            {formatUsdPerUnit(addable.priceCents, product.unit)}
-                          </p>
+                        <div className="flex flex-shrink-0 items-center gap-3">
+                          <PriceTag
+                            cents={addable.priceCents}
+                            unit={product.unit}
+                            className="font-headings text-base font-bold text-foreground"
+                          />
                           {hasVariants ? (
                             <Link
                               href={`/s/${store.slug}/products/${product.id}`}
-                              className="inline-block rounded-lg border border-border px-4 py-1.5 text-xs font-semibold text-foreground"
+                              className="inline-block rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-foreground"
                             >
                               Options
                             </Link>
@@ -123,9 +126,10 @@ export function MinimalTemplate({
                               type="button"
                               disabled={soldOut}
                               onClick={() => addItem(addable)}
-                              className="rounded-lg border border-border px-4 py-1.5 text-xs font-semibold text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                              aria-label={soldOut ? 'Sold out' : `Add ${product.name} to cart`}
+                              className="flex h-9 w-9 items-center justify-center rounded-full border border-border text-foreground disabled:cursor-not-allowed disabled:opacity-40"
                             >
-                              {soldOut ? 'Sold out' : 'Add'}
+                              <Icon i="plus" size={16} />
                             </button>
                           )}
                         </div>
