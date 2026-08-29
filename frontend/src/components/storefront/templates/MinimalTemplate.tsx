@@ -77,7 +77,7 @@ export function MinimalTemplate({
                     const addable = toAddableProduct(product, product.variants[0]?.id ?? null);
                     const soldOut = !hasVariants && addable.quantity <= 0;
                     return (
-                      <div key={product.id} className="flex items-center gap-5 py-6">
+                      <div key={product.id} className="flex items-center gap-4 py-3.5">
                         <Link
                           href={`/s/${store.slug}/products/${product.id}`}
                           className="flex-shrink-0"
@@ -86,26 +86,26 @@ export function MinimalTemplate({
                             <img
                               src={product.imageUrl}
                               alt={product.name}
-                              className="h-20 w-20 rounded-lg object-cover"
+                              className="h-14 w-14 rounded-lg object-cover"
                             />
                           ) : (
-                            <ImagePlaceholder icon="package" className="h-20 w-20 rounded-lg" />
+                            <ImagePlaceholder icon="package" className="h-14 w-14 rounded-lg" />
                           )}
                         </Link>
                         <div className="min-w-0 flex-1">
                           <Link href={`/s/${store.slug}/products/${product.id}`}>
-                            <p className="font-headings font-semibold text-foreground hover:text-primary">
+                            <p className="truncate font-headings text-sm font-semibold text-foreground hover:text-primary">
                               {product.name}
                             </p>
                           </Link>
                           {product.description && (
-                            <p className="mt-1 line-clamp-1 text-sm text-muted-foreground">
+                            <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
                               {product.description}
                             </p>
                           )}
                         </div>
-                        <div className="flex-shrink-0 text-right">
-                          <p className="mb-2 font-headings text-base font-bold text-foreground">
+                        <div className="flex flex-shrink-0 items-center gap-3 text-right">
+                          <p className="font-headings text-sm font-bold text-foreground">
                             {formatUsdPerUnit(addable.priceCents, product.unit)}
                           </p>
                           {hasVariants ? (

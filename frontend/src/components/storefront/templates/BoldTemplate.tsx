@@ -86,7 +86,7 @@ export function BoldTemplate({
                 >
                   {sectionTitle(section)}
                 </h2>
-                <div className="grid grid-cols-1 gap-10 sm:grid-cols-2">
+                <div className="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-4">
                   {section.products.map((product) => {
                     const hasVariants = product.variants.length > 0;
                     const addable = toAddableProduct(product, product.variants[0]?.id ?? null);
@@ -95,41 +95,41 @@ export function BoldTemplate({
                       <div key={product.id} className="flex flex-col">
                         <Link
                           href={`/s/${store.slug}/products/${product.id}`}
-                          className="relative mb-4 block overflow-hidden rounded-2xl"
+                          className="relative mb-3 block overflow-hidden rounded-xl"
                         >
                           {product.imageUrl ? (
                             <img
                               src={product.imageUrl}
                               alt={product.name}
-                              className="h-72 w-full object-cover"
+                              className="aspect-square w-full object-cover"
                             />
                           ) : (
-                            <ImagePlaceholder icon="package" className="h-72 w-full" />
+                            <ImagePlaceholder icon="package" className="aspect-square w-full" />
                           )}
                           {soldOut && (
-                            <span className="absolute right-4 top-4 rounded bg-foreground px-3 py-1.5 text-xs font-semibold text-background">
+                            <span className="absolute right-2 top-2 rounded bg-foreground px-2 py-1 text-[10px] font-semibold text-background">
                               Sold out
                             </span>
                           )}
                         </Link>
                         <Link href={`/s/${store.slug}/products/${product.id}`}>
-                          <p className="mb-2 font-headings text-2xl font-bold text-foreground hover:text-primary">
+                          <p className="mb-1 line-clamp-2 font-headings text-base font-bold text-foreground hover:text-primary">
                             {product.name}
                           </p>
                         </Link>
                         {product.description && (
-                          <p className="mb-4 text-base text-muted-foreground">
+                          <p className="mb-2 line-clamp-2 text-xs text-muted-foreground">
                             {product.description}
                           </p>
                         )}
-                        <div className="flex items-center justify-between gap-4">
-                          <p className="font-headings text-3xl font-bold text-foreground">
+                        <div className="mt-auto flex flex-col gap-2 pt-1">
+                          <p className="font-headings text-lg font-bold text-foreground">
                             {formatUsdPerUnit(addable.priceCents, product.unit)}
                           </p>
                           {hasVariants ? (
                             <Link
                               href={`/s/${store.slug}/products/${product.id}`}
-                              className="rounded-xl border border-border px-6 py-3 text-sm font-semibold text-foreground"
+                              className="w-full rounded-lg border border-border py-2 text-center text-xs font-semibold text-foreground"
                             >
                               View Options
                             </Link>
@@ -138,7 +138,7 @@ export function BoldTemplate({
                               type="button"
                               disabled={soldOut}
                               onClick={() => addItem(addable)}
-                              className="rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                              className="w-full rounded-lg bg-primary py-2 text-xs font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
                             >
                               {soldOut ? 'Sold out' : 'Add to Cart'}
                             </button>

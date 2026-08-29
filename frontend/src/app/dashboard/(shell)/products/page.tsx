@@ -133,7 +133,7 @@ export default function ProductsPage() {
         }}
       />
       <div className="px-4 py-12 lg:px-14">
-        <div className="mx-auto max-w-5xl">
+        <div className="mx-auto max-w-6xl">
           <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <Link
@@ -270,42 +270,44 @@ export default function ProductsPage() {
                       {group.products.length}
                     </span>
                   </h2>
-                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                     {group.products.map((product) => (
                       <Link
                         key={product.id}
                         href={`/dashboard/products/${product.id}/edit`}
-                        className="overflow-hidden rounded-xl border border-border bg-card transition-colors hover:border-primary"
+                        className="overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-primary"
                       >
                         <div className="relative">
                           {product.imageUrl ? (
                             <img
                               src={product.imageUrl}
                               alt={product.name}
-                              className="h-32 w-full object-cover"
+                              className="aspect-square w-full object-cover"
                             />
                           ) : (
-                            <ImagePlaceholder icon="package" className="h-32 w-full" />
+                            <ImagePlaceholder icon="package" className="aspect-square w-full" />
                           )}
                           {product.status === 'ARCHIVED' ? (
-                            <span className="absolute right-3 top-3 rounded bg-foreground px-2 py-1 text-xs font-semibold text-background">
+                            <span className="absolute right-2 top-2 rounded bg-foreground px-1.5 py-0.5 text-[10px] font-semibold text-background">
                               Inactive
                             </span>
                           ) : (
                             product.quantity <= 0 && (
-                              <span className="absolute right-3 top-3 rounded bg-foreground px-2 py-1 text-xs font-semibold text-background">
+                              <span className="absolute right-2 top-2 rounded bg-foreground px-1.5 py-0.5 text-[10px] font-semibold text-background">
                                 Sold out
                               </span>
                             )
                           )}
                         </div>
-                        <div className="p-4">
-                          <p className="mb-1 font-semibold text-foreground">{product.name}</p>
-                          <div className="flex items-center justify-between text-sm">
+                        <div className="p-2.5">
+                          <p className="mb-0.5 truncate text-sm font-semibold text-foreground">
+                            {product.name}
+                          </p>
+                          <div className="flex items-center justify-between gap-2 text-xs">
                             <span className="font-bold text-foreground">
                               {formatUsdPerUnit(product.priceCents, product.unit)}
                             </span>
-                            <span className="text-muted-foreground">
+                            <span className="truncate text-muted-foreground">
                               {formatQuantityWithUnit(product.quantity, product.unit)} in stock
                             </span>
                           </div>

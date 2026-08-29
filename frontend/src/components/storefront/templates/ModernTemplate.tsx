@@ -60,7 +60,7 @@ export function ModernTemplate({
         )}
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-10 lg:px-14">
+      <main className="mx-auto max-w-6xl px-4 py-10 lg:px-14">
         {store.products.length === 0 ? (
           <div className="py-20 text-center">
             <ImagePlaceholder icon="package" className="mx-auto mb-4 h-16 w-16 rounded-full" />
@@ -80,7 +80,7 @@ export function ModernTemplate({
                 <h2 className="mb-5 font-headings text-xl font-bold text-foreground">
                   {sectionTitle(section)}
                 </h2>
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
                   {section.products.map((product) => {
                     const hasVariants = product.variants.length > 0;
                     const addable = toAddableProduct(product, product.variants[0]?.id ?? null);
@@ -88,7 +88,7 @@ export function ModernTemplate({
                     return (
                       <div
                         key={product.id}
-                        className="overflow-hidden rounded-xl border border-border bg-card"
+                        className="flex flex-col overflow-hidden rounded-lg border border-border bg-card"
                       >
                         <Link
                           href={`/s/${store.slug}/products/${product.id}`}
@@ -98,42 +98,37 @@ export function ModernTemplate({
                             <img
                               src={product.imageUrl}
                               alt={product.name}
-                              className="h-48 w-full object-cover"
+                              className="aspect-square w-full object-cover"
                             />
                           ) : (
-                            <ImagePlaceholder icon="package" className="h-48 w-full" />
+                            <ImagePlaceholder icon="package" className="aspect-square w-full" />
                           )}
                           {soldOut && (
-                            <span className="absolute right-3 top-3 rounded bg-foreground px-2 py-1 text-xs font-semibold text-background">
+                            <span className="absolute right-2 top-2 rounded bg-foreground px-1.5 py-0.5 text-[10px] font-semibold text-background">
                               Sold out
                             </span>
                           )}
                         </Link>
-                        <div className="p-5">
+                        <div className="flex flex-1 flex-col p-3">
                           <Link href={`/s/${store.slug}/products/${product.id}`}>
-                            <p className="mb-1 font-headings text-base font-semibold text-foreground hover:text-primary">
+                            <p className="line-clamp-2 font-headings text-sm font-semibold text-foreground hover:text-primary">
                               {product.name}
                             </p>
                           </Link>
-                          {product.description && (
-                            <p className="mb-3 line-clamp-2 text-sm text-muted-foreground">
-                              {product.description}
-                            </p>
-                          )}
-                          <div className="mb-3 flex items-center justify-between">
-                            <p className="font-headings text-lg font-bold text-foreground">
+                          <div className="mb-2 mt-1 flex items-baseline justify-between gap-1">
+                            <p className="font-headings text-base font-bold text-foreground">
                               {formatUsdPerUnit(addable.priceCents, product.unit)}
                             </p>
                             {!soldOut && !hasVariants && addable.quantity <= 5 && (
-                              <span className="text-xs text-muted-foreground">
-                                Only {formatQuantityWithUnit(addable.quantity, product.unit)} left
+                              <span className="text-[10px] text-muted-foreground">
+                                {formatQuantityWithUnit(addable.quantity, product.unit)} left
                               </span>
                             )}
                           </div>
                           {hasVariants ? (
                             <Link
                               href={`/s/${store.slug}/products/${product.id}`}
-                              className="block w-full rounded-lg border border-border py-2.5 text-center text-sm font-semibold text-foreground hover:bg-secondary"
+                              className="mt-auto block w-full rounded-lg border border-border py-2 text-center text-xs font-semibold text-foreground hover:bg-secondary"
                             >
                               View Options
                             </Link>
@@ -142,7 +137,7 @@ export function ModernTemplate({
                               type="button"
                               disabled={soldOut}
                               onClick={() => addItem(addable)}
-                              className="w-full rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                              className="mt-auto w-full rounded-lg bg-primary py-2 text-xs font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
                             >
                               {soldOut ? 'Sold out' : 'Add to Cart'}
                             </button>
