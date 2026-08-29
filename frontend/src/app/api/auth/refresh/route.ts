@@ -7,9 +7,11 @@
 //   2. verifyRefreshToken → 401 on bad token
 //   3. user.findUnique by sub → 401 if deleted
 //   4. tokenVersion DB check → 401 on mismatch (D-19, T-1-02 mitigation)
-//   5. acquireRefreshLock(userId) → 409 CONFLICT on contention (D-20)
+//   5. acquireRefreshLock(userId) → best-effort: retry-with-backoff on
+//      contention, then proceed lock-less rather than 409 (D-20; see the
+//      inline note — a hard 409 surfaced as a spurious client-side logout)
 //   6. Mint new access + refresh + csrf cookies
-//   7. release lock in finally (Pitfall 6 — release even on error)
+//   7. release lock in finally if held (Pitfall 6 — release even on error)
 //
 // No CSRF check: refresh is itself authenticated via the refresh cookie and is
 // path-scoped to /api/auth. The refresh cookie cannot be used cross-site for
@@ -89,13 +91,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // D-20 — single-flight: only one rotation in flight per user.
-    const release = await acquireRefreshLock(user.id);
-    if (!release) {
-      return NextResponse.json(
-        { error: 'CONFLICT', message: 'Concurrent refresh; retry shortly.' },
-        { status: 409, headers: { 'x-request-id': ctx.requestId } },
-      );
+    // D-20 — single-flight, best-effort. On contention (another refresh for
+    // this user is in flight — common when the client has two tabs open),
+    // back off briefly and retry a few times. If we STILL can't get the lock,
+    // proceed WITHOUT it rather than 409: dual rotation is safe here because
+    // refresh tokens are stateless (see the WR-06 note above) — the other
+    // request's new token and ours both stay valid until their 7d exp. A hard
+    // 409 just pushed the failure onto the client, which surfaced as a
+    // spurious "session expired" mid-use.
+    let release: (() => Promise<void>) | null = null;
+    for (let attempt = 0; attempt < 4 && !release; attempt++) {
+      release = await acquireRefreshLock(user.id);
+      if (!release && attempt < 3) {
+        await new Promise((r) => setTimeout(r, 120));
+      }
     }
 
     try {
@@ -112,7 +121,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         { status: 200, headers: { 'x-request-id': ctx.requestId } },
       );
     } finally {
-      await release();
+      if (release) await release();
     }
   });
 }

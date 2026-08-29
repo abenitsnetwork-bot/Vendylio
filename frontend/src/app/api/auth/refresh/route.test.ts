@@ -92,20 +92,39 @@ describe('POST /api/auth/refresh', () => {
     expect(acquireRefreshLock).not.toHaveBeenCalled();
   });
 
-  it('Test 5: single-flight contention — 409 CONFLICT with retry hint', async () => {
+  it('Test 5: lock contention — retries, then issues cookies WITHOUT the lock (no 409)', async () => {
     vi.mocked(verifyRefreshToken).mockResolvedValue({ sub: 'u1', tokenVersion: 0 });
     prismaMock.user.findUnique.mockResolvedValue({
       id: 'u1',
       email: 'a@b.com',
       tokenVersion: 0,
     } as never);
-    vi.mocked(acquireRefreshLock).mockResolvedValue(null); // contention
+    vi.mocked(acquireRefreshLock).mockResolvedValue(null); // never acquires
 
     const res = await POST(makeReq('valid'));
-    expect(res.status).toBe(409);
-    const body = await res.json();
-    expect(body.error).toBe('CONFLICT');
-    expect(body.message).toMatch(/retry/i);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true });
+    expect(__cookieStore.has('app-token')).toBe(true);
+    // Retried a few times before giving up on the lock.
+    expect(vi.mocked(acquireRefreshLock).mock.calls.length).toBeGreaterThan(1);
+    // Nothing to release since the lock was never held.
+    expect(releaseSpy).not.toHaveBeenCalled();
+  });
+
+  it('Test 5b: lock acquired on a later retry — issues cookies and releases', async () => {
+    vi.mocked(verifyRefreshToken).mockResolvedValue({ sub: 'u1', tokenVersion: 0 });
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 'u1',
+      email: 'a@b.com',
+      tokenVersion: 0,
+    } as never);
+    vi.mocked(acquireRefreshLock).mockResolvedValueOnce(null).mockResolvedValueOnce(releaseSpy);
+
+    const res = await POST(makeReq('valid'));
+
+    expect(res.status).toBe(200);
+    expect(releaseSpy).toHaveBeenCalledTimes(1);
   });
 
   it('Test 6: release called even if setAuthCookies throws', async () => {
