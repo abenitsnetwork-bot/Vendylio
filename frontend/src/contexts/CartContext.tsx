@@ -40,7 +40,7 @@ export interface AddableProduct {
 }
 
 /** Phase C — how the buyer wants to receive the order. Chosen on the
- * storefront (StorefrontFulfillmentToggle), carried through to checkout as
+ * storefront (StorefrontUtilityBar), carried through to checkout as
  * the initial selection. The server re-decides pricing regardless
  * (api/orders zeroes the delivery fee for pickup). */
 export type FulfillmentMethod = 'pickup' | 'delivery';

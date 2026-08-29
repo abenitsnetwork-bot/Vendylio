@@ -11,7 +11,6 @@ import { groupProductsByCategory, sectionTitle, sectionIcon } from '@/lib/storef
 import { useCart } from '@/contexts/CartContext';
 import { StoreReviews } from '@/components/storefront/StoreReviews';
 import { StorefrontCategoryNav } from '@/components/storefront/StorefrontCategoryNav';
-import { StorefrontTopBar } from '@/components/storefront/StorefrontTopBar';
 import { StorefrontHeader } from '@/components/storefront/StorefrontHeader';
 import { StorefrontHero } from '@/components/storefront/StorefrontHero';
 
@@ -29,7 +28,6 @@ export function MinimalTemplate({
 
   return (
     <div>
-      <StorefrontTopBar phone={store.phone} />
       <StorefrontHeader
         storeSlug={store.slug}
         storeName={store.name}

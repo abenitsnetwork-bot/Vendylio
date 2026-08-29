@@ -40,7 +40,7 @@ function CheckoutFormInner({
 }) {
   const router = useRouter();
   // fulfillmentMethod lives on the cart context so the buyer's choice on the
-  // storefront (StorefrontFulfillmentToggle) carries through to here.
+  // storefront (StorefrontUtilityBar) carries through to here.
   const { items, subtotalCents, clear, fulfillmentMethod, setFulfillmentMethod } = useCart();
   const [idempotencyKey] = useState(() => crypto.randomUUID());
 

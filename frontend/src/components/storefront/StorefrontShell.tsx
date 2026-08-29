@@ -6,7 +6,7 @@ import type { PublicStore } from '@/lib/server/storefront';
 import { CartProvider, useCart } from '@/contexts/CartContext';
 import { Icon } from '@/components/ui/Icon';
 import { CartDrawer } from '@/components/storefront/CartDrawer';
-import { StorefrontFulfillmentToggle } from '@/components/storefront/StorefrontFulfillmentToggle';
+import { StorefrontUtilityBar } from '@/components/storefront/StorefrontUtilityBar';
 import { ModernTemplate } from '@/components/storefront/templates/ModernTemplate';
 import { MinimalTemplate } from '@/components/storefront/templates/MinimalTemplate';
 import { BoldTemplate } from '@/components/storefront/templates/BoldTemplate';
@@ -81,13 +81,13 @@ export function StorefrontShell({ store }: { store: PublicStore }) {
       <div className="min-h-screen bg-background font-body">
         <AnnouncementStrip text={store.announcement} />
         <StoreStatusBanner store={store} />
-        {store.acceptingOrders && (
-          <StorefrontFulfillmentToggle
-            deliveryFeeCents={store.deliveryFeeCents}
-            deliveryProvider={store.deliveryProvider}
-            pickupAddress={store.pickupAddress}
-          />
-        )}
+        <StorefrontUtilityBar
+          phone={store.phone}
+          acceptingOrders={store.acceptingOrders}
+          deliveryFeeCents={store.deliveryFeeCents}
+          deliveryProvider={store.deliveryProvider}
+          pickupAddress={store.pickupAddress}
+        />
         <Template store={store} onOpenCart={() => setCartOpen(true)} />
         <footer className="border-t border-border px-4 py-6 text-center lg:px-14">
           <Link

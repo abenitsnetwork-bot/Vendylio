@@ -6,13 +6,17 @@ import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 import { useCart } from '@/contexts/CartContext';
 
 /** Shared header used by all three storefront templates and the product
- * detail page — logo/name link home, an optional live search box (product
- * listing pages pass one; the detail page doesn't need it), and a cart
- * button that always reflects the real cart count via useCart(). */
+ * detail page — logo + store identity (name / location) link home, an
+ * optional live search box (product listing pages pass one; the detail page
+ * doesn't need it), and a cart button reflecting the real cart count. The
+ * optional `description` shows as a thin line beneath on sm+ so the main
+ * templates don't need a second store-info block. */
 export function StorefrontHeader({
   storeSlug,
   storeName,
   logoUrl,
+  location,
+  description,
   onOpenCart,
   searchQuery,
   onSearchChange,
@@ -20,6 +24,8 @@ export function StorefrontHeader({
   storeSlug: string;
   storeName: string;
   logoUrl: string | null;
+  location?: string | null;
+  description?: string | null;
   onOpenCart: () => void;
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
@@ -27,24 +33,27 @@ export function StorefrontHeader({
   const { itemCount } = useCart();
 
   return (
-    <header className="border-b border-border bg-card px-4 py-4 lg:px-14">
-      <div className="mx-auto flex max-w-6xl items-center gap-4">
-        <Link href={`/s/${storeSlug}`} className="flex flex-shrink-0 items-center gap-3">
+    <header className="border-b border-border bg-card px-4 py-3 lg:px-14">
+      <div className="mx-auto flex max-w-7xl items-center gap-4">
+        <Link href={`/s/${storeSlug}`} className="flex min-w-0 flex-shrink-0 items-center gap-3">
           {logoUrl ? (
-            // Not decorative here — the store name beside it is hidden on
-            // mobile (`sm:inline`), so the logo carries the identity.
             <img
               src={logoUrl}
               alt={storeName}
-              className="h-10 w-10 rounded-lg object-cover"
-              width={40}
-              height={40}
+              className="h-14 w-14 rounded-xl object-cover"
+              width={56}
+              height={56}
             />
           ) : (
-            <ImagePlaceholder icon="store" className="h-10 w-10 rounded-lg" />
+            <ImagePlaceholder icon="store" className="h-14 w-14 rounded-xl" />
           )}
-          <span className="hidden font-headings text-lg font-bold text-foreground sm:inline">
-            {storeName}
+          <span className="min-w-0">
+            <span className="block truncate font-headings text-lg font-bold text-foreground">
+              {storeName}
+            </span>
+            {location && (
+              <span className="block truncate text-xs text-muted-foreground">{location}</span>
+            )}
           </span>
         </Link>
 
@@ -81,6 +90,12 @@ export function StorefrontHeader({
           )}
         </button>
       </div>
+
+      {description && (
+        <p className="mx-auto mt-2 hidden max-w-7xl truncate text-xs text-muted-foreground sm:block">
+          {description}
+        </p>
+      )}
     </header>
   );
 }

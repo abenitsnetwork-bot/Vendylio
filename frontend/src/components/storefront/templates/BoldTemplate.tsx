@@ -11,7 +11,6 @@ import { groupProductsByCategory, sectionTitle, sectionIcon } from '@/lib/storef
 import { useCart } from '@/contexts/CartContext';
 import { StoreReviews } from '@/components/storefront/StoreReviews';
 import { StorefrontCategoryNav } from '@/components/storefront/StorefrontCategoryNav';
-import { StorefrontTopBar } from '@/components/storefront/StorefrontTopBar';
 import { StorefrontHeader } from '@/components/storefront/StorefrontHeader';
 import { StorefrontHero } from '@/components/storefront/StorefrontHero';
 
@@ -29,7 +28,6 @@ export function BoldTemplate({
 
   return (
     <div>
-      <StorefrontTopBar phone={store.phone} />
       <StorefrontHeader
         storeSlug={store.slug}
         storeName={store.name}
@@ -42,7 +40,7 @@ export function BoldTemplate({
       <StorefrontHero hero={store.hero} storeName={store.name} />
 
       <header className="rounded-b-[2rem] bg-primary px-4 py-16 text-primary-foreground lg:rounded-b-[3rem] lg:px-14">
-        <div className="mx-auto flex max-w-6xl flex-col items-start gap-4">
+        <div className="mx-auto flex max-w-7xl flex-col items-start gap-4">
           {store.logoUrl ? (
             <img
               src={store.logoUrl}
@@ -67,7 +65,7 @@ export function BoldTemplate({
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-14 lg:px-14">
+      <main className="mx-auto max-w-7xl px-4 py-14 lg:px-14">
         {store.products.length === 0 ? (
           <div className="py-20 text-center">
             <ImagePlaceholder icon="package" className="mx-auto mb-4 h-16 w-16 rounded-full" />
@@ -91,7 +89,7 @@ export function BoldTemplate({
                   {sectionIcon(section) && <span aria-hidden="true">{sectionIcon(section)}</span>}
                   {sectionTitle(section)}
                 </h2>
-                <div className="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-4">
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                   {section.products.map((product) => {
                     const hasVariants = product.variants.length > 0;
                     const addable = toAddableProduct(product, product.variants[0]?.id ?? null);

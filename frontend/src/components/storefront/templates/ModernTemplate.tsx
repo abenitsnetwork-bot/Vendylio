@@ -12,7 +12,6 @@ import { groupProductsByCategory, sectionTitle, sectionIcon } from '@/lib/storef
 import { useCart } from '@/contexts/CartContext';
 import { StoreReviews } from '@/components/storefront/StoreReviews';
 import { StorefrontCategoryNav } from '@/components/storefront/StorefrontCategoryNav';
-import { StorefrontTopBar } from '@/components/storefront/StorefrontTopBar';
 import { StorefrontHeader } from '@/components/storefront/StorefrontHeader';
 import { StorefrontHero } from '@/components/storefront/StorefrontHero';
 
@@ -30,11 +29,12 @@ export function ModernTemplate({
 
   return (
     <div>
-      <StorefrontTopBar phone={store.phone} />
       <StorefrontHeader
         storeSlug={store.slug}
         storeName={store.name}
         logoUrl={store.logoUrl}
+        location={location}
+        description={store.description}
         onOpenCart={onOpenCart}
         searchQuery={query}
         onSearchChange={setQuery}
@@ -42,30 +42,7 @@ export function ModernTemplate({
 
       <StorefrontHero hero={store.hero} storeName={store.name} />
 
-      <header className="border-b border-border bg-card px-4 py-6 lg:px-14">
-        <div className="mx-auto flex max-w-5xl items-center gap-4">
-          {store.logoUrl ? (
-            <img
-              src={store.logoUrl}
-              alt=""
-              className="h-16 w-16 flex-shrink-0 rounded-lg object-cover"
-            />
-          ) : (
-            <ImagePlaceholder icon="store" className="h-16 w-16 flex-shrink-0 rounded-lg" />
-          )}
-          <div>
-            <h1 className="font-headings text-2xl font-bold text-foreground">{store.name}</h1>
-            {location && <p className="text-sm text-muted-foreground">{location}</p>}
-          </div>
-        </div>
-        {store.description && (
-          <p className="mx-auto mt-4 max-w-5xl text-sm text-muted-foreground">
-            {store.description}
-          </p>
-        )}
-      </header>
-
-      <main className="mx-auto max-w-6xl px-4 py-10 lg:px-14">
+      <main className="mx-auto max-w-7xl px-4 py-10 lg:px-14">
         {store.products.length === 0 ? (
           <div className="py-20 text-center">
             <ImagePlaceholder icon="package" className="mx-auto mb-4 h-16 w-16 rounded-full" />
@@ -86,7 +63,7 @@ export function ModernTemplate({
                   {sectionIcon(section) && <span aria-hidden="true">{sectionIcon(section)}</span>}
                   {sectionTitle(section)}
                 </h2>
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
                   {section.products.map((product) => {
                     const hasVariants = product.variants.length > 0;
                     const addable = toAddableProduct(product, product.variants[0]?.id ?? null);
@@ -115,9 +92,9 @@ export function ModernTemplate({
                             </span>
                           )}
                         </Link>
-                        <div className="flex flex-1 flex-col p-3">
+                        <div className="flex flex-1 flex-col p-2.5">
                           <Link href={`/s/${store.slug}/products/${product.id}`}>
-                            <p className="line-clamp-2 font-headings text-sm font-semibold text-foreground hover:text-primary">
+                            <p className="line-clamp-2 font-headings text-xs font-semibold leading-snug text-foreground hover:text-primary sm:text-sm">
                               {product.name}
                             </p>
                           </Link>
@@ -126,16 +103,16 @@ export function ModernTemplate({
                               Only {formatQuantityWithUnit(addable.quantity, product.unit)} left
                             </p>
                           )}
-                          <div className="mt-auto flex items-end justify-between gap-2 pt-2">
+                          <div className="mt-auto flex items-center justify-between gap-1.5 pt-2">
                             <PriceTag
                               cents={addable.priceCents}
                               unit={product.unit}
-                              className="font-headings text-lg font-bold text-foreground"
+                              className="font-headings text-sm font-bold text-foreground sm:text-base"
                             />
                             {hasVariants ? (
                               <Link
                                 href={`/s/${store.slug}/products/${product.id}`}
-                                className="flex-shrink-0 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary"
+                                className="flex-shrink-0 rounded-full border border-border px-2.5 py-1 text-[11px] font-semibold text-foreground hover:bg-secondary"
                               >
                                 Options
                               </Link>
@@ -145,9 +122,9 @@ export function ModernTemplate({
                                 disabled={soldOut}
                                 onClick={() => addItem(addable)}
                                 aria-label={soldOut ? 'Sold out' : `Add ${product.name} to cart`}
-                                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                                className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
                               >
-                                <Icon i="plus" size={18} />
+                                <Icon i="plus" size={16} />
                               </button>
                             )}
                           </div>
