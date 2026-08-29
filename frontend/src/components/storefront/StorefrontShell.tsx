@@ -29,6 +29,33 @@ function CartButton({ onClick }: { onClick: () => void }) {
   );
 }
 
+function StoreStatusBanner({ store }: { store: PublicStore }) {
+  if (!store.acceptingOrders) {
+    return (
+      <div
+        role="status"
+        className="bg-foreground px-4 py-2.5 text-center text-sm font-medium text-background lg:px-14"
+      >
+        {store.pauseMessage?.trim()
+          ? store.pauseMessage.trim()
+          : `${store.name} isn’t accepting orders right now.`}
+      </div>
+    );
+  }
+  if (store.openState.hoursConfigured && !store.openState.openNow) {
+    return (
+      <div
+        role="status"
+        className="bg-secondary px-4 py-2.5 text-center text-sm font-medium text-foreground lg:px-14"
+      >
+        Currently closed{store.openState.nextOpenLabel ? ` · ${store.openState.nextOpenLabel}` : ''}
+        . You can still place an order for later.
+      </div>
+    );
+  }
+  return null;
+}
+
 export function StorefrontShell({ store }: { store: PublicStore }) {
   const [cartOpen, setCartOpen] = useState(false);
   const Template =
@@ -41,6 +68,7 @@ export function StorefrontShell({ store }: { store: PublicStore }) {
   return (
     <CartProvider storeSlug={store.slug}>
       <div className="min-h-screen bg-background font-body">
+        <StoreStatusBanner store={store} />
         <Template store={store} onOpenCart={() => setCartOpen(true)} />
         <footer className="border-t border-border px-4 py-6 text-center lg:px-14">
           <Link
@@ -52,7 +80,16 @@ export function StorefrontShell({ store }: { store: PublicStore }) {
           </Link>
         </footer>
         <CartButton onClick={() => setCartOpen(true)} />
-        {cartOpen && <CartDrawer storeSlug={store.slug} onClose={() => setCartOpen(false)} />}
+        {cartOpen && (
+          <CartDrawer
+            storeSlug={store.slug}
+            acceptingOrders={store.acceptingOrders}
+            notAcceptingMessage={
+              store.pauseMessage?.trim() || `${store.name} isn’t accepting orders right now.`
+            }
+            onClose={() => setCartOpen(false)}
+          />
+        )}
       </div>
     </CartProvider>
   );

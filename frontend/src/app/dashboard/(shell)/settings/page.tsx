@@ -9,6 +9,7 @@ import { api, ApiError } from '@/lib/api';
 import { Icon } from '@/components/ui/Icon';
 import { SellerHeader } from '@/components/seller/SellerHeader';
 import { StoreSettingsForm } from '@/components/seller/StoreSettingsForm';
+import { StoreHoursForm, type StoreHoursEntry } from '@/components/seller/StoreHoursForm';
 import { CategoryManager } from '@/components/seller/CategoryManager';
 import { PaymentsConnectSettings } from '@/components/seller/PaymentsConnectSettings';
 import { AccountSecurityForm } from '@/components/seller/AccountSecurityForm';
@@ -27,10 +28,15 @@ interface StoreDetails {
   zelleContact: string | null;
   template: StoreTemplate;
   defaultLowStockThreshold: number;
+  timezone: string;
+  ordersPaused: boolean;
+  pauseMessage: string | null;
+  hours: StoreHoursEntry[];
 }
 
 const TABS = [
   { value: 'store', label: 'Store' },
+  { value: 'hours', label: 'Hours & status' },
   { value: 'categories', label: 'Categories' },
   { value: 'payments', label: 'Payments' },
   { value: 'account', label: 'Account' },
@@ -129,7 +135,29 @@ function SettingsTabs() {
             (!error && !store ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
             ) : (
-              store && <StoreSettingsForm store={store} onSaved={setStore} />
+              store && (
+                <StoreSettingsForm
+                  store={store}
+                  onSaved={(s) => setStore((prev) => (prev ? { ...prev, ...s } : prev))}
+                />
+              )
+            ))}
+
+          {activeTab === 'hours' &&
+            (!error && !store ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : (
+              store && (
+                <StoreHoursForm
+                  ops={{
+                    timezone: store.timezone,
+                    ordersPaused: store.ordersPaused,
+                    pauseMessage: store.pauseMessage,
+                    hours: store.hours,
+                  }}
+                  onSaved={(next) => setStore((prev) => (prev ? { ...prev, ...next } : prev))}
+                />
+              )
             ))}
 
           {activeTab === 'categories' && <CategoryManager />}

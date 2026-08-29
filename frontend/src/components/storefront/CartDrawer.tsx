@@ -7,7 +7,17 @@ import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 import { formatUsdPerUnit } from '@/lib/productUnits';
 import { useCart } from '@/contexts/CartContext';
 
-export function CartDrawer({ storeSlug, onClose }: { storeSlug: string; onClose: () => void }) {
+export function CartDrawer({
+  storeSlug,
+  acceptingOrders = true,
+  notAcceptingMessage,
+  onClose,
+}: {
+  storeSlug: string;
+  acceptingOrders?: boolean;
+  notAcceptingMessage?: string;
+  onClose: () => void;
+}) {
   const { items, subtotalCents, removeItem, setQuantity } = useCart();
 
   return (
@@ -123,7 +133,20 @@ export function CartDrawer({ storeSlug, onClose }: { storeSlug: string; onClose:
             {formatUsdPerUnit(subtotalCents, 'UNIT')}
           </span>
         </div>
-        {items.length === 0 ? (
+        {!acceptingOrders ? (
+          <>
+            <p className="mb-2 text-center text-xs text-muted-foreground">
+              {notAcceptingMessage ?? 'This store isn’t accepting orders right now.'}
+            </p>
+            <button
+              type="button"
+              disabled
+              className="w-full cursor-not-allowed rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground opacity-50"
+            >
+              Checkout
+            </button>
+          </>
+        ) : items.length === 0 ? (
           <button
             type="button"
             disabled

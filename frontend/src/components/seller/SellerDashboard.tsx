@@ -22,10 +22,21 @@ export interface DashboardStats {
   monthSalesCents: number;
   monthOrdersCount: number;
   visits: number;
+  /** Phase 8 — orders sitting in PAID/PREPARING/READY (need merchant action). */
+  pendingOrdersCount: number;
   /** Phase 4 — products/variants at or below their low-stock threshold (still > 0). */
   lowStockCount: number;
   /** Phase 4 — products/variants at zero. */
   outOfStockCount: number;
+}
+
+export interface DashboardOpenState {
+  acceptingOrders: boolean;
+  ordersPaused: boolean;
+  pauseMessage: string | null;
+  hoursConfigured: boolean;
+  openNow: boolean;
+  nextOpenLabel: string | null;
 }
 
 export interface RecentOrder {
@@ -48,11 +59,28 @@ const GETTING_STARTED = [
   { title: 'Share & Sell', desc: 'Send your link to friends' },
 ];
 
+function storeStatusLabel(open: DashboardOpenState): {
+  text: string;
+  tone: 'ok' | 'warn' | 'muted';
+} {
+  if (open.ordersPaused) {
+    return { text: 'Paused · not taking orders', tone: 'warn' };
+  }
+  if (open.hoursConfigured && !open.openNow) {
+    return {
+      text: open.nextOpenLabel ? `Closed · ${open.nextOpenLabel.toLowerCase()}` : 'Closed',
+      tone: 'muted',
+    };
+  }
+  return { text: 'Open · taking orders', tone: 'ok' };
+}
+
 export function SellerDashboard({
   greetingName,
   userEmail,
   store,
   stats,
+  openState,
   recentOrders,
   topBanner,
   onLogout,
@@ -61,11 +89,13 @@ export function SellerDashboard({
   userEmail: string;
   store: DashboardStore;
   stats: DashboardStats;
+  openState: DashboardOpenState;
   recentOrders: RecentOrder[];
   /** Optional slot rendered between the header and the "Welcome" heading — e.g. a "finish setup" nudge. */
   topBanner?: ReactNode;
   onLogout: () => void;
 }) {
+  const status = storeStatusLabel(openState);
   const [shareOpen, setShareOpen] = useState(false);
   const storeUrl =
     typeof window !== 'undefined'
@@ -86,7 +116,22 @@ export function SellerDashboard({
           >
             Welcome, {greetingName}!
           </h1>
-          <p className="text-sm text-muted-foreground">Your store is live. Start selling.</p>
+          <Link
+            href="/dashboard/settings?tab=hours"
+            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <span
+              className={`inline-block h-2 w-2 rounded-full ${
+                status.tone === 'ok'
+                  ? 'bg-green-500'
+                  : status.tone === 'warn'
+                    ? 'bg-amber-500'
+                    : 'bg-muted-foreground'
+              }`}
+              aria-hidden="true"
+            />
+            {status.text}
+          </Link>
         </div>
 
         {/* Stats grid */}
@@ -107,13 +152,19 @@ export function SellerDashboard({
             </p>
             <p className="mt-1 text-xs text-muted-foreground">Orders: {stats.monthOrdersCount}</p>
           </Card>
-          <Card>
-            <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
-              Store Visits
-            </p>
-            <p className="font-headings text-2xl font-bold text-foreground">{stats.visits}</p>
-            <p className="mt-1 text-xs text-muted-foreground">From your link</p>
-          </Card>
+          <Link href="/dashboard/orders?status=PAID">
+            <Card className="transition-colors hover:border-primary">
+              <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
+                Pending Orders
+              </p>
+              <p className="font-headings text-2xl font-bold text-foreground">
+                {stats.pendingOrdersCount}
+              </p>
+              <p className="mt-1 text-xs text-primary">
+                {stats.pendingOrdersCount > 0 ? 'Needs attention →' : 'All caught up'}
+              </p>
+            </Card>
+          </Link>
           {(() => {
             const restockCount = stats.lowStockCount + stats.outOfStockCount;
             return (

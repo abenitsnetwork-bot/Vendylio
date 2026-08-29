@@ -1,6 +1,7 @@
 import 'server-only';
 import { prisma } from '@/lib/server/prisma';
 import { isStoreTemplate, type StoreTemplate } from '@/lib/storeTemplates';
+import { getStoreOpenState } from '@/lib/server/store/availability';
 
 export interface PublicProductVariant {
   id: string;
@@ -58,6 +59,12 @@ export interface PublicStore {
   deliveryProvider: string;
   pickupAddress: string | null;
   template: StoreTemplate;
+  // Phase 8 — store operations. `acceptingOrders` is the hard switch (false =
+  // checkout is blocked server-side too). `openState` is informational: it
+  // drives a "currently closed" banner but does NOT block checkout.
+  acceptingOrders: boolean;
+  pauseMessage: string | null;
+  openState: { hoursConfigured: boolean; openNow: boolean; nextOpenLabel: string | null };
   // Seller-defined, ordered. Products are grouped under these on the
   // storefront; a product whose `category` is null falls under an implicit
   // "Uncategorized" section rendered last.
@@ -101,6 +108,10 @@ export async function getPublicStore(slug: string): Promise<PublicStore | null> 
       deliveryProvider: true,
       pickupAddress: true,
       template: true,
+      timezone: true,
+      ordersPaused: true,
+      pauseMessage: true,
+      hours: true,
       categories: {
         orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
         select: { id: true, name: true, slug: true, sortOrder: true },
@@ -156,9 +167,13 @@ export async function getPublicStore(slug: string): Promise<PublicStore | null> 
     ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviewCount
     : null;
 
+  const { timezone, ordersPaused, pauseMessage, hours, ...publicFields } = store;
   return {
-    ...store,
+    ...publicFields,
     template: isStoreTemplate(store.template) ? store.template : 'MODERN',
+    acceptingOrders: !ordersPaused,
+    pauseMessage,
+    openState: getStoreOpenState({ timezone, hours }),
     reviews,
     averageRating,
     reviewCount,

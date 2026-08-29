@@ -258,6 +258,41 @@ describe('PATCH /api/stores', () => {
     expect(updateArg?.data).toMatchObject({ deliveryFeeCents: 500 });
   });
 
+  it('updates the Phase 8 store-ops fields (timezone, pause, hours)', async () => {
+    mockResolveOwnStore.mockResolvedValue({ id: 'store-1', organizationId: 'org-1' } as never);
+    prismaMock.store.update.mockResolvedValue({ id: 'store-1' } as never);
+
+    const res = await PATCH(
+      makeReq('PATCH', {
+        timezone: 'America/Chicago',
+        ordersPaused: true,
+        pauseMessage: 'Back Monday',
+        hours: [{ day: 1, open: '09:00', close: '17:00' }],
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(prismaMock.store.update.mock.calls[0]?.[0]?.data).toMatchObject({
+      timezone: 'America/Chicago',
+      ordersPaused: true,
+      pauseMessage: 'Back Monday',
+      hours: [{ day: 1, open: '09:00', close: '17:00' }],
+    });
+  });
+
+  it('400s on an unknown timezone', async () => {
+    mockResolveOwnStore.mockResolvedValue({ id: 'store-1', organizationId: 'org-1' } as never);
+    const res = await PATCH(makeReq('PATCH', { timezone: 'Not/AZone' }));
+    expect(res.status).toBe(400);
+  });
+
+  it('400s when an hours row closes before it opens', async () => {
+    mockResolveOwnStore.mockResolvedValue({ id: 'store-1', organizationId: 'org-1' } as never);
+    const res = await PATCH(
+      makeReq('PATCH', { hours: [{ day: 1, open: '17:00', close: '09:00' }] }),
+    );
+    expect(res.status).toBe(400);
+  });
+
   it('updates phone, and clears it with an explicit null', async () => {
     mockResolveOwnStore.mockResolvedValue({ id: 'store-1', organizationId: 'org-1' } as never);
     prismaMock.store.update.mockResolvedValueOnce({ id: 'store-1', phone: '+1 555-0100' } as never);

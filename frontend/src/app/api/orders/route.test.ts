@@ -211,6 +211,32 @@ describe('POST /api/orders — guards', () => {
     const body = await res.json();
     expect(body.error).toBe('STORE_NOT_FOUND');
   });
+
+  it('409s STORE_NOT_ACCEPTING_ORDERS when the merchant has paused the store', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({
+      ...STORE,
+      ordersPaused: true,
+      pauseMessage: 'Back Monday at 9',
+    } as never);
+    const res = await POST(makePost(validBody));
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).toBe('STORE_NOT_ACCEPTING_ORDERS');
+    expect(body.message).toBe('Back Monday at 9');
+    expect(prismaMock.order.create).not.toHaveBeenCalled();
+  });
+
+  it('does NOT block checkout merely for being outside opening hours (hours are soft)', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({
+      ...STORE,
+      ordersPaused: false,
+      hours: [{ day: 0, open: '00:00', close: '00:01' }],
+    } as never);
+    prismaMock.order.create.mockResolvedValue(seededOrder() as never);
+    prismaMock.order.update.mockResolvedValue(seededOrder() as never);
+    const res = await POST(makePost(validBody));
+    expect(res.status).toBe(201);
+  });
 });
 
 describe('POST /api/orders — pricing guards (server re-prices, never trusts the client)', () => {

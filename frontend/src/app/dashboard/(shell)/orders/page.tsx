@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { sellerFirstName } from '@/lib/utils';
 import { useAuth, useUser } from '@/contexts/AuthContext';
 import { api, ApiError } from '@/lib/api';
@@ -20,10 +21,14 @@ const STATUS_FILTERS = [
   { label: 'Pending Payment', value: 'PENDING' },
 ];
 
-export default function OrdersPage() {
+const VALID_STATUSES = new Set(STATUS_FILTERS.map((f) => f.value).filter(Boolean));
+
+function OrdersPageInner() {
   const user = useUser();
   const { logout } = useAuth();
-  const [status, setStatus] = useState('');
+  const searchParams = useSearchParams();
+  const initialStatus = searchParams.get('status') ?? '';
+  const [status, setStatus] = useState(VALID_STATUSES.has(initialStatus) ? initialStatus : '');
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const [orders, setOrders] = useState<SellerOrder[] | null>(null);
@@ -158,5 +163,13 @@ export default function OrdersPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function OrdersPage() {
+  return (
+    <Suspense fallback={null}>
+      <OrdersPageInner />
+    </Suspense>
   );
 }

@@ -52,6 +52,7 @@ import { clampLimit, cursorWhere, buildPage, decodeCursor } from '@/lib/server/p
 import { effectivePriceCents, variantLabel } from '@/lib/productVariants';
 import { parseOrderNumberQuery } from '@/lib/orderNumber';
 import { newTrackingToken } from '@/lib/server/orders/trackingToken';
+import { storeAcceptsOrders } from '@/lib/server/store/availability';
 import { roundQuantity } from '@/lib/quantity';
 import { getUberDirectDeliveryFeeCents } from '@/lib/server/delivery/uber-direct';
 
@@ -184,6 +185,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json(
         { error: 'STORE_NOT_FOUND', message: 'No such store.' },
         { status: 404, headers: { 'x-request-id': ctx.requestId } },
+      );
+    }
+
+    // Phase 8 — the merchant's hard pause switch. Enforced here so a client
+    // that skips the disabled-checkout UI still can't place an order. Opening
+    // hours are deliberately NOT enforced (soft/informational — the seller
+    // may take orders for later).
+    if (!storeAcceptsOrders(store)) {
+      return NextResponse.json(
+        {
+          error: 'STORE_NOT_ACCEPTING_ORDERS',
+          message: store.pauseMessage?.trim()
+            ? store.pauseMessage.trim()
+            : 'This store is not accepting orders right now.',
+        },
+        { status: 409, headers: { 'x-request-id': ctx.requestId } },
       );
     }
 

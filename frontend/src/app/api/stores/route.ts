@@ -79,6 +79,48 @@ const PatchBody = z.object({
   pickupAddress: z.string().trim().max(200).nullable().optional(),
   // Phase 3 — default "low stock" threshold for products without their own.
   defaultLowStockThreshold: z.number().int().min(0).max(100000).optional(),
+  // Phase 8 — store operations.
+  // IANA name; rejected if the runtime's Intl doesn't recognize it.
+  timezone: z
+    .string()
+    .trim()
+    .min(1)
+    .max(64)
+    .refine(
+      (v) => {
+        try {
+          new Intl.DateTimeFormat('en-US', { timeZone: v });
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      { message: 'Unknown timezone' },
+    )
+    .optional(),
+  ordersPaused: z.boolean().optional(),
+  pauseMessage: z.string().trim().max(200).nullable().optional(),
+  // Informational opening hours. One entry per open window; a day with no
+  // entry is closed. `close` must be after `open` (no overnight windows in V1).
+  hours: z
+    .array(
+      z.object({
+        day: z.number().int().min(0).max(6),
+        open: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+        close: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+      }),
+    )
+    .max(21)
+    .refine(
+      (rows) =>
+        rows.every((r) => {
+          const [oh, om] = r.open.split(':').map(Number);
+          const [ch, cm] = r.close.split(':').map(Number);
+          return (ch ?? 0) * 60 + (cm ?? 0) > (oh ?? 0) * 60 + (om ?? 0);
+        }),
+      { message: 'Closing time must be after opening time' },
+    )
+    .optional(),
 });
 
 export async function POST(req: NextRequest): Promise<NextResponse> {

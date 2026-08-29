@@ -12,6 +12,7 @@ import {
   SellerDashboard,
   type DashboardStats,
   type DashboardStore,
+  type DashboardOpenState,
   type RecentOrder,
 } from '@/components/seller/SellerDashboard';
 
@@ -23,6 +24,7 @@ type LoadState =
       store: DashboardStore;
       onboardingStore: OnboardingStoreInput;
       stats: DashboardStats;
+      openState: DashboardOpenState;
       recentOrders: RecentOrder[];
     };
 
@@ -58,9 +60,11 @@ export default function DashboardPage() {
     let cancelled = false;
     setState({ status: 'loading' });
     Promise.all([
-      api<{ store: DashboardStore & OnboardingStoreInput; stats: DashboardStats }>(
-        '/api/stores/me',
-      ),
+      api<{
+        store: DashboardStore & OnboardingStoreInput;
+        stats: DashboardStats;
+        openState: DashboardOpenState;
+      }>('/api/stores/me'),
       api<{ items: RecentOrder[] }>('/api/orders?limit=5'),
     ])
       .then(([storeRes, ordersRes]) => {
@@ -70,6 +74,7 @@ export default function DashboardPage() {
             store: storeRes.store,
             onboardingStore: storeRes.store,
             stats: storeRes.stats,
+            openState: storeRes.openState,
             recentOrders: ordersRes.items,
           });
         }
@@ -124,6 +129,7 @@ export default function DashboardPage() {
       userEmail={user.email}
       store={state.store}
       stats={state.stats}
+      openState={state.openState}
       recentOrders={state.recentOrders}
       topBanner={
         !progress.mandatoryComplete ? (

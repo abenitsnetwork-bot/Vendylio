@@ -170,6 +170,8 @@ function CheckoutFormInner({
         const map: Record<string, string> = {
           PRODUCT_UNAVAILABLE: body.message ?? 'Something in your cart is no longer available.',
           STORE_NOT_FOUND: 'This store is no longer available.',
+          STORE_NOT_ACCEPTING_ORDERS:
+            body.message ?? 'This store isn’t accepting orders right now.',
           PAYMENT_PROVIDER_UNCONFIGURED: 'This store cannot accept payments yet.',
           PAYMENT_METHOD_UNAVAILABLE: body.message ?? 'This payment method is not available.',
           PAYMENT_PROVIDER_UNAVAILABLE:

@@ -50,15 +50,23 @@ export function SellerSidebar() {
   const user = useUser();
   const pathname = usePathname();
   const [storeSlug, setStoreSlug] = useState<string | null>(null);
+  const [pendingOrders, setPendingOrders] = useState(0);
 
   useEffect(() => {
     if (!user) return;
-    api<{ store: { slug: string } }>('/api/stores/me')
-      .then((res) => setStoreSlug(res.store.slug))
+    api<{ store: { slug: string }; stats: { pendingOrdersCount: number } }>('/api/stores/me')
+      .then((res) => {
+        setStoreSlug(res.store.slug);
+        setPendingOrders(res.stats.pendingOrdersCount ?? 0);
+      })
       .catch(() => {
         // No store yet (mid-onboarding) — the "View Store" link just stays hidden.
       });
   }, [user]);
+
+  function badgeFor(href: string): number {
+    return href === '/dashboard/orders' ? pendingOrders : 0;
+  }
 
   if (!user) return null;
 
@@ -73,20 +81,28 @@ export function SellerSidebar() {
           <img src="/vendylio-logo.svg" alt="Vendylio" className="h-7 w-auto" />
         </Link>
         <div className="flex-1 overflow-y-auto py-4">
-          {NAV_ITEMS.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`mx-3 mb-1 flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium ${
-                isActive(pathname, item.href)
-                  ? 'bg-secondary text-primary'
-                  : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
-              }`}
-            >
-              <Icon i={item.icon} size={18} />
-              {item.label}
-            </Link>
-          ))}
+          {NAV_ITEMS.map((item) => {
+            const badge = badgeFor(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`mx-3 mb-1 flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium ${
+                  isActive(pathname, item.href)
+                    ? 'bg-secondary text-primary'
+                    : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                }`}
+              >
+                <Icon i={item.icon} size={18} />
+                <span className="flex-1">{item.label}</span>
+                {badge > 0 && (
+                  <span className="rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-bold text-primary-foreground">
+                    {badge}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
         </div>
         {storeSlug && (
           <a
@@ -106,18 +122,26 @@ export function SellerSidebar() {
         aria-label="Seller navigation"
         className="fixed inset-x-0 bottom-0 z-30 flex border-t border-border bg-card lg:hidden"
       >
-        {MOBILE_NAV_ITEMS.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-medium ${
-              isActive(pathname, item.href) ? 'text-primary' : 'text-muted-foreground'
-            }`}
-          >
-            <Icon i={item.icon} size={20} />
-            {item.label}
-          </Link>
-        ))}
+        {MOBILE_NAV_ITEMS.map((item) => {
+          const badge = badgeFor(item.href);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`relative flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-medium ${
+                isActive(pathname, item.href) ? 'text-primary' : 'text-muted-foreground'
+              }`}
+            >
+              <Icon i={item.icon} size={20} />
+              {badge > 0 && (
+                <span className="absolute right-1/2 top-1 ml-3 translate-x-4 rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
+                  {badge}
+                </span>
+              )}
+              {item.label}
+            </Link>
+          );
+        })}
       </nav>
     </>
   );

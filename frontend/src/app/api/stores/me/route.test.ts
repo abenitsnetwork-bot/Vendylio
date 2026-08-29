@@ -28,6 +28,8 @@ beforeEach(() => {
   mockRequireAuth.mockResolvedValue(authedCtx);
   // countLowStock() raw query — default to "nothing low".
   prismaMock.$queryRaw.mockResolvedValue([{ low: 0, out: 0 }] as never);
+  // Phase 8 — pending-order count.
+  prismaMock.order.count.mockResolvedValue(0 as never);
 });
 
 describe('GET /api/stores/me', () => {
@@ -58,6 +60,10 @@ describe('GET /api/stores/me', () => {
       city: null,
       state: null,
       logoUrl: null,
+      timezone: 'America/New_York',
+      ordersPaused: false,
+      pauseMessage: null,
+      hours: [],
       createdAt: new Date(),
       updatedAt: new Date(),
       _count: { products: 3 },
@@ -76,9 +82,52 @@ describe('GET /api/stores/me', () => {
       todayOrdersCount: 0,
       monthSalesCents: 0,
       monthOrdersCount: 0,
+      pendingOrdersCount: 0,
       visits: 0,
       lowStockCount: 2,
       outOfStockCount: 1,
+    });
+    // Phase 8 — store open/pause state, defaults for a store with no config.
+    expect(body.openState).toEqual({
+      acceptingOrders: true,
+      ordersPaused: false,
+      pauseMessage: null,
+      hoursConfigured: false,
+      openNow: true,
+      nextOpenLabel: null,
+    });
+  });
+
+  it('reports the store as paused + surfaces the pending-order count', async () => {
+    mockResolveOwnStore.mockResolvedValue({ id: 'store-1', organizationId: 'org-1' } as never);
+    prismaMock.store.findUniqueOrThrow.mockResolvedValue({
+      id: 'store-1',
+      organizationId: 'org-1',
+      slug: 'shea-store',
+      name: 'Shea Store',
+      timezone: 'America/New_York',
+      ordersPaused: true,
+      pauseMessage: 'Back Monday',
+      hours: [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      _count: { products: 1 },
+    } as never);
+    prismaMock.order.aggregate.mockResolvedValue({ _sum: { amount: 0 }, _count: 0 } as never);
+    prismaMock.order.count.mockResolvedValue(4 as never);
+
+    const res = await GET(makeGet());
+    const body = await res.json();
+    expect(body.openState).toMatchObject({
+      acceptingOrders: false,
+      ordersPaused: true,
+      pauseMessage: 'Back Monday',
+    });
+    expect(body.stats.pendingOrdersCount).toBe(4);
+    const countArgs = prismaMock.order.count.mock.calls[0]?.[0];
+    expect(countArgs?.where).toEqual({
+      storeId: 'store-1',
+      status: { in: ['PAID', 'PREPARING', 'READY'] },
     });
   });
 

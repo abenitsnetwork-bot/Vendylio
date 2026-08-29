@@ -532,6 +532,18 @@ model Store {
   // whose own `lowStockThreshold` is null. A product/variant is LOW when its
   // quantity is > 0 and <= the effective threshold, OUT when quantity <= 0.
   defaultLowStockThreshold Int          @default(3)
+  // Phase 8 — store operations. `timezone` (IANA, e.g. "America/New_York") is
+  // the business's own timezone: it drives the "today" boundary for dashboard
+  // metrics and the interpretation of `hours`. `ordersPaused` is a HARD,
+  // server-enforced switch — checkout rejects new orders while it's true
+  // (STORE_NOT_ACCEPTING_ORDERS), independent of `published`. `hours` is
+  // informational only (soft): [{day:0-6 (0=Sun), open:"HH:MM", close:"HH:MM"}]
+  // — an empty array means "no hours configured", i.e. always shown as open.
+  // See lib/server/store/availability.ts.
+  timezone                 String       @default("America/New_York")
+  ordersPaused             Boolean      @default(false)
+  pauseMessage             String?
+  hours                    Json         @default("[]")
   createdAt                DateTime     @default(now())
   updatedAt                DateTime     @updatedAt
 
