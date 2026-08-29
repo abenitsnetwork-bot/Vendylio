@@ -6,6 +6,8 @@ import { notFound } from 'next/navigation';
 import { getPublicProduct } from '@/lib/server/storefront';
 import { CartProvider } from '@/contexts/CartContext';
 import { ProductDetailView } from '@/components/storefront/ProductDetailView';
+import { JsonLd } from '@/components/JsonLd';
+import { productMetadata, productJsonLd } from '@/lib/seo';
 
 export const runtime = 'nodejs';
 
@@ -16,11 +18,8 @@ interface Params {
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { slug, productId } = await params;
   const result = await getPublicProduct(slug, productId);
-  if (!result) return { title: 'Product not found — Vendylio' };
-  return {
-    title: `${result.product.name} — ${result.store.name}`,
-    description: result.product.description ?? `${result.product.name} on Vendylio.`,
-  };
+  if (!result) return { title: 'Product not found', robots: { index: false, follow: false } };
+  return productMetadata(result.store, result.product);
 }
 
 export default async function ProductDetailPage({ params }: Params) {
@@ -30,6 +29,7 @@ export default async function ProductDetailPage({ params }: Params) {
 
   return (
     <CartProvider storeSlug={result.store.slug}>
+      <JsonLd data={productJsonLd(result.store, result.product)} />
       <ProductDetailView store={result.store} product={result.product} />
     </CartProvider>
   );

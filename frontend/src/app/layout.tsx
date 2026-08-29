@@ -4,6 +4,7 @@ import './globals.css';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { SentryClientInit } from '@/components/SentryClientInit';
+import { siteOrigin } from '@/lib/seo';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -20,8 +21,14 @@ const fraunces = Fraunces({
   display: 'swap',
 });
 
+// metadataBase lets every page's relative `alternates.canonical` and
+// `openGraph` URLs resolve to absolute ones (storefront pages rely on this).
 export const metadata: Metadata = {
-  title: 'Vendylio',
+  metadataBase: new URL(siteOrigin()),
+  // No `title.template` — storefront pages set a merchant-first title
+  // (just the store/product name, no "| Vendylio" suffix) so each store
+  // reads as its own independent business.
+  title: 'Vendylio — open your online store',
   description: 'Open your online store and start selling — free, in minutes.',
 };
 

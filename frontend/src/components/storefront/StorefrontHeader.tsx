@@ -31,7 +31,15 @@ export function StorefrontHeader({
       <div className="mx-auto flex max-w-6xl items-center gap-4">
         <Link href={`/s/${storeSlug}`} className="flex flex-shrink-0 items-center gap-3">
           {logoUrl ? (
-            <img src={logoUrl} alt="" className="h-10 w-10 rounded-lg object-cover" />
+            // Not decorative here — the store name beside it is hidden on
+            // mobile (`sm:inline`), so the logo carries the identity.
+            <img
+              src={logoUrl}
+              alt={storeName}
+              className="h-10 w-10 rounded-lg object-cover"
+              width={40}
+              height={40}
+            />
           ) : (
             <ImagePlaceholder icon="store" className="h-10 w-10 rounded-lg" />
           )}

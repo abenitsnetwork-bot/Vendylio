@@ -11,6 +11,8 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getPublicStore } from '@/lib/server/storefront';
 import { StorefrontShell } from '@/components/storefront/StorefrontShell';
+import { JsonLd } from '@/components/JsonLd';
+import { storeMetadata, storeJsonLd } from '@/lib/seo';
 
 export const runtime = 'nodejs';
 
@@ -21,11 +23,8 @@ interface Params {
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { slug } = await params;
   const store = await getPublicStore(slug);
-  if (!store) return { title: 'Store not found — Vendylio' };
-  return {
-    title: `${store.name} — Vendylio`,
-    description: store.description ?? `Shop ${store.name} on Vendylio.`,
-  };
+  if (!store) return { title: 'Store not found', robots: { index: false, follow: false } };
+  return storeMetadata(store);
 }
 
 export default async function StorefrontPage({ params }: Params) {
@@ -33,5 +32,10 @@ export default async function StorefrontPage({ params }: Params) {
   const store = await getPublicStore(slug);
   if (!store) notFound();
 
-  return <StorefrontShell store={store} />;
+  return (
+    <>
+      <JsonLd data={storeJsonLd(store)} />
+      <StorefrontShell store={store} />
+    </>
+  );
 }
