@@ -4,6 +4,7 @@ import { sellerFirstName } from '@/lib/utils';
 import { useAuth, useUser } from '@/contexts/AuthContext';
 import { SellerHeader } from '@/components/seller/SellerHeader';
 import { GuideLayout, type GuideStep } from '@/components/seller/GuideLayout';
+import { relatedGuides } from '@/lib/resourceGuides';
 
 const STEPS: GuideStep[] = [
   {
@@ -88,10 +89,7 @@ export default function GuideFirstProductsPage() {
           description="A practical guide to adding your first products to Vendylio and getting ready for your first sale."
           readTime="12 min read"
           steps={STEPS}
-          relatedGuides={[
-            { title: 'Setting Up Delivery', time: '8 min', href: '/dashboard/resources/delivery' },
-            { title: 'Payment Setup', time: '5 min', href: '/dashboard/resources/payment-setup' },
-          ]}
+          relatedGuides={relatedGuides('first-products')}
           ctaText="Go to Product Manager"
           ctaHref="/dashboard/products/new"
           extraContent={

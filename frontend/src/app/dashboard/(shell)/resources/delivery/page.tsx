@@ -5,6 +5,7 @@ import { useAuth, useUser } from '@/contexts/AuthContext';
 import { Icon } from '@/components/ui/Icon';
 import { SellerHeader } from '@/components/seller/SellerHeader';
 import { GuideLayout, type GuideStep } from '@/components/seller/GuideLayout';
+import { relatedGuides } from '@/lib/resourceGuides';
 
 const STEPS: GuideStep[] = [
   {
@@ -84,19 +85,12 @@ export default function GuideDeliveryPage() {
       />
       <div className="px-4 py-12 lg:px-14">
         <GuideLayout
-          category="Logistics & Fulfillment"
+          category="Operations & Money"
           title="Setting Up Delivery"
           description="Configure your delivery zones, set realistic timelines, and establish a system that scales with your growth."
           readTime="8 min read"
           steps={STEPS}
-          relatedGuides={[
-            {
-              title: 'Your First 5 Products',
-              time: '12 min',
-              href: '/dashboard/resources/first-products',
-            },
-            { title: 'Payment Setup', time: '5 min', href: '/dashboard/resources/payment-setup' },
-          ]}
+          relatedGuides={relatedGuides('delivery')}
           ctaText="Go to Store Settings"
           ctaHref="/dashboard/settings"
           extraContent={

@@ -5,6 +5,7 @@ import { useAuth, useUser } from '@/contexts/AuthContext';
 import { Icon } from '@/components/ui/Icon';
 import { SellerHeader } from '@/components/seller/SellerHeader';
 import { GuideLayout, type GuideStep } from '@/components/seller/GuideLayout';
+import { relatedGuides } from '@/lib/resourceGuides';
 
 const STEPS: GuideStep[] = [
   {
@@ -97,19 +98,12 @@ export default function GuidePaymentSetupPage() {
       />
       <div className="px-4 py-12 lg:px-14">
         <GuideLayout
-          category="Getting Started"
-          title="Payment Setup"
-          description="Get ready to receive your earnings via Cash App or Zelle."
+          category="Operations & Money"
+          title="Getting Paid"
+          description="How money reaches you on Vendylio — card payments and Cash App / Zelle withdrawals."
           readTime="5 min read"
           steps={STEPS}
-          relatedGuides={[
-            {
-              title: 'Your First 5 Products',
-              time: '12 min',
-              href: '/dashboard/resources/first-products',
-            },
-            { title: 'Setting Up Delivery', time: '8 min', href: '/dashboard/resources/delivery' },
-          ]}
+          relatedGuides={relatedGuides('payment-setup')}
           ctaText="Go to Billing & Payouts"
           ctaHref="/dashboard/billing"
           extraContent={
