@@ -11,7 +11,7 @@
 // set on session establishment (verify-email / login / refresh).
 export const runtime = 'nodejs';
 
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse, after, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { zEmail } from '@/lib/server/zod-helpers';
 import { prisma } from '@/lib/server/prisma';
@@ -24,6 +24,7 @@ import { isBanned } from '@/lib/server/auth/banned-passwords';
 import { isPwned } from '@/lib/server/auth/hibp';
 import { dummyBcryptCompare } from '@/lib/server/auth/dummy-bcrypt';
 import { enqueueOutbox } from '@/lib/server/outbox';
+import { sendVerificationCodeNow } from '@/lib/server/auth/send-verification-now';
 
 const PASSWORD_MIN = Number(process.env.AUTH_PASSWORD_MIN_LENGTH ?? 10);
 const VERIFICATION_TTL_MS = Number(process.env.AUTH_VERIFICATION_TTL_MIN ?? 15) * 60 * 1000;
@@ -145,6 +146,11 @@ export async function POST(req: NextRequest): Promise<Response> {
     });
 
     log.info('signup new user');
+    // Deliver the code now instead of waiting on the 1-min outbox cron. Runs
+    // after the response is flushed — no added latency, no timing-parity leak
+    // (the existing-email branch above is untouched). The outbox row is the
+    // fallback if this best-effort send can't complete.
+    after(() => sendVerificationCodeNow({ to: email, code, expiresAt }));
     const res = NextResponse.json({ ok: true }, { status: 201 });
     res.headers.set('x-request-id', ctx.requestId);
     return res;

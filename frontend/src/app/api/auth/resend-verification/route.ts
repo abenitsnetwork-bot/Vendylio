@@ -16,7 +16,7 @@
 //     natural cap, hence the stricter posture.
 export const runtime = 'nodejs';
 
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse, after, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { zEmail } from '@/lib/server/zod-helpers';
 import { prisma } from '@/lib/server/prisma';
@@ -26,6 +26,7 @@ import { makeRequestContext, withRequestContext } from '@/lib/server/observabili
 import { log } from '@/lib/server/observability/log';
 import { generateVerificationCode } from '@/lib/server/auth';
 import { enqueueOutbox } from '@/lib/server/outbox';
+import { sendVerificationCodeNow } from '@/lib/server/auth/send-verification-now';
 
 const VERIFICATION_TTL_MS = Number(process.env.AUTH_VERIFICATION_TTL_MIN ?? 15) * 60 * 1000;
 
@@ -107,6 +108,8 @@ export async function POST(req: NextRequest): Promise<Response> {
           },
         });
       });
+      // Deliver now rather than on the 1-min outbox cron (see signup route).
+      after(() => sendVerificationCodeNow({ to: user.email, code, expiresAt }));
       log.info('resend-verification: code re-issued', { userId: user.id });
     } else {
       // No user, OR already verified — log without leaking which case it is.

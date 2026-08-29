@@ -18,8 +18,17 @@ vi.mock('@/lib/server/auth/dummy-bcrypt', () => ({
 vi.mock('@/lib/server/auth/hibp', () => ({
   isPwned: vi.fn().mockResolvedValue(false),
 }));
+vi.mock('@/lib/server/auth/send-verification-now', () => ({
+  sendVerificationCodeNow: vi.fn().mockResolvedValue(undefined),
+}));
+// `after()` throws outside a real request scope — run its callback inline.
+vi.mock('next/server', async (orig) => {
+  const actual = await orig<typeof import('next/server')>();
+  return { ...actual, after: (fn: () => unknown) => void fn() };
+});
 
 import { POST } from './route';
+import { sendVerificationCodeNow } from '@/lib/server/auth/send-verification-now';
 import { dummyBcryptCompare } from '@/lib/server/auth/dummy-bcrypt';
 import { isPwned } from '@/lib/server/auth/hibp';
 import { enqueueOutbox } from '@/lib/server/outbox';
@@ -71,6 +80,19 @@ describe('POST /api/auth/signup', () => {
     const outboxArg = (enqueueOutbox as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[1];
     expect(outboxArg?.kind).toBe('email.verification_code');
     expect(outboxArg?.payload?.to).toBe('new@example.com');
+
+    // Immediate delivery kicked off via after() (bypasses the 1-min cron).
+    expect(sendVerificationCodeNow).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(sendVerificationCodeNow).mock.calls[0]?.[0]).toMatchObject({
+      to: 'new@example.com',
+    });
+  });
+
+  it('does NOT kick an immediate send on the existing-email branch', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({ id: 'u-existing' } as never);
+    const res = await POST(makeReq({ email: 'dupe@example.com', password: 'a-strong-passphrase' }));
+    expect(res.status).toBe(201);
+    expect(sendVerificationCodeNow).not.toHaveBeenCalled();
   });
 
   it('passes through the optional name field on user.create', async () => {
