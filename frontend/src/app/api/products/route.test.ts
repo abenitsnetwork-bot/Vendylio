@@ -142,8 +142,8 @@ describe('POST /api/products', () => {
 });
 
 describe('GET /api/products', () => {
-  function makeGet(): NextRequest {
-    return new NextRequest('http://test/api/products', { method: 'GET' });
+  function makeGet(qs = ''): NextRequest {
+    return new NextRequest(`http://test/api/products${qs}`, { method: 'GET' });
   }
 
   it('401s when requireAuth bails', async () => {
@@ -162,21 +162,57 @@ describe('GET /api/products', () => {
     expect(body.error).toBe('NO_STORE');
   });
 
-  it('lists products scoped to the caller store, newest first', async () => {
-    prismaMock.product.findMany.mockResolvedValue([{ id: 'prod-1', storeId: 'store-1' }] as never);
+  it('lists products scoped to the caller store, newest first, with a null nextCursor when the page fits', async () => {
+    prismaMock.product.findMany.mockResolvedValue([
+      { id: 'prod-1', storeId: 'store-1', createdAt: new Date() },
+    ] as never);
     const res = await GET(makeGet());
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.products).toHaveLength(1);
+    expect(body.nextCursor).toBeNull();
     const args = prismaMock.product.findMany.mock.calls[0]?.[0];
-    expect(args?.where).toEqual({ storeId: 'store-1' });
-    expect(args?.orderBy).toEqual({ createdAt: 'desc' });
+    expect(args?.where).toMatchObject({ storeId: 'store-1' });
+    expect(args?.orderBy).toEqual([{ createdAt: 'desc' }, { id: 'desc' }]);
   });
 
-  it('includes ARCHIVED products alongside ACTIVE ones — this is the seller management view, not the public storefront', async () => {
+  it('applies q / categoryId / status filters', async () => {
+    prismaMock.product.findMany.mockResolvedValue([] as never);
+    await GET(makeGet('?q=shea&categoryId=cat-1&status=ARCHIVED'));
+    const where = prismaMock.product.findMany.mock.calls[0]?.[0]?.where as Record<string, unknown>;
+    expect(where).toMatchObject({
+      storeId: 'store-1',
+      name: { contains: 'shea', mode: 'insensitive' },
+      categoryId: 'cat-1',
+      status: 'ARCHIVED',
+    });
+  });
+
+  it('categoryId=__none__ filters to uncategorized products', async () => {
+    prismaMock.product.findMany.mockResolvedValue([] as never);
+    await GET(makeGet('?categoryId=__none__'));
+    const where = prismaMock.product.findMany.mock.calls[0]?.[0]?.where as Record<string, unknown>;
+    expect(where.categoryId).toBeNull();
+  });
+
+  it('emits a nextCursor when there is another page', async () => {
+    // limit defaults to 20 → route asks for 21; return 21 rows
+    const rows = Array.from({ length: 21 }, (_, i) => ({
+      id: `prod-${i}`,
+      storeId: 'store-1',
+      createdAt: new Date(Date.now() - i * 1000),
+    }));
+    prismaMock.product.findMany.mockResolvedValue(rows as never);
+    const res = await GET(makeGet());
+    const body = await res.json();
+    expect(body.products).toHaveLength(20);
+    expect(body.nextCursor).toEqual(expect.any(String));
+  });
+
+  it('includes ARCHIVED products by default — this is the seller management view, not the public storefront', async () => {
     prismaMock.product.findMany.mockResolvedValue([
-      { id: 'prod-1', storeId: 'store-1', status: 'ACTIVE' },
-      { id: 'prod-2', storeId: 'store-1', status: 'ARCHIVED' },
+      { id: 'prod-1', storeId: 'store-1', status: 'ACTIVE', createdAt: new Date() },
+      { id: 'prod-2', storeId: 'store-1', status: 'ARCHIVED', createdAt: new Date() },
     ] as never);
     const res = await GET(makeGet());
     const body = await res.json();

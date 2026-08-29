@@ -6,8 +6,10 @@ import type { PublicStore } from '@/lib/server/storefront';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 import { formatUsdPerUnit, formatQuantityWithUnit } from '@/lib/productUnits';
 import { toAddableProduct } from '@/lib/productVariants';
+import { groupProductsByCategory, sectionTitle } from '@/lib/storefrontGrouping';
 import { useCart } from '@/contexts/CartContext';
 import { StoreReviews } from '@/components/storefront/StoreReviews';
+import { StorefrontCategoryNav } from '@/components/storefront/StorefrontCategoryNav';
 import { StorefrontTopBar } from '@/components/storefront/StorefrontTopBar';
 import { StorefrontHeader } from '@/components/storefront/StorefrontHeader';
 
@@ -21,9 +23,7 @@ export function ModernTemplate({
   const { addItem } = useCart();
   const [query, setQuery] = useState('');
   const location = [store.city, store.state].filter(Boolean).join(', ');
-  const products = store.products.filter((p) =>
-    p.name.toLowerCase().includes(query.trim().toLowerCase()),
-  );
+  const sections = groupProductsByCategory(store.products, store.categories, query);
 
   return (
     <div>
@@ -68,85 +68,93 @@ export function ModernTemplate({
               This store hasn&apos;t added any products yet — check back soon.
             </p>
           </div>
-        ) : products.length === 0 ? (
+        ) : sections.length === 0 ? (
           <p className="py-20 text-center text-sm text-muted-foreground">
             No products match &ldquo;{query}&rdquo;.
           </p>
         ) : (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {products.map((product) => {
-              const hasVariants = product.variants.length > 0;
-              const addable = toAddableProduct(product, product.variants[0]?.id ?? null);
-              const soldOut = !hasVariants && addable.quantity <= 0;
-              return (
-                <div
-                  key={product.id}
-                  className="overflow-hidden rounded-xl border border-border bg-card"
-                >
-                  <Link href={`/s/${store.slug}/products/${product.id}`} className="relative block">
-                    {product.imageUrl ? (
-                      <img
-                        src={product.imageUrl}
-                        alt={product.name}
-                        className="h-48 w-full object-cover"
-                      />
-                    ) : (
-                      <ImagePlaceholder icon="package" className="h-48 w-full" />
-                    )}
-                    {soldOut && (
-                      <span className="absolute right-3 top-3 rounded bg-foreground px-2 py-1 text-xs font-semibold text-background">
-                        Sold out
-                      </span>
-                    )}
-                  </Link>
-                  <div className="p-5">
-                    {product.category && (
-                      <span className="mb-2 inline-block rounded bg-secondary px-2 py-0.5 text-xs font-medium text-primary">
-                        {product.category.name}
-                      </span>
-                    )}
-                    <Link href={`/s/${store.slug}/products/${product.id}`}>
-                      <p className="mb-1 font-headings text-base font-semibold text-foreground hover:text-primary">
-                        {product.name}
-                      </p>
-                    </Link>
-                    {product.description && (
-                      <p className="mb-3 line-clamp-2 text-sm text-muted-foreground">
-                        {product.description}
-                      </p>
-                    )}
-                    <div className="mb-3 flex items-center justify-between">
-                      <p className="font-headings text-lg font-bold text-foreground">
-                        {formatUsdPerUnit(addable.priceCents, product.unit)}
-                      </p>
-                      {!soldOut && !hasVariants && addable.quantity <= 5 && (
-                        <span className="text-xs text-muted-foreground">
-                          Only {formatQuantityWithUnit(addable.quantity, product.unit)} left
-                        </span>
-                      )}
-                    </div>
-                    {hasVariants ? (
-                      <Link
-                        href={`/s/${store.slug}/products/${product.id}`}
-                        className="block w-full rounded-lg border border-border py-2.5 text-center text-sm font-semibold text-foreground hover:bg-secondary"
+          <>
+            <StorefrontCategoryNav sections={sections} />
+            {sections.map((section) => (
+              <section key={section.anchor} id={section.anchor} className="mb-12 scroll-mt-20">
+                <h2 className="mb-5 font-headings text-xl font-bold text-foreground">
+                  {sectionTitle(section)}
+                </h2>
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  {section.products.map((product) => {
+                    const hasVariants = product.variants.length > 0;
+                    const addable = toAddableProduct(product, product.variants[0]?.id ?? null);
+                    const soldOut = !hasVariants && addable.quantity <= 0;
+                    return (
+                      <div
+                        key={product.id}
+                        className="overflow-hidden rounded-xl border border-border bg-card"
                       >
-                        View Options
-                      </Link>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={soldOut}
-                        onClick={() => addItem(addable)}
-                        className="w-full rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        {soldOut ? 'Sold out' : 'Add to Cart'}
-                      </button>
-                    )}
-                  </div>
+                        <Link
+                          href={`/s/${store.slug}/products/${product.id}`}
+                          className="relative block"
+                        >
+                          {product.imageUrl ? (
+                            <img
+                              src={product.imageUrl}
+                              alt={product.name}
+                              className="h-48 w-full object-cover"
+                            />
+                          ) : (
+                            <ImagePlaceholder icon="package" className="h-48 w-full" />
+                          )}
+                          {soldOut && (
+                            <span className="absolute right-3 top-3 rounded bg-foreground px-2 py-1 text-xs font-semibold text-background">
+                              Sold out
+                            </span>
+                          )}
+                        </Link>
+                        <div className="p-5">
+                          <Link href={`/s/${store.slug}/products/${product.id}`}>
+                            <p className="mb-1 font-headings text-base font-semibold text-foreground hover:text-primary">
+                              {product.name}
+                            </p>
+                          </Link>
+                          {product.description && (
+                            <p className="mb-3 line-clamp-2 text-sm text-muted-foreground">
+                              {product.description}
+                            </p>
+                          )}
+                          <div className="mb-3 flex items-center justify-between">
+                            <p className="font-headings text-lg font-bold text-foreground">
+                              {formatUsdPerUnit(addable.priceCents, product.unit)}
+                            </p>
+                            {!soldOut && !hasVariants && addable.quantity <= 5 && (
+                              <span className="text-xs text-muted-foreground">
+                                Only {formatQuantityWithUnit(addable.quantity, product.unit)} left
+                              </span>
+                            )}
+                          </div>
+                          {hasVariants ? (
+                            <Link
+                              href={`/s/${store.slug}/products/${product.id}`}
+                              className="block w-full rounded-lg border border-border py-2.5 text-center text-sm font-semibold text-foreground hover:bg-secondary"
+                            >
+                              View Options
+                            </Link>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={soldOut}
+                              onClick={() => addItem(addable)}
+                              className="w-full rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              {soldOut ? 'Sold out' : 'Add to Cart'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
+              </section>
+            ))}
+          </>
         )}
         <StoreReviews
           reviews={store.reviews}

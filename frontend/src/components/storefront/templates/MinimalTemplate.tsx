@@ -6,8 +6,10 @@ import type { PublicStore } from '@/lib/server/storefront';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 import { formatUsdPerUnit } from '@/lib/productUnits';
 import { toAddableProduct } from '@/lib/productVariants';
+import { groupProductsByCategory, sectionTitle } from '@/lib/storefrontGrouping';
 import { useCart } from '@/contexts/CartContext';
 import { StoreReviews } from '@/components/storefront/StoreReviews';
+import { StorefrontCategoryNav } from '@/components/storefront/StorefrontCategoryNav';
 import { StorefrontTopBar } from '@/components/storefront/StorefrontTopBar';
 import { StorefrontHeader } from '@/components/storefront/StorefrontHeader';
 
@@ -21,9 +23,7 @@ export function MinimalTemplate({
   const { addItem } = useCart();
   const [query, setQuery] = useState('');
   const location = [store.city, store.state].filter(Boolean).join(', ');
-  const products = store.products.filter((p) =>
-    p.name.toLowerCase().includes(query.trim().toLowerCase()),
-  );
+  const sections = groupProductsByCategory(store.products, store.categories, query);
 
   return (
     <div>
@@ -59,72 +59,80 @@ export function MinimalTemplate({
           <p className="py-16 text-center text-sm text-muted-foreground">
             This store hasn&apos;t added any products yet — check back soon.
           </p>
-        ) : products.length === 0 ? (
+        ) : sections.length === 0 ? (
           <p className="py-16 text-center text-sm text-muted-foreground">
             No products match &ldquo;{query}&rdquo;.
           </p>
         ) : (
-          <div className="divide-y divide-border border-t border-border">
-            {products.map((product) => {
-              const hasVariants = product.variants.length > 0;
-              const addable = toAddableProduct(product, product.variants[0]?.id ?? null);
-              const soldOut = !hasVariants && addable.quantity <= 0;
-              return (
-                <div key={product.id} className="flex items-center gap-5 py-6">
-                  <Link href={`/s/${store.slug}/products/${product.id}`} className="flex-shrink-0">
-                    {product.imageUrl ? (
-                      <img
-                        src={product.imageUrl}
-                        alt={product.name}
-                        className="h-20 w-20 rounded-lg object-cover"
-                      />
-                    ) : (
-                      <ImagePlaceholder icon="package" className="h-20 w-20 rounded-lg" />
-                    )}
-                  </Link>
-                  <div className="min-w-0 flex-1">
-                    {product.category && (
-                      <p className="mb-0.5 text-xs uppercase tracking-wide text-muted-foreground">
-                        {product.category.name}
-                      </p>
-                    )}
-                    <Link href={`/s/${store.slug}/products/${product.id}`}>
-                      <p className="font-headings font-semibold text-foreground hover:text-primary">
-                        {product.name}
-                      </p>
-                    </Link>
-                    {product.description && (
-                      <p className="mt-1 line-clamp-1 text-sm text-muted-foreground">
-                        {product.description}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex-shrink-0 text-right">
-                    <p className="mb-2 font-headings text-base font-bold text-foreground">
-                      {formatUsdPerUnit(addable.priceCents, product.unit)}
-                    </p>
-                    {hasVariants ? (
-                      <Link
-                        href={`/s/${store.slug}/products/${product.id}`}
-                        className="inline-block rounded-lg border border-border px-4 py-1.5 text-xs font-semibold text-foreground"
-                      >
-                        Options
-                      </Link>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={soldOut}
-                        onClick={() => addItem(addable)}
-                        className="rounded-lg border border-border px-4 py-1.5 text-xs font-semibold text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        {soldOut ? 'Sold out' : 'Add'}
-                      </button>
-                    )}
-                  </div>
+          <>
+            <StorefrontCategoryNav sections={sections} />
+            {sections.map((section) => (
+              <section key={section.anchor} id={section.anchor} className="mb-10 scroll-mt-20">
+                <h2 className="mb-2 font-headings text-lg font-bold text-foreground">
+                  {sectionTitle(section)}
+                </h2>
+                <div className="divide-y divide-border border-t border-border">
+                  {section.products.map((product) => {
+                    const hasVariants = product.variants.length > 0;
+                    const addable = toAddableProduct(product, product.variants[0]?.id ?? null);
+                    const soldOut = !hasVariants && addable.quantity <= 0;
+                    return (
+                      <div key={product.id} className="flex items-center gap-5 py-6">
+                        <Link
+                          href={`/s/${store.slug}/products/${product.id}`}
+                          className="flex-shrink-0"
+                        >
+                          {product.imageUrl ? (
+                            <img
+                              src={product.imageUrl}
+                              alt={product.name}
+                              className="h-20 w-20 rounded-lg object-cover"
+                            />
+                          ) : (
+                            <ImagePlaceholder icon="package" className="h-20 w-20 rounded-lg" />
+                          )}
+                        </Link>
+                        <div className="min-w-0 flex-1">
+                          <Link href={`/s/${store.slug}/products/${product.id}`}>
+                            <p className="font-headings font-semibold text-foreground hover:text-primary">
+                              {product.name}
+                            </p>
+                          </Link>
+                          {product.description && (
+                            <p className="mt-1 line-clamp-1 text-sm text-muted-foreground">
+                              {product.description}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex-shrink-0 text-right">
+                          <p className="mb-2 font-headings text-base font-bold text-foreground">
+                            {formatUsdPerUnit(addable.priceCents, product.unit)}
+                          </p>
+                          {hasVariants ? (
+                            <Link
+                              href={`/s/${store.slug}/products/${product.id}`}
+                              className="inline-block rounded-lg border border-border px-4 py-1.5 text-xs font-semibold text-foreground"
+                            >
+                              Options
+                            </Link>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={soldOut}
+                              onClick={() => addItem(addable)}
+                              className="rounded-lg border border-border px-4 py-1.5 text-xs font-semibold text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              {soldOut ? 'Sold out' : 'Add'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
+              </section>
+            ))}
+          </>
         )}
         <StoreReviews
           reviews={store.reviews}

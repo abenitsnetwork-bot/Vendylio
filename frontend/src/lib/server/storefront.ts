@@ -10,6 +10,13 @@ export interface PublicProductVariant {
   quantity: number;
 }
 
+export interface PublicCategory {
+  id: string;
+  name: string;
+  slug: string;
+  sortOrder: number;
+}
+
 export interface PublicProduct {
   id: string;
   name: string;
@@ -51,6 +58,10 @@ export interface PublicStore {
   deliveryProvider: string;
   pickupAddress: string | null;
   template: StoreTemplate;
+  // Seller-defined, ordered. Products are grouped under these on the
+  // storefront; a product whose `category` is null falls under an implicit
+  // "Uncategorized" section rendered last.
+  categories: PublicCategory[];
   products: PublicProduct[];
   reviews: PublicReview[];
   averageRating: number | null;
@@ -90,6 +101,10 @@ export async function getPublicStore(slug: string): Promise<PublicStore | null> 
       deliveryProvider: true,
       pickupAddress: true,
       template: true,
+      categories: {
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+        select: { id: true, name: true, slug: true, sortOrder: true },
+      },
       products: {
         where: { status: 'ACTIVE' },
         orderBy: { createdAt: 'desc' },

@@ -6,8 +6,10 @@ import type { PublicStore } from '@/lib/server/storefront';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
 import { formatUsdPerUnit } from '@/lib/productUnits';
 import { toAddableProduct } from '@/lib/productVariants';
+import { groupProductsByCategory, sectionTitle } from '@/lib/storefrontGrouping';
 import { useCart } from '@/contexts/CartContext';
 import { StoreReviews } from '@/components/storefront/StoreReviews';
+import { StorefrontCategoryNav } from '@/components/storefront/StorefrontCategoryNav';
 import { StorefrontTopBar } from '@/components/storefront/StorefrontTopBar';
 import { StorefrontHeader } from '@/components/storefront/StorefrontHeader';
 
@@ -21,9 +23,7 @@ export function BoldTemplate({
   const { addItem } = useCart();
   const [query, setQuery] = useState('');
   const location = [store.city, store.state].filter(Boolean).join(', ');
-  const products = store.products.filter((p) =>
-    p.name.toLowerCase().includes(query.trim().toLowerCase()),
-  );
+  const sections = groupProductsByCategory(store.products, store.categories, query);
 
   return (
     <div>
@@ -71,76 +71,86 @@ export function BoldTemplate({
               This store hasn&apos;t added any products yet — check back soon.
             </p>
           </div>
-        ) : products.length === 0 ? (
+        ) : sections.length === 0 ? (
           <p className="py-20 text-center text-sm text-muted-foreground">
             No products match &ldquo;{query}&rdquo;.
           </p>
         ) : (
-          <div className="grid grid-cols-1 gap-10 sm:grid-cols-2">
-            {products.map((product) => {
-              const hasVariants = product.variants.length > 0;
-              const addable = toAddableProduct(product, product.variants[0]?.id ?? null);
-              const soldOut = !hasVariants && addable.quantity <= 0;
-              return (
-                <div key={product.id} className="flex flex-col">
-                  <Link
-                    href={`/s/${store.slug}/products/${product.id}`}
-                    className="relative mb-4 block overflow-hidden rounded-2xl"
-                  >
-                    {product.imageUrl ? (
-                      <img
-                        src={product.imageUrl}
-                        alt={product.name}
-                        className="h-72 w-full object-cover"
-                      />
-                    ) : (
-                      <ImagePlaceholder icon="package" className="h-72 w-full" />
-                    )}
-                    {soldOut && (
-                      <span className="absolute right-4 top-4 rounded bg-foreground px-3 py-1.5 text-xs font-semibold text-background">
-                        Sold out
-                      </span>
-                    )}
-                  </Link>
-                  {product.category && (
-                    <span className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary">
-                      {product.category.name}
-                    </span>
-                  )}
-                  <Link href={`/s/${store.slug}/products/${product.id}`}>
-                    <p className="mb-2 font-headings text-2xl font-bold text-foreground hover:text-primary">
-                      {product.name}
-                    </p>
-                  </Link>
-                  {product.description && (
-                    <p className="mb-4 text-base text-muted-foreground">{product.description}</p>
-                  )}
-                  <div className="flex items-center justify-between gap-4">
-                    <p className="font-headings text-3xl font-bold text-foreground">
-                      {formatUsdPerUnit(addable.priceCents, product.unit)}
-                    </p>
-                    {hasVariants ? (
-                      <Link
-                        href={`/s/${store.slug}/products/${product.id}`}
-                        className="rounded-xl border border-border px-6 py-3 text-sm font-semibold text-foreground"
-                      >
-                        View Options
-                      </Link>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={soldOut}
-                        onClick={() => addItem(addable)}
-                        className="rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        {soldOut ? 'Sold out' : 'Add to Cart'}
-                      </button>
-                    )}
-                  </div>
+          <>
+            <StorefrontCategoryNav sections={sections} />
+            {sections.map((section) => (
+              <section key={section.anchor} id={section.anchor} className="mb-16 scroll-mt-20">
+                <h2
+                  className="mb-6 font-headings font-bold text-foreground"
+                  style={{ fontSize: 'clamp(24px, 4vw, 34px)', letterSpacing: '-1px' }}
+                >
+                  {sectionTitle(section)}
+                </h2>
+                <div className="grid grid-cols-1 gap-10 sm:grid-cols-2">
+                  {section.products.map((product) => {
+                    const hasVariants = product.variants.length > 0;
+                    const addable = toAddableProduct(product, product.variants[0]?.id ?? null);
+                    const soldOut = !hasVariants && addable.quantity <= 0;
+                    return (
+                      <div key={product.id} className="flex flex-col">
+                        <Link
+                          href={`/s/${store.slug}/products/${product.id}`}
+                          className="relative mb-4 block overflow-hidden rounded-2xl"
+                        >
+                          {product.imageUrl ? (
+                            <img
+                              src={product.imageUrl}
+                              alt={product.name}
+                              className="h-72 w-full object-cover"
+                            />
+                          ) : (
+                            <ImagePlaceholder icon="package" className="h-72 w-full" />
+                          )}
+                          {soldOut && (
+                            <span className="absolute right-4 top-4 rounded bg-foreground px-3 py-1.5 text-xs font-semibold text-background">
+                              Sold out
+                            </span>
+                          )}
+                        </Link>
+                        <Link href={`/s/${store.slug}/products/${product.id}`}>
+                          <p className="mb-2 font-headings text-2xl font-bold text-foreground hover:text-primary">
+                            {product.name}
+                          </p>
+                        </Link>
+                        {product.description && (
+                          <p className="mb-4 text-base text-muted-foreground">
+                            {product.description}
+                          </p>
+                        )}
+                        <div className="flex items-center justify-between gap-4">
+                          <p className="font-headings text-3xl font-bold text-foreground">
+                            {formatUsdPerUnit(addable.priceCents, product.unit)}
+                          </p>
+                          {hasVariants ? (
+                            <Link
+                              href={`/s/${store.slug}/products/${product.id}`}
+                              className="rounded-xl border border-border px-6 py-3 text-sm font-semibold text-foreground"
+                            >
+                              View Options
+                            </Link>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={soldOut}
+                              onClick={() => addItem(addable)}
+                              className="rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              {soldOut ? 'Sold out' : 'Add to Cart'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
+              </section>
+            ))}
+          </>
         )}
         <StoreReviews
           reviews={store.reviews}

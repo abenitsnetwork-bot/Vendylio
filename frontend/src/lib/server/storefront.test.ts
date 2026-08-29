@@ -61,6 +61,29 @@ describe('getPublicStore', () => {
     });
   });
 
+  it('selects the store categories ordered by sortOrder (Phase 2 — storefront grouping)', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({
+      slug: 'shea-store',
+      name: 'Shea Store',
+      description: null,
+      city: null,
+      state: null,
+      logoUrl: null,
+      categories: [{ id: 'c1', name: 'Food', slug: 'food', sortOrder: 0 }],
+      products: [],
+      reviews: [],
+    } as never);
+
+    const result = await getPublicStore('shea-store');
+
+    const arg = prismaMock.store.findFirst.mock.calls[0]?.[0];
+    expect(arg?.select?.categories).toMatchObject({
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      select: { id: true, name: true, slug: true, sortOrder: true },
+    });
+    expect(result?.categories).toEqual([{ id: 'c1', name: 'Food', slug: 'food', sortOrder: 0 }]);
+  });
+
   it('selects only visible reviews, newest first (Phase 8)', async () => {
     prismaMock.store.findFirst.mockResolvedValue({
       slug: 'shea-store',

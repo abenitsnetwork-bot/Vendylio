@@ -13,8 +13,12 @@ import { requireAuth } from '@/lib/server/middleware';
 import { prisma } from '@/lib/server/prisma';
 import { resolveOwnStore } from '@/lib/server/org';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
+import { clampLimit, cursorWhere, buildPage, decodeCursor } from '@/lib/server/pagination/paginate';
 import { PRODUCT_UNIT_VALUES } from '@/lib/productUnits';
 import { isValidQuantityForUnit, roundQuantity } from '@/lib/quantity';
+
+// `?categoryId=__none__` filters to products with no category.
+const UNCATEGORIZED_FILTER = '__none__';
 
 const Body = z
   .object({
@@ -114,12 +118,36 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const products = await prisma.product.findMany({
-      where: { storeId: store.id },
-      orderBy: { createdAt: 'desc' },
+    const url = new URL(req.url);
+    const limit = clampLimit(url.searchParams.get('limit'));
+    const cursor = decodeCursor(url.searchParams.get('cursor'));
+    const q = url.searchParams.get('q')?.trim() ?? '';
+    const categoryId = url.searchParams.get('categoryId');
+    const status = url.searchParams.get('status');
+
+    const where = {
+      storeId: store.id,
+      ...(q ? { name: { contains: q, mode: 'insensitive' as const } } : {}),
+      ...(categoryId === UNCATEGORIZED_FILTER
+        ? { categoryId: null }
+        : categoryId
+          ? { categoryId }
+          : {}),
+      ...(status === 'ACTIVE' || status === 'ARCHIVED' ? { status } : {}),
+      ...cursorWhere(cursor),
+    };
+
+    const rows = await prisma.product.findMany({
+      where,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
       include: { category: { select: { id: true, name: true, slug: true, sortOrder: true } } },
     });
 
-    return NextResponse.json({ products }, { headers: { 'x-request-id': ctx.requestId } });
+    const { items, nextCursor } = buildPage(rows, limit);
+    return NextResponse.json(
+      { products: items, nextCursor },
+      { headers: { 'x-request-id': ctx.requestId } },
+    );
   });
 }
