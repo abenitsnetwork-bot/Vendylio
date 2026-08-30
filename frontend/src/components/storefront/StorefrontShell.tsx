@@ -107,7 +107,7 @@ export function StorefrontShell({ store }: { store: PublicStore }) {
             href="/"
             className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
           >
-            <img src="/vendylio-icon.svg" alt="" className="h-4 w-4" />
+            <img src="/icon.png" alt="" className="h-4 w-4" />
             Powered by Vendylio
           </Link>
         </footer>

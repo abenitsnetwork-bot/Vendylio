@@ -30,7 +30,7 @@ export function SellerHeader({
   return (
     <header className="flex items-center justify-between border-b border-border bg-card px-4 py-4 lg:px-14">
       <Link href="/dashboard" className="flex items-center">
-        <img src="/vendylio-logo.svg" alt="Vendylio" className="h-7 w-auto" />
+        <img src="/logo.png" alt="Vendylio" className="h-7 w-auto" />
       </Link>
       <div className="flex items-center gap-6">
         <NotificationBell />

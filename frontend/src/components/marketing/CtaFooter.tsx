@@ -28,7 +28,7 @@ export function CtaFooter() {
 
       <footer className="flex flex-col items-start gap-6 border-t border-border bg-card px-4 py-8 font-body lg:flex-row lg:items-center lg:justify-between lg:px-14">
         <div>
-          <img src="/vendylio-logo.svg" alt="Vendylio" className="h-7 w-auto" />
+          <img src="/logo.png" alt="Vendylio" className="h-7 w-auto" />
           <p className="mt-2 text-xs text-muted-foreground">© 2026 Vendylio · Maryland, USA</p>
         </div>
         <div className="flex flex-wrap items-center gap-6 text-sm text-muted-foreground">
