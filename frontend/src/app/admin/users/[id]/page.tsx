@@ -88,6 +88,27 @@ export default function AdminUserDetailPage({ params }: { params: Promise<{ id: 
     }
   }
 
+  const [resendMsg, setResendMsg] = useState<string | null>(null);
+
+  async function resendVerification() {
+    setBusy(true);
+    setActionError(null);
+    setResendMsg(null);
+    try {
+      await api(`/api/admin/users/${id}/resend-verification`, { method: 'POST' });
+      setResendMsg('Rate limit cleared and a fresh verification code was sent.');
+    } catch (err) {
+      const map: Record<string, string> = {
+        ALREADY_VERIFIED: 'This account is already verified.',
+      };
+      setActionError(
+        err instanceof ApiError ? (map[err.code] ?? err.message) : 'Could not resend the code.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const canChangeRole = can.includes('users:role');
   const canSuspend = can.includes('users:status:suspend');
   const canRestore = can.includes('users:status:restore');
@@ -117,6 +138,7 @@ export default function AdminUserDetailPage({ params }: { params: Promise<{ id: 
             <p className="mb-6 text-sm text-muted-foreground">{user.email}</p>
 
             {actionError && <p className="mb-4 text-sm text-red-600">{actionError}</p>}
+            {resendMsg && <p className="mb-4 text-sm text-green-600">{resendMsg}</p>}
 
             <Card className="mb-6">
               <div className="grid grid-cols-2 gap-4 text-sm">
@@ -144,6 +166,24 @@ export default function AdminUserDetailPage({ params }: { params: Promise<{ id: 
                 </div>
               </div>
             </Card>
+
+            {!user.emailVerifiedAt && (
+              <Card className="mb-6">
+                <p className="mb-1 text-sm font-semibold text-foreground">Email verification</p>
+                <p className="mb-3 text-xs text-muted-foreground">
+                  This account never verified its email. Sends a fresh 15-minute code and clears any
+                  signup / resend rate limit on {user.email}.
+                </p>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={resendVerification}
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                >
+                  Resend verification email
+                </button>
+              </Card>
+            )}
 
             {canChangeRole && (
               <Card className="mb-6">

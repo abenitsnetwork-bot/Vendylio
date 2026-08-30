@@ -139,3 +139,25 @@ export function createEmailLimiter(
     },
   };
 }
+
+/** Canonical bucket names used by the auth routes. */
+export const AUTH_LIMIT_BUCKETS = {
+  signup: 'auth:signup',
+  resend: 'auth:resend',
+  login: 'auth:login',
+} as const;
+
+/**
+ * Wipe an email's per-email rate-limit counter for a bucket — the admin
+ * "unblock this account" action. No-op without Redis (the in-memory fallback
+ * is per-instance and not worth clearing).
+ */
+export async function resetEmailLimit(
+  redis: Redis | null,
+  bucket: string,
+  email: string,
+): Promise<void> {
+  if (!redis) return;
+  const store = new RedisRateLimitStore({ redis, prefix: `rl:${bucket}:`, windowMs: 1 });
+  await store.resetKey(`e:${email.trim().toLowerCase()}`);
+}
