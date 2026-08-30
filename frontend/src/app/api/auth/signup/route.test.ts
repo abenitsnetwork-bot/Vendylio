@@ -88,10 +88,35 @@ describe('POST /api/auth/signup', () => {
     });
   });
 
-  it('does NOT kick an immediate send on the existing-email branch', async () => {
-    prismaMock.user.findUnique.mockResolvedValue({ id: 'u-existing' } as never);
+  it('re-issues + immediately sends a code when the existing account is UNVERIFIED', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 'u-unverified',
+      emailVerifiedAt: null,
+    } as never);
+    prismaMock.verificationCode.create.mockResolvedValue({} as never);
+
+    const res = await POST(makeReq({ email: 'dupe@example.com', password: 'a-strong-passphrase' }));
+
+    expect(res.status).toBe(201);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(prismaMock.user.create).not.toHaveBeenCalled(); // not a new account
+    expect(prismaMock.verificationCode.create).toHaveBeenCalledTimes(1);
+    expect(enqueueOutbox).toHaveBeenCalledTimes(1);
+    expect(sendVerificationCodeNow).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(sendVerificationCodeNow).mock.calls[0]?.[0]).toMatchObject({
+      to: 'dupe@example.com',
+    });
+  });
+
+  it('stays silent (no code, no send) when the existing account is VERIFIED', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 'u-verified',
+      emailVerifiedAt: new Date(),
+    } as never);
     const res = await POST(makeReq({ email: 'dupe@example.com', password: 'a-strong-passphrase' }));
     expect(res.status).toBe(201);
+    expect(prismaMock.verificationCode.create).not.toHaveBeenCalled();
+    expect(enqueueOutbox).not.toHaveBeenCalled();
     expect(sendVerificationCodeNow).not.toHaveBeenCalled();
   });
 
@@ -108,8 +133,11 @@ describe('POST /api/auth/signup', () => {
     expect(createArg?.data?.name).toBe('Adaeze O.');
   });
 
-  it('returns identical 201 + dummy-bcrypts on existing email (enumeration-resist)', async () => {
-    prismaMock.user.findUnique.mockResolvedValue({ id: 'u-existing' } as never);
+  it('returns identical 201 + dummy-bcrypts on existing (verified) email (enumeration-resist)', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 'u-existing',
+      emailVerifiedAt: new Date(),
+    } as never);
 
     const res = await POST(
       makeReq({ email: 'existing@example.com', password: 'a-strong-passphrase' }),

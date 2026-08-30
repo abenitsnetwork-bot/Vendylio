@@ -107,11 +107,34 @@ export async function POST(req: NextRequest): Promise<Response> {
     // 4. Existing-email branch — return identical 201 with timing parity (D-22).
     const existing = await prisma.user.findUnique({
       where: { email },
-      select: { id: true },
+      select: { id: true, emailVerifiedAt: true },
     });
     if (existing) {
       await dummyBcryptCompare(password);
-      log.info('signup duplicate (enumeration-resist)');
+      // If the account exists but was never verified, someone re-running
+      // signup almost certainly just wants their code again (they have no
+      // way to know "resend" is the right door). Re-issue + send it. Still
+      // enumeration-safe: the response is byte-identical, the send is
+      // post-response (timing parity holds), and the email only ever reaches
+      // the real inbox owner — a prober learns nothing. A VERIFIED account
+      // stays silent (they should log in / use forgot-password).
+      if (!existing.emailVerifiedAt) {
+        const code = generateVerificationCode();
+        const expiresAt = new Date(Date.now() + VERIFICATION_TTL_MS);
+        await prisma.$transaction(async (tx) => {
+          await tx.verificationCode.create({
+            data: { userId: existing.id, code, type: 'EMAIL_VERIFY', expiresAt },
+          });
+          await enqueueOutbox(tx, {
+            kind: 'email.verification_code',
+            payload: { to: email, code, expiresAt: expiresAt.toISOString() },
+          });
+        });
+        after(() => sendVerificationCodeNow({ to: email, code, expiresAt }));
+        log.info('signup duplicate — unverified, code re-issued');
+      } else {
+        log.info('signup duplicate (enumeration-resist)');
+      }
       const res = NextResponse.json({ ok: true }, { status: 201 });
       res.headers.set('x-request-id', ctx.requestId);
       return res;
