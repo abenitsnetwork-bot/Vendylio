@@ -33,9 +33,12 @@ vi.mock('./registry', async (orig) => {
 vi.mock('@/lib/server/notifications', () => ({ createNotification: vi.fn() }));
 
 import {
+  applyCourierWebhookEvent,
   cancelFulfillment,
   createFulfillment,
+  createQuote,
   handleProviderEvent,
+  hashDropoffAddress,
   initFulfillment,
   legacyProviderFor,
   quoteMethod,
@@ -75,6 +78,21 @@ function seedDelivery(row: Partial<DeliveryRow> = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   mockProvider.isConfigured.mockReturnValue(true);
+  mockProvider.normalizeStatus.mockImplementation(
+    (s: string) =>
+      (
+        ({
+          delivered: 'DELIVERED',
+          cancelled: 'CANCELLED',
+          canceled: 'CANCELLED',
+          returned: 'FAILED',
+          picked_up: 'PICKED_UP',
+          pickup_complete: 'PICKED_UP',
+          dropoff: 'OUT_FOR_DELIVERY',
+          en_route_to_dropoff: 'OUT_FOR_DELIVERY',
+        }) as Record<string, string>
+      )[s] ?? 'UNKNOWN',
+  );
   prismaMock.$transaction.mockImplementation((cb: unknown) => {
     if (typeof cb === 'function') {
       return (cb as (tx: typeof prismaMock) => unknown)(prismaMock) as Promise<unknown>;
@@ -82,6 +100,7 @@ beforeEach(() => {
     return Promise.resolve(cb);
   });
   prismaMock.$executeRawUnsafe.mockResolvedValue(0 as never);
+  prismaMock.outboxEvent.create.mockResolvedValue({ id: 'ob_1' } as never);
 });
 
 function ctxDelivery(over: Record<string, unknown> = {}) {
@@ -539,6 +558,165 @@ describe('updateFulfillment / cancelFulfillment', () => {
     prismaMock.order.findUnique.mockResolvedValue({ status: 'OUT_FOR_DELIVERY' } as never);
     const res = await cancelFulfillment(prismaMock as never, 'del_1', { reason: 'buyer no-show' });
     expect(res.cancelled).toBe(true);
+  });
+});
+
+describe('applyCourierWebhookEvent', () => {
+  function seedForWebhook(state = 'REQUESTED') {
+    prismaMock.delivery.findFirst.mockResolvedValue({
+      id: 'del_1',
+      order: {
+        id: 'ord_1',
+        storeId: 'store_1',
+        store: { organization: { ownerId: 'owner_1' } },
+      },
+    } as never);
+    // handleProviderEvent → recordTransition reads the narrow delivery
+    prismaMock.delivery.findUnique.mockResolvedValue({
+      id: 'del_1',
+      orderId: 'ord_1',
+      state,
+      providerType: 'DOORDASH',
+    } as never);
+    prismaMock.deliveryEvent.findUnique.mockResolvedValue(null as never);
+    prismaMock.deliveryEvent.create.mockResolvedValue({} as never);
+    prismaMock.delivery.update.mockResolvedValue({} as never);
+    prismaMock.order.findUnique.mockResolvedValue({ status: 'OUT_FOR_DELIVERY' } as never);
+    prismaMock.order.update.mockResolvedValue({} as never);
+    prismaMock.orderStatusEvent.create.mockResolvedValue({} as never);
+  }
+
+  it('returns matched:false for an unknown delivery', async () => {
+    prismaMock.delivery.findFirst.mockResolvedValue(null as never);
+    const res = await applyCourierWebhookEvent(prismaMock as never, {
+      providerType: 'DOORDASH',
+      correlateBy: { externalDeliveryId: 'vend_x' },
+      rawStatus: 'delivered',
+      eventId: 'e1',
+    });
+    expect(res).toEqual({ matched: false, changed: false });
+  });
+
+  it('on DELIVERED enqueues the completed notification + delivered email', async () => {
+    seedForWebhook('OUT_FOR_DELIVERY');
+    await applyCourierWebhookEvent(prismaMock as never, {
+      providerType: 'DOORDASH',
+      correlateBy: { externalDeliveryId: 'vend_del_1' },
+      rawStatus: 'delivered',
+      eventId: 'e1',
+    });
+    const kinds = prismaMock.outboxEvent.create.mock.calls.map(
+      (c) => (c[0] as { data: { kind: string } }).data.kind,
+    );
+    expect(kinds).toContain('notification.delivery_completed');
+    expect(kinds).toContain('email.order_status');
+  });
+
+  it('on a cancel enqueues the failed notification + delivery-issue email', async () => {
+    seedForWebhook('OUT_FOR_DELIVERY');
+    await applyCourierWebhookEvent(prismaMock as never, {
+      providerType: 'DOORDASH',
+      correlateBy: { externalDeliveryId: 'vend_del_1' },
+      rawStatus: 'cancelled',
+      eventId: 'e2',
+    });
+    const events = prismaMock.outboxEvent.create.mock.calls.map(
+      (c) => (c[0] as { data: { kind: string; payload: Record<string, unknown> } }).data,
+    );
+    expect(events.find((e) => e.kind === 'notification.delivery_failed')?.payload).toMatchObject({
+      status: 'cancelled',
+    });
+  });
+
+  it('does not enqueue anything for a deduped replay', async () => {
+    seedForWebhook('OUT_FOR_DELIVERY');
+    prismaMock.deliveryEvent.findUnique.mockResolvedValue({ id: 'seen' } as never);
+    await applyCourierWebhookEvent(prismaMock as never, {
+      providerType: 'DOORDASH',
+      correlateBy: { externalDeliveryId: 'vend_del_1' },
+      rawStatus: 'delivered',
+      eventId: 'e-dup',
+    });
+    expect(prismaMock.outboxEvent.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('createQuote', () => {
+  const config = readFulfillmentConfig({
+    fulfillmentConfig: { merchant: { enabled: true, feeCents: 500 }, pickup: { enabled: true } },
+    deliveryProvider: 'self_manual',
+    deliveryFeeCents: 500,
+  });
+
+  beforeEach(() => {
+    prismaMock.quote.create.mockResolvedValue({ id: 'q_1' } as never);
+  });
+
+  it('always offers pickup and the merchant flat fee, persisting a Quote row', async () => {
+    const res = await createQuote(prismaMock as never, {
+      storeId: 'store_1',
+      config,
+      pickupAddress: '1 Main',
+      pickupPhone: null,
+      dropoffAddress: { street: '2 Elm' },
+      dropoffPhone: null,
+      subtotalCents: 4000,
+      currency: 'USD',
+    });
+    const methods = res.options.map((o) => `${o.method}:${o.provider}`);
+    expect(methods).toContain('PICKUP:PICKUP');
+    expect(methods).toContain('DELIVERY:MERCHANT');
+    const merchant = res.options.find((o) => o.provider === 'MERCHANT')!;
+    expect(merchant).toMatchObject({
+      feeCents: 500,
+      serviceable: true,
+      isEstimate: true,
+      quoteId: 'q_1',
+    });
+    expect(res.deliveryUnavailable).toBe(false);
+    expect(prismaMock.quote.create).toHaveBeenCalled();
+  });
+
+  it('flags deliveryUnavailable when the only delivery method is below its minimum order', async () => {
+    const gated = readFulfillmentConfig({
+      fulfillmentConfig: {
+        merchant: { enabled: true, feeCents: 500, minOrderCents: 10000 },
+        pickup: { enabled: true },
+      },
+      deliveryProvider: 'self_manual',
+      deliveryFeeCents: 500,
+    });
+    const res = await createQuote(prismaMock as never, {
+      storeId: 'store_1',
+      config: gated,
+      pickupAddress: '1 Main',
+      pickupPhone: null,
+      dropoffAddress: { street: '2 Elm' },
+      dropoffPhone: null,
+      subtotalCents: 4000,
+      currency: 'USD',
+    });
+    expect(res.deliveryUnavailable).toBe(true);
+    expect(res.options.some((o) => o.method === 'PICKUP')).toBe(true);
+  });
+});
+
+describe('hashDropoffAddress', () => {
+  it('is stable and case/whitespace-insensitive', () => {
+    const a = hashDropoffAddress({
+      street: '2 Elm St',
+      city: 'Springfield',
+      state: 'IL',
+      zip: '62704',
+    });
+    const b = hashDropoffAddress({
+      street: '  2 elm st ',
+      city: 'SPRINGFIELD',
+      state: 'il',
+      zip: '62704',
+    });
+    expect(a).toBe(b);
+    expect(a).not.toBe(hashDropoffAddress({ street: '9 Oak', city: 'X', state: 'Y', zip: '1' }));
   });
 });
 

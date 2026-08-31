@@ -72,19 +72,20 @@ export async function runFulfillmentTick(prisma: PrismaClient): Promise<Fulfillm
       state: { in: ACTIVE_STATES },
       providerType: { in: COURIER_PROVIDER_TYPES as unknown as string[] },
       dispatchedAt: { not: null },
-      externalDeliveryId: { not: null },
     },
-    select: { id: true, providerType: true, externalDeliveryId: true },
+    select: { id: true, providerType: true, externalDeliveryId: true, providerDeliveryId: true },
     take: POLL_BATCH,
     orderBy: { updatedAt: 'asc' },
   });
 
   for (const row of active) {
+    const lookupId = row.providerDeliveryId ?? row.externalDeliveryId;
+    if (!lookupId) continue;
     result.polled++;
     const provider = getDeliveryProvider(row.providerType as ProviderType);
     if (!provider.isConfigured()) continue;
     try {
-      const snapshot = await provider.getDelivery(row.externalDeliveryId!);
+      const snapshot = await provider.getDelivery(lookupId);
       if (snapshot.state === 'UNKNOWN') continue;
       const res = await prisma.$transaction(
         async (tx) => {

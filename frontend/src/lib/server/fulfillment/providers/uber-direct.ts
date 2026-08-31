@@ -11,7 +11,9 @@
  */
 import 'server-only';
 import {
+  cancelUberDelivery,
   createUberDirectProvider as createLegacyUberProvider,
+  getUberDelivery,
   getUberDirectDeliveryFeeCents,
   isUberDirectConfigured,
   uberDirectAuthProbe,
@@ -119,15 +121,26 @@ export function createUberDirectFulfillmentProvider(): FulfillmentProvider {
       };
     },
 
-    async getDelivery(_externalDeliveryId: string): Promise<ProviderSnapshot> {
-      // Phase 3 — GET /v1/customers/{id}/deliveries/{id}. Until then the poll
-      // cron simply skips Uber deliveries and relies on the webhook.
-      return { providerDeliveryId: null, rawStatus: 'unknown', state: 'UNKNOWN' };
+    // The poll cron passes our `externalDeliveryId` (`vend_<id>`), but Uber
+    // keys its own API on the provider's delivery id — the service resolves
+    // that from the Delivery row's `providerDeliveryId` before calling here.
+    async getDelivery(providerDeliveryId: string): Promise<ProviderSnapshot> {
+      const d = await getUberDelivery(providerDeliveryId);
+      if (!d || !d.status) {
+        return { providerDeliveryId: null, rawStatus: 'unknown', state: 'UNKNOWN' };
+      }
+      return {
+        providerDeliveryId,
+        rawStatus: d.status,
+        state: normalizeUberStatus(d.status),
+        ...(d.tracking_url ? { trackingUrl: d.tracking_url } : {}),
+        ...(d.courier?.name ? { courierName: d.courier.name } : {}),
+        ...(d.courier?.phone_number ? { courierPhone: d.courier.phone_number } : {}),
+      };
     },
 
-    async cancelDelivery(_externalDeliveryId: string): Promise<CancelDeliveryResult> {
-      // Phase 3 — POST /v1/customers/{id}/deliveries/{id}/cancel.
-      return { cancelled: false, reason: 'Uber Direct cancellation is not wired yet.' };
+    cancelDelivery(providerDeliveryId: string): Promise<CancelDeliveryResult> {
+      return cancelUberDelivery(providerDeliveryId);
     },
 
     normalizeStatus: normalizeUberStatus,

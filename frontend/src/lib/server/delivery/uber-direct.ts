@@ -216,6 +216,61 @@ export async function checkPickupAddressDeliverable(
   }
 }
 
+const UBER_API_BASE = 'https://api.uber.com/v1';
+
+export interface UberDeliverySnapshot {
+  status?: string;
+  tracking_url?: string;
+  pickup_eta?: string;
+  dropoff_eta?: string;
+  courier?: { name?: string; phone_number?: string };
+}
+
+/**
+ * Prompt #12 — raw GET of a delivery, used by the fulfillment-tick poll cron
+ * (the installed SDK exposes no get/cancel helper). Returns null on any
+ * failure so the poll simply skips this row.
+ */
+export async function getUberDelivery(
+  providerDeliveryId: string,
+): Promise<UberDeliverySnapshot | null> {
+  if (!isConfigured() || !providerDeliveryId) return null;
+  try {
+    const token = await getCachedAccessToken();
+    const customerId = process.env.UBER_DIRECT_CUSTOMER_ID!;
+    const res = await fetch(
+      `${UBER_API_BASE}/customers/${customerId}/deliveries/${encodeURIComponent(providerDeliveryId)}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!res.ok) return null;
+    return (await res.json()) as UberDeliverySnapshot;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Prompt #12 — cancel a delivery. `{ cancelled: false }` when Uber refuses
+ * (courier already assigned / delivery in a non-cancellable state).
+ */
+export async function cancelUberDelivery(
+  providerDeliveryId: string,
+): Promise<{ cancelled: boolean; reason?: string }> {
+  if (!isConfigured()) return { cancelled: false, reason: 'Uber Direct is not configured.' };
+  try {
+    const token = await getCachedAccessToken();
+    const customerId = process.env.UBER_DIRECT_CUSTOMER_ID!;
+    const res = await fetch(
+      `${UBER_API_BASE}/customers/${customerId}/deliveries/${encodeURIComponent(providerDeliveryId)}/cancel`,
+      { method: 'POST', headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (res.ok) return { cancelled: true };
+    return { cancelled: false, reason: `Uber Direct refused the cancellation (${res.status}).` };
+  } catch (err) {
+    return { cancelled: false, reason: errorMessage(err) };
+  }
+}
+
 export function createUberDirectProvider(): DeliveryProvider {
   return {
     name: 'uber_direct',

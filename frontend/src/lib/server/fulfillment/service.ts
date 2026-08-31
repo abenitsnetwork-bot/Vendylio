@@ -12,6 +12,7 @@
  * `cancelFulfillment` are fleshed out in Phase 2 / Phase 5.
  */
 import 'server-only';
+import { createHash } from 'crypto';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import type { PrismaTransactionClient } from '@/lib/server/webhook/handler';
 import { log } from '@/lib/server/observability/log';
@@ -25,13 +26,15 @@ import type {
   ProviderType,
 } from './types';
 import { getDeliveryProvider, type ProviderContext } from './registry';
-import { readFulfillmentConfig, type FulfillmentConfig } from './config';
+import { enabledProviderTypes, readFulfillmentConfig, type FulfillmentConfig } from './config';
+import { PROVIDER_FRIENDLY_NAME } from './types';
 import { createNotification } from '@/lib/server/notifications';
 import {
   fulfillmentDispatched,
   fulfillmentSetupFailed,
 } from '@/lib/server/notifications/templates';
 import { formatOrderNumber } from '@/lib/orderNumber';
+import { enqueueOutbox } from '@/lib/server/outbox';
 import { isCourierProvider } from './types';
 
 /** Minimal tx client shape the service needs (real tx or the deep mock) —
@@ -283,6 +286,75 @@ export async function handleProviderEvent(
   });
 }
 
+// ── applyCourierWebhookEvent ────────────────────────────────────────────
+
+/**
+ * The single entry point both courier webhook routes
+ * (`api/webhooks/{uber-direct,doordash}`) funnel through. Correlates the
+ * payload to a `Delivery`, folds the status through `handleProviderEvent`
+ * (state machine + `DeliveryEvent` idempotency), and — only when the state
+ * actually moved to a terminal — enqueues the seller notification + the
+ * customer status email inside the factory's Serializable tx.
+ */
+export async function applyCourierWebhookEvent(
+  tx: FulfillmentTx,
+  input: {
+    providerType: ProviderType;
+    correlateBy: { externalDeliveryId: string } | { providerDeliveryId: string };
+    rawStatus: string;
+    eventId: string;
+  },
+): Promise<{ matched: boolean; changed: boolean; state?: NormalizedState }> {
+  const delivery = await tx.delivery.findFirst({
+    where: input.correlateBy,
+    select: {
+      id: true,
+      order: {
+        select: {
+          id: true,
+          storeId: true,
+          store: { select: { organization: { select: { ownerId: true } } } },
+        },
+      },
+    },
+  });
+  if (!delivery) return { matched: false, changed: false };
+
+  const normalized = getDeliveryProvider(input.providerType).normalizeStatus(input.rawStatus);
+  const res = await handleProviderEvent(tx, {
+    deliveryId: delivery.id,
+    snapshot: { providerDeliveryId: null, rawStatus: input.rawStatus, state: normalized },
+    source: 'PROVIDER',
+    providerEventId: input.eventId,
+  });
+
+  if (res.changed) {
+    const ownerId = delivery.order.store.organization.ownerId;
+    const orderId = delivery.order.id;
+    if (res.state === 'DELIVERED') {
+      await enqueueOutbox(tx, {
+        kind: 'notification.delivery_completed',
+        payload: { userId: ownerId, orderId },
+      });
+      await enqueueOutbox(tx, {
+        kind: 'email.order_status',
+        payload: { orderId, kind: 'DELIVERED' },
+      });
+    } else if (res.state === 'FAILED' || res.state === 'CANCELLED') {
+      await enqueueOutbox(tx, {
+        kind: 'notification.delivery_failed',
+        payload: { userId: ownerId, orderId, status: input.rawStatus },
+      });
+      await enqueueOutbox(tx, {
+        kind: 'email.order_status',
+        payload: { orderId, kind: 'DELIVERY_ISSUE' },
+      });
+    }
+  }
+
+  return { matched: true, changed: res.changed, state: res.state };
+}
+
 // ── selectProvider ───────────────────────────────────────────────────────
 
 export interface ProviderChoiceInput {
@@ -369,6 +441,181 @@ export async function quoteMethod(
 
 /** Simple singleton-style Prisma type export for the cron/route call sites. */
 export type FulfillmentPrisma = PrismaClient;
+
+// ── createQuote ─────────────────────────────────────────────────────────
+
+/** Stable hash binding a persisted quote to the exact dropoff address it was
+ *  produced for — checked again at `POST /api/orders`. */
+export function hashDropoffAddress(addr: Record<string, unknown> | null): string {
+  const norm = ['street', 'city', 'state', 'zip']
+    .map((k) =>
+      String(addr?.[k] ?? '')
+        .trim()
+        .toLowerCase(),
+    )
+    .join('|');
+  return createHash('sha256').update(norm).digest('hex').slice(0, 32);
+}
+
+const QUOTE_TIMEOUT_MS = Math.max(
+  1000,
+  Number(process.env.FULFILLMENT_QUOTE_TIMEOUT_MS ?? 4000) || 4000,
+);
+const FLAT_QUOTE_TTL_MS =
+  Math.max(60, Number(process.env.FULFILLMENT_QUOTE_FALLBACK_TTL_SECONDS ?? 300) || 300) * 1000;
+
+export interface CreateQuoteInput {
+  storeId: string;
+  config: FulfillmentConfig;
+  pickupAddress: string | null;
+  pickupPhone: string | null;
+  dropoffAddress: Record<string, unknown> | null;
+  dropoffPhone: string | null;
+  subtotalCents: number;
+  currency: string;
+}
+
+export interface QuoteOption {
+  method: 'DELIVERY' | 'PICKUP';
+  provider: ProviderType;
+  friendlyName: string;
+  quoteId: string | null;
+  feeCents: number;
+  serviceable: boolean;
+  isEstimate: boolean;
+  estimatedDropoffAt: string | null;
+  expiresAt: string | null;
+  unserviceableReason?: string;
+}
+
+export interface CreateQuoteResult {
+  batchId: string;
+  currency: string;
+  customerChoosesProvider: boolean;
+  options: QuoteOption[];
+  /** No serviceable delivery method — checkout should steer to pickup. */
+  deliveryUnavailable: boolean;
+  /** A courier was tried and reported the address out of coverage. */
+  notServiceable: boolean;
+}
+
+/**
+ * Gather quotes from every enabled + configured provider in parallel (bounded
+ * timeout, partial failure tolerated), persist one `Quote` row per serviceable
+ * delivery result, and return the checkout options. PICKUP is always offered
+ * when the store enables it.
+ */
+export async function createQuote(
+  prisma: PrismaClient,
+  input: CreateQuoteInput,
+): Promise<CreateQuoteResult> {
+  const batchId = createHash('sha256')
+    .update(`${input.storeId}:${Date.now()}:${Math.random()}`)
+    .digest('hex')
+    .slice(0, 24);
+  const dropoffAddressHash = hashDropoffAddress(input.dropoffAddress);
+
+  const ctx: ProviderContext = { merchant: input.config.merchant, pickup: input.config.pickup };
+  const quoteInput = {
+    pickupAddress: input.pickupAddress,
+    pickupPhone: input.pickupPhone,
+    dropoffAddress: input.dropoffAddress,
+    dropoffPhone: input.dropoffPhone,
+    subtotalCents: input.subtotalCents,
+    currency: input.currency,
+  };
+
+  const deliveryTypes = enabledProviderTypes(input.config).filter(
+    (t) => t !== 'PICKUP' && getDeliveryProvider(t, ctx).isConfigured(),
+  );
+
+  const quotes = await Promise.all(
+    deliveryTypes.map(async (t) => ({
+      type: t,
+      quote: await quoteMethod(t, quoteInput, ctx, QUOTE_TIMEOUT_MS),
+    })),
+  );
+
+  const options: QuoteOption[] = [];
+  let courierTried = false;
+
+  for (const { type, quote } of quotes) {
+    if (isCourierProvider(type)) courierTried = true;
+    if (!quote.serviceable) {
+      options.push({
+        method: 'DELIVERY',
+        provider: type,
+        friendlyName: PROVIDER_FRIENDLY_NAME[type],
+        quoteId: null,
+        feeCents: 0,
+        serviceable: false,
+        isEstimate: false,
+        estimatedDropoffAt: null,
+        expiresAt: null,
+        ...(quote.unserviceableReason ? { unserviceableReason: quote.unserviceableReason } : {}),
+      });
+      continue;
+    }
+    const isEstimate = !isCourierProvider(type);
+    const expiresAt = quote.expiresAt ?? new Date(Date.now() + FLAT_QUOTE_TTL_MS);
+    const row = await prisma.quote.create({
+      data: {
+        batchId,
+        storeId: input.storeId,
+        providerType: type,
+        serviceable: true,
+        feeCents: quote.feeCents,
+        currency: quote.currency,
+        ...(typeof quote.providerCostCents === 'number'
+          ? { providerCostCents: quote.providerCostCents }
+          : {}),
+        ...(quote.providerQuoteId ? { providerQuoteId: quote.providerQuoteId } : {}),
+        ...(quote.estimatedPickupAt ? { estimatedPickupAt: quote.estimatedPickupAt } : {}),
+        ...(quote.estimatedDropoffAt ? { estimatedDropoffAt: quote.estimatedDropoffAt } : {}),
+        expiresAt,
+        subtotalCents: input.subtotalCents,
+        dropoffAddressHash,
+      },
+      select: { id: true },
+    });
+    options.push({
+      method: 'DELIVERY',
+      provider: type,
+      friendlyName: PROVIDER_FRIENDLY_NAME[type],
+      quoteId: row.id,
+      feeCents: quote.feeCents,
+      serviceable: true,
+      isEstimate,
+      estimatedDropoffAt: quote.estimatedDropoffAt ? quote.estimatedDropoffAt.toISOString() : null,
+      expiresAt: expiresAt.toISOString(),
+    });
+  }
+
+  if (input.config.pickup.enabled) {
+    options.push({
+      method: 'PICKUP',
+      provider: 'PICKUP',
+      friendlyName: PROVIDER_FRIENDLY_NAME.PICKUP,
+      quoteId: null,
+      feeCents: 0,
+      serviceable: true,
+      isEstimate: false,
+      estimatedDropoffAt: null,
+      expiresAt: null,
+    });
+  }
+
+  const serviceableDelivery = options.some((o) => o.method === 'DELIVERY' && o.serviceable);
+
+  return {
+    batchId,
+    currency: input.currency,
+    customerChoosesProvider: input.config.customerChoosesProvider,
+    options,
+    deliveryUnavailable: !serviceableDelivery,
+    notServiceable: !serviceableDelivery && courierTried,
+  };
+}
 
 // ── createFulfillment (courier dispatch) ─────────────────────────────────
 
@@ -538,7 +785,9 @@ export async function createFulfillment(
       //    reconcile from the provider, never create a second one. ──
       if (delivery.dispatchedAt && delivery.externalDeliveryId) {
         try {
-          const snapshot = await provider.getDelivery(delivery.externalDeliveryId);
+          const snapshot = await provider.getDelivery(
+            delivery.providerDeliveryId ?? delivery.externalDeliveryId,
+          );
           if (snapshot.state !== 'UNKNOWN') {
             const res = await handleProviderEvent(tx, {
               deliveryId,
@@ -696,7 +945,9 @@ export async function cancelFulfillment(
       const provider = getDeliveryProvider(providerType, providerCtxFor(delivery.order.store));
 
       if (isCourierProvider(providerType) && delivery.externalDeliveryId) {
-        const res = await provider.cancelDelivery(delivery.externalDeliveryId);
+        const res = await provider.cancelDelivery(
+          delivery.providerDeliveryId ?? delivery.externalDeliveryId,
+        );
         if (!res.cancelled) {
           return {
             cancelled: false,
