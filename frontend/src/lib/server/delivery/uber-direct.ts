@@ -82,6 +82,29 @@ function isConfigured(): boolean {
   );
 }
 
+/** Public form of the env check — consumed by the Prompt #12 fulfillment
+ *  registry (`lib/server/fulfillment/providers/uber-direct.ts`). */
+export function isUberDirectConfigured(): boolean {
+  return isConfigured();
+}
+
+/**
+ * Safe credential probe for the merchant "Test connection" button — obtains
+ * an access token and stops. Never creates a quote or a delivery, so it can
+ * never dispatch a real courier. `ok: false` with a reason when auth fails.
+ */
+export async function uberDirectAuthProbe(): Promise<{ ok: boolean; detail: string }> {
+  if (!isConfigured()) {
+    return { ok: false, detail: 'UBER_DIRECT_CLIENT_ID / _CLIENT_SECRET / _CUSTOMER_ID not set.' };
+  }
+  try {
+    await getCachedAccessToken();
+    return { ok: true, detail: 'Authenticated with Uber Direct.' };
+  } catch (err) {
+    return { ok: false, detail: `Uber Direct auth failed: ${errorMessage(err)}` };
+  }
+}
+
 // Single-instance token cache — same documented limitation as
 // payments/circuit-breaker.ts. Uber Direct tokens last 30 days; refreshed
 // after 24h so a stale cache is never relied on for weeks.

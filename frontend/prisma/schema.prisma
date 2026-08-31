@@ -309,23 +309,23 @@ model WebhookLog {
 // for USD that's cents.
 // ───────────────────────────────────────────────────────────────────────
 model Order {
-  id      String  @id @default(cuid())
+  id            String  @id @default(cuid())
   // Phase 6 — human-friendly order reference shown to customers + merchants
   // (formatOrderNumber() renders it as "VND-10042"). A Postgres sequence
   // default: atomic, collision-free under concurrent checkout, and never
   // the "SELECT MAX(n)+1" anti-pattern. The raw `id` cuid stays the PK and
   // the internal/URL identifier; this is display-only.
-  orderNumber Int   @unique @default(autoincrement())
+  orderNumber   Int     @unique @default(autoincrement())
   // Phase 7 — bearer credential for the guest tracking page + email links.
   // App-generated random 24 bytes (base64url, 32 chars) in POST /api/orders —
   // NOT the cuid `id`, NOT the sequential `orderNumber`: high-entropy,
   // non-enumerable, and rotatable (regenerate the column) if a link leaks.
   // Every guest-facing order read/write is keyed on this, never on `id`.
-  trackingToken String @unique
-  storeId String
-  store   Store   @relation(fields: [storeId], references: [id], onDelete: Restrict)
-  userId  String? // guest checkout is the norm — set only if the buyer happened to be logged in
-  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  trackingToken String  @unique
+  storeId       String
+  store         Store   @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  userId        String? // guest checkout is the norm — set only if the buyer happened to be logged in
+  user          User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   amount   Int // grand total, smallest unit — subtotalCents + deliveryFeeCents + taxCents
   currency String @default("USD")
@@ -335,26 +335,35 @@ model Order {
   // idempotency-key replay reports the right terminal state (CR-02).
   status   String @default("PENDING") // PENDING|PAID|PREPARING|READY|OUT_FOR_DELIVERY|DELIVERED|CANCELLED|REFUNDED|EXPIRED|FAILED
 
-  subtotalCents     Int
-  deliveryFeeCents  Int     @default(0)
-  taxCents          Int     @default(0) // column ready; MVP always computes 0 (no tax engine)
+  subtotalCents          Int
+  deliveryFeeCents       Int       @default(0)
+  taxCents               Int       @default(0) // column ready; MVP always computes 0 (no tax engine)
   // Phase D — promo code applied at checkout (uppercased snapshot; the
   // Discount row may later be edited/deleted, this preserves history).
   // `discountCents` is what the buyer saved — for FREE_DELIVERY it equals
   // the delivery fee that would otherwise have applied. `amount` already
   // has the discount subtracted.
-  discountCode      String?
-  discountCents     Int     @default(0)
+  discountCode           String?
+  discountCents          Int       @default(0)
   // Buyer's checkout choice — PICKUP: deliveryFeeCents forced to 0 and no
   // courier is ever involved (seller hands the order over in person, marked
   // done via the generic READY→DELIVERED transition). DELIVERY: existing
   // behavior — store's flat fee applies, self_manual/uber_direct handle it.
-  fulfillmentMethod String  @default("DELIVERY") // PICKUP|DELIVERY
-  customerEmail     String?
-  customerPhone     String?
-  customerName      String?
-  deliveryAddress   Json?
-  lineItems         Json // snapshot at checkout time: [{ productId, name, priceCents, quantity }]
+  fulfillmentMethod      String    @default("DELIVERY") // PICKUP|DELIVERY
+  // Prompt #12 — the delivery method + quote the buyer selected at checkout,
+  // snapshotted so the fulfillment engine dispatches the right courier and
+  // the charged fee stays reproducible. All null for PICKUP or a store with
+  // no courier configured (the flat Store fee path).
+  deliveryProviderType   String? // UBER_DIRECT | DOORDASH | MERCHANT
+  deliveryQuoteId        String?
+  providerQuoteId        String?
+  deliveryQuoteExpiresAt DateTime?
+  providerCostCents      Int? // provider's own charge — modeled for a future margin, unused in V1
+  customerEmail          String?
+  customerPhone          String?
+  customerName           String?
+  deliveryAddress        Json?
+  lineItems              Json // snapshot at checkout time: [{ productId, name, priceCents, quantity }]
 
   // Stripe-grade idempotency (CR-02). Required header on POST /api/orders;
   // replay with the same value returns the original outcome instead of
@@ -411,22 +420,109 @@ model OrderStatusEvent {
   @@index([orderId, createdAt])
 }
 
-// Phase 5 — delivery tracking, one row per Order once the seller requests
-// delivery (POST /api/orders/[id]/delivery). Kept separate from
-// OrderStatusEvent: this is provider-facing tracking data (trackingUrl,
-// providerDeliveryId for a future real courier's correlation), not a
-// generic audit log entry.
+// Phase 5 — delivery tracking, one row per Order. Originally created only
+// when the seller pressed "Request Delivery"; since Prompt #12 (the
+// fulfillment engine) a row is also created in `state = PENDING` by
+// markPaid.ts for every paid non-PICKUP order, and the fulfillment-tick cron
+// dispatches it to the courier. Kept separate from OrderStatusEvent: this is
+// provider-facing fulfillment data, not a generic audit log entry.
+//
+// `status` + `provider` are the ORIGINAL Phase-5 columns (REQUESTED |
+// DELIVERED | FAILED / self_manual | uber_direct). They are kept and
+// dual-written for back-compat with the guest tracking route + the seller
+// dashboard; the engine's own source of truth is `state` + `providerType`.
+// A later cleanup migration drops the legacy pair.
 model Delivery {
-  id                 String    @id @default(cuid())
-  orderId            String    @unique
-  order              Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  provider           String // self_manual | uber_direct (future)
+  id      String @id @default(cuid())
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  // Legacy Phase-5 columns — dual-written, read by the tracking route + dashboard.
+  provider           String // self_manual | uber_direct
   providerDeliveryId String? // opaque id from the delivery provider, if any
   status             String    @default("REQUESTED") // REQUESTED | DELIVERED | FAILED
   trackingUrl        String?
   deliveredAt        DateTime?
+
+  // Prompt #12 — the fulfillment engine's normalized model.
+  // state: PENDING | QUOTED | REQUESTED | CONFIRMED | PICKED_UP | OUT_FOR_DELIVERY
+  //        | DELIVERED | CANCELLED | FAILED  (see lib/server/fulfillment/stateMachine.ts)
+  state              String    @default("PENDING")
+  providerType       String? // UBER_DIRECT | DOORDASH | MERCHANT | PICKUP
+  externalDeliveryId String?   @unique // Vendylio-controlled stable id sent to the provider ("vend_<id>")
+  quoteId            String? // the Quote row this delivery was created from, if any
+  providerQuoteId    String? // the provider's own quote id (Uber quote.id / DoorDash external id)
+  quotedFeeCents     Int? // fee from the accepted quote
+  feeCents           Int? // fee actually charged to the customer (snapshot of Order.deliveryFeeCents)
+  providerCostCents  Int? // what the provider bills the platform — modeled for a future margin, unused in V1
+  currency           String    @default("USD")
+  quoteExpiresAt     DateTime?
+  estimatedPickupAt  DateTime?
+  estimatedDropoffAt DateTime?
+  dispatchedAt       DateTime? // when the external delivery was successfully created
+  pickedUpAt         DateTime?
+  cancelledAt        DateTime?
+  cancelReason       String?
+  lastProviderStatus String? // raw provider status string from the last event/poll
+  attemptCount       Int       @default(0) // create-delivery attempts (dispatch backoff)
+  failureReason      String?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
+
+  events DeliveryEvent[]
+
+  @@index([state])
+}
+
+// Prompt #12 — append-only history of a Delivery's lifecycle + the
+// idempotency gate for webhooks and status polls. One row per accepted state
+// change (or per recorded-but-ignored out-of-order/unknown provider event).
+// `providerEventId` is the provider's event id for a webhook, or
+// "poll:<hash>" for a cron poll; @@unique([deliveryId, providerEventId])
+// means a replayed webhook / repeated poll can never drive a second state
+// change or a duplicate notification.
+model DeliveryEvent {
+  id              String   @id @default(cuid())
+  deliveryId      String
+  delivery        Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  state           String // the normalized state this event carried
+  providerStatus  String? // raw provider status
+  providerEventId String?
+  source          String // SYSTEM | MERCHANT | PROVIDER | CRON
+  payload         Json?
+  createdAt       DateTime @default(now())
+
+  @@unique([deliveryId, providerEventId])
+  @@index([deliveryId, createdAt])
+}
+
+// Prompt #12 — a persisted delivery quote from the checkout quote endpoint.
+// One row per serviceable provider in a quote batch (shared batchId). The
+// buyer's chosen quote is referenced by Order.deliveryQuoteId and
+// re-validated (and re-quoted if a courier quote / expired) server-side in
+// POST /api/orders — the browser-sent fee is never trusted. `dropoffAddressHash`
+// + `subtotalCents` bind the quote to the exact cart it was produced for.
+// Rows are purged opportunistically by the fulfillment-tick cron.
+model Quote {
+  id                 String    @id @default(cuid())
+  batchId            String
+  storeId            String
+  store              Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  providerType       String // UBER_DIRECT | DOORDASH | MERCHANT | PICKUP
+  serviceable        Boolean   @default(true)
+  feeCents           Int
+  currency           String    @default("USD")
+  providerQuoteId    String?
+  providerCostCents  Int?
+  estimatedPickupAt  DateTime?
+  estimatedDropoffAt DateTime?
+  expiresAt          DateTime?
+  subtotalCents      Int
+  dropoffAddressHash String
+  createdAt          DateTime  @default(now())
+
+  @@index([batchId])
+  @@index([expiresAt])
 }
 
 // Phase 8 — post-delivery review, one per Order (guest-submitted, no
@@ -536,6 +632,18 @@ model Store {
   deliveryProvider         String       @default("self_manual")
   deliveryFeeCents         Int          @default(0)
   pickupAddress            String?
+  // Prompt #12 — the fulfillment engine's per-method config. Shape:
+  //   { pickup:   { enabled, instructions },
+  //     merchant: { enabled, feeCents, minOrderCents, instructions },
+  //     uberDirect: { enabled }, doordash: { enabled },
+  //     customerChoosesProvider: bool }
+  // Normalised (with legacy `deliveryProvider`/`deliveryFeeCents` backfill)
+  // by lib/server/fulfillment/config.ts::readFulfillmentConfig. Provider
+  // credentials are PLATFORM-level env vars, never stored here.
+  fulfillmentConfig        Json         @default("{}")
+  // Store's operating country — default US. Kept off the hot path; the core
+  // fulfillment code stays country-agnostic for a future CA/MX expansion.
+  country                  String       @default("US")
   // Phase 12 — Free/Pro tiers. No hard enforcement in the MVP (no feature is
   // gated behind PRO yet); the one branchable benefit today is a reduced
   // marketplace commission — see COMMISSION_RATE_BP_PRO and
@@ -581,6 +689,7 @@ model Store {
   categories     Category[]
   stockMovements StockMovement[]
   discounts      Discount[]
+  quotes         Quote[]
 }
 
 // Phase D — seller-managed promo codes. V1 ships one mechanism:
@@ -639,40 +748,40 @@ model Category {
 }
 
 model Product {
-  id                String    @id @default(cuid())
-  storeId           String
-  store             Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  name              String
-  description       String?
-  priceCents        Int
+  id                 String    @id @default(cuid())
+  storeId            String
+  store              Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name               String
+  description        String?
+  priceCents         Int
   // Float, not Int: a UNIT product's quantity is always a whole count
   // (enforced at the zod layer, not here — Prisma has no per-row numeric
   // constraint), but a weight unit (KG/LB/G/OZ) needs fractional amounts
   // like 12.09 lb. Always rounded to 2 decimal places wherever it's
   // written (lib/server/quantity.ts) so float drift never accumulates.
-  quantity          Float     @default(0)
+  quantity           Float     @default(0)
   // Nullable on purpose — a product with no category shows under "Sans
   // catégorie". Set null (not blocked) when its Category row is deleted.
-  categoryId        String?
-  category          Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  categoryId         String?
+  category           Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   // Phase 7 — unit the price/quantity above are denominated in. UNIT means
   // "priceCents per item" (the only mode before Phase 7); the weight units
   // let a seller price something like spices "per kg", with fractional
   // quantities (`quantity` counts however much of that unit is in stock —
   // e.g. quantity=12.09 with unit=LB means 12.09 lb on hand).
-  unit              String    @default("UNIT") // UNIT | LB | KG | G | OZ
-  imageUrl          String?
-  status            String    @default("ACTIVE") // ACTIVE | ARCHIVED
+  unit               String    @default("UNIT") // UNIT | LB | KG | G | OZ
+  imageUrl           String?
+  status             String    @default("ACTIVE") // ACTIVE | ARCHIVED
   // Phase 3 — inventory. null = use the store's defaultLowStockThreshold.
-  lowStockThreshold Int?
+  lowStockThreshold  Int?
   // Phase 4 — low-stock alert re-arm gate. Set to now() when a low/out
   // notification is sent; reset to null by applyStockChange() the moment
   // stock climbs back above the effective threshold. A notification is only
   // (re-)emitted while this is null, so recovering + dropping again alerts
   // once per episode instead of on every decrement.
   lowStockNotifiedAt DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   variants       ProductVariant[]
   stockMovements StockMovement[]
@@ -688,17 +797,17 @@ model Product {
 // authoritative for that line's stock — see api/orders/route.ts and the
 // Stripe webhook's stock-decrement step.
 model ProductVariant {
-  id              String   @id @default(cuid())
-  productId       String
-  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  name            String // option group label, e.g. "Size" or "Weight"
-  value           String // the specific option, e.g. "Large" or "1kg bag"
-  priceDeltaCents Int      @default(0) // added to Product.priceCents when selected
-  quantity        Float    @default(0) // same Float-for-fractional-weight reasoning as Product.quantity
+  id                 String    @id @default(cuid())
+  productId          String
+  product            Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name               String // option group label, e.g. "Size" or "Weight"
+  value              String // the specific option, e.g. "Large" or "1kg bag"
+  priceDeltaCents    Int       @default(0) // added to Product.priceCents when selected
+  quantity           Float     @default(0) // same Float-for-fractional-weight reasoning as Product.quantity
   // Phase 4 — per-variant low-stock alert re-arm gate (see Product.lowStockNotifiedAt).
   lowStockNotifiedAt DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   stockMovements StockMovement[]
 
