@@ -17,7 +17,9 @@
 //
 // Field select returns the full row shape (id, actorId, action, targetType,
 // targetId, metadata, ip, userAgent, createdAt) — admins need everything
-// during incident response.
+// during incident response — plus the resolved `actor` (name/email/role via
+// the FK) and, for User/Store targets, a resolved `target` { label, sub } so
+// the UI can render a plain-English sentence instead of raw cuids.
 //
 // Rate-limited per-userId (D-ADMIN-05 / T-03-03-04) so a polling UI can't
 // burn the back-office's request budget.
@@ -86,11 +88,57 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         ip: true,
         userAgent: true,
         createdAt: true,
+        actor: { select: { id: true, name: true, email: true, role: true } },
       },
     });
 
-    return NextResponse.json(buildPage(rows, limit), {
-      headers: { 'x-request-id': ctx.requestId },
+    const page = buildPage(rows, limit);
+
+    // Resolve the targets we can name (User / Store) in one round-trip each,
+    // so the UI shows "suspended jane@shop.com" instead of a bare cuid.
+    const idsFor = (type: string) => [
+      ...new Set(
+        page.items
+          .filter((r) => r.targetType === type && r.targetId)
+          .map((r) => r.targetId as string),
+      ),
+    ];
+    const userIds = idsFor('User');
+    const storeIds = idsFor('Store');
+
+    const [users, stores] = await Promise.all([
+      userIds.length
+        ? prisma.user.findMany({
+            where: { id: { in: userIds } },
+            select: { id: true, name: true, email: true },
+          })
+        : Promise.resolve([]),
+      storeIds.length
+        ? prisma.store.findMany({
+            where: { id: { in: storeIds } },
+            select: { id: true, name: true, slug: true },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const userById = new Map((users ?? []).map((u) => [u.id, u]));
+    const storeById = new Map((stores ?? []).map((s) => [s.id, s]));
+
+    const items = page.items.map((r) => {
+      let target: { label: string; sub: string | null } | null = null;
+      if (r.targetType === 'User' && r.targetId) {
+        const u = userById.get(r.targetId);
+        if (u) target = { label: u.name || u.email, sub: u.name ? u.email : null };
+      } else if (r.targetType === 'Store' && r.targetId) {
+        const s = storeById.get(r.targetId);
+        if (s) target = { label: s.name, sub: `/s/${s.slug}` };
+      }
+      return { ...r, target };
     });
+
+    return NextResponse.json(
+      { items, nextCursor: page.nextCursor },
+      { headers: { 'x-request-id': ctx.requestId } },
+    );
   });
 }

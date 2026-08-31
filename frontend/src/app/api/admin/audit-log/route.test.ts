@@ -203,7 +203,7 @@ describe('GET /api/admin/audit-log [Wave 1]', () => {
     expect(args?.take).toBe(21);
   });
 
-  it('GET selects full incident-triage shape (id, actorId, action, targetType, targetId, metadata, ip, userAgent, createdAt)', async () => {
+  it('GET selects full incident-triage shape + resolved actor', async () => {
     prismaMock.adminAction.findMany.mockResolvedValue([] as never);
     await GET(makeGet('http://test/api/admin/audit-log'));
     const args = prismaMock.adminAction.findMany.mock.calls[0]?.[0];
@@ -217,7 +217,33 @@ describe('GET /api/admin/audit-log [Wave 1]', () => {
       ip: true,
       userAgent: true,
       createdAt: true,
+      actor: { select: { id: true, name: true, email: true, role: true } },
     });
+  });
+
+  it('GET resolves User targets to a { label, sub } via a batched user lookup', async () => {
+    prismaMock.adminAction.findMany.mockResolvedValue([
+      row({ id: 'a-1', targetType: 'User', targetId: 'user-target-1' }),
+    ] as never);
+    prismaMock.user.findMany.mockResolvedValue([
+      { id: 'user-target-1', name: 'Jane Shop', email: 'jane@shop.com' },
+    ] as never);
+    const res = await GET(makeGet('http://test/api/admin/audit-log'));
+    const body = await res.json();
+    expect(prismaMock.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: { in: ['user-target-1'] } } }),
+    );
+    expect(body.items[0].target).toEqual({ label: 'Jane Shop', sub: 'jane@shop.com' });
+  });
+
+  it('GET leaves target null when the row has no nameable target', async () => {
+    prismaMock.adminAction.findMany.mockResolvedValue([
+      row({ id: 'a-1', targetType: 'PlatformSettings', targetId: 'default' }),
+    ] as never);
+    const res = await GET(makeGet('http://test/api/admin/audit-log'));
+    const body = await res.json();
+    expect(body.items[0].target).toBeNull();
+    expect(prismaMock.user.findMany).not.toHaveBeenCalled();
   });
 
   it('GET response includes x-request-id header', async () => {
