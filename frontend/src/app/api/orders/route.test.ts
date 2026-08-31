@@ -15,6 +15,7 @@ function fingerprintBody(input: {
   items: { productId: string; quantity: number; variantId?: string }[];
   fulfillmentMethod?: string;
   discountCode?: string | null;
+  deliveryProviderType?: string | null;
 }) {
   const sortedItems = [...input.items]
     .map((i) => ({ productId: i.productId, quantity: i.quantity, variantId: i.variantId ?? null }))
@@ -24,6 +25,7 @@ function fingerprintBody(input: {
     items: sortedItems,
     fulfillmentMethod: input.fulfillmentMethod ?? 'delivery',
     discountCode: input.discountCode ?? null,
+    deliveryProviderType: input.deliveryProviderType ?? null,
   });
   return createHash('sha256').update(canonical).digest('hex');
 }
@@ -51,6 +53,17 @@ vi.mock('@/lib/server/payments/provider-singleton', () => ({
 
 vi.mock('@/lib/server/delivery/uber-direct', () => ({
   getUberDirectDeliveryFeeCents: vi.fn(),
+  // The Prompt #12 engine resolves the delivery fee through the fulfillment
+  // registry now, which pulls these from the same module.
+  isUberDirectConfigured: vi.fn(() => true),
+  uberDirectAuthProbe: vi.fn(async () => ({ ok: true, detail: 'ok' })),
+  getUberDelivery: vi.fn(async () => null),
+  cancelUberDelivery: vi.fn(async () => ({ cancelled: false })),
+  createUberDirectProvider: vi.fn(() => ({
+    name: 'uber_direct',
+    requestDelivery: vi.fn(),
+    markDelivered: vi.fn(),
+  })),
 }));
 
 import { optionalAuth, requireAuth } from '@/lib/server/middleware';

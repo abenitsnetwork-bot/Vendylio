@@ -2,14 +2,10 @@ import { prismaMock } from '@/test-utils/prisma-mock';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
-vi.mock('@/lib/server/delivery/uber-direct', () => ({
-  getUberDirectDeliveryFeeCents: vi.fn(),
-}));
+const { createQuote } = vi.hoisted(() => ({ createQuote: vi.fn() }));
+vi.mock('@/lib/server/fulfillment/service', () => ({ createQuote }));
 
-import { getUberDirectDeliveryFeeCents } from '@/lib/server/delivery/uber-direct';
 import { POST } from './route';
-
-const mockGetUberDirectDeliveryFeeCents = vi.mocked(getUberDirectDeliveryFeeCents);
 
 const ctx = { params: Promise.resolve({ slug: 'shea-store' }) };
 
@@ -28,80 +24,111 @@ const VALID_BODY = {
   amountCents: 4500,
 };
 
+const STORE = {
+  id: 'store-1',
+  phone: '+15550000000',
+  pickupAddress: '1 Pickup Ave',
+  deliveryProvider: 'self_manual',
+  deliveryFeeCents: 500,
+  fulfillmentConfig: {},
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
-  mockGetUberDirectDeliveryFeeCents.mockResolvedValue(null);
+  prismaMock.store.findFirst.mockResolvedValue(STORE as never);
+  createQuote.mockResolvedValue({
+    batchId: 'b1',
+    currency: 'USD',
+    customerChoosesProvider: false,
+    options: [
+      {
+        method: 'DELIVERY',
+        provider: 'MERCHANT',
+        friendlyName: 'Merchant delivery',
+        quoteId: 'q1',
+        feeCents: 500,
+        serviceable: true,
+        isEstimate: true,
+        estimatedDropoffAt: null,
+        expiresAt: null,
+      },
+      {
+        method: 'PICKUP',
+        provider: 'PICKUP',
+        friendlyName: 'Pickup',
+        quoteId: null,
+        feeCents: 0,
+        serviceable: true,
+        isEstimate: false,
+        estimatedDropoffAt: null,
+        expiresAt: null,
+      },
+    ],
+    deliveryUnavailable: false,
+    notServiceable: false,
+  });
 });
 
 describe('POST /api/stores/[slug]/delivery-quote', () => {
   it('403s when CSRF header is missing', async () => {
-    const res = await POST(makePost(VALID_BODY, 'missing'), ctx);
-    expect(res.status).toBe(403);
+    expect((await POST(makePost(VALID_BODY, 'missing'), ctx)).status).toBe(403);
   });
 
   it('400s VALIDATION_FAILED on a malformed body', async () => {
     const res = await POST(makePost({}), ctx);
     expect(res.status).toBe(400);
-    const body = await res.json();
-    expect(body.error).toBe('VALIDATION_FAILED');
+    expect((await res.json()).error).toBe('VALIDATION_FAILED');
   });
 
   it('404s STORE_NOT_FOUND for an unknown or unpublished slug', async () => {
-    prismaMock.store.findFirst.mockResolvedValue(null);
+    prismaMock.store.findFirst.mockResolvedValueOnce(null);
     const res = await POST(makePost(VALID_BODY), ctx);
     expect(res.status).toBe(404);
-    const body = await res.json();
-    expect(body.error).toBe('STORE_NOT_FOUND');
+    expect((await res.json()).error).toBe('STORE_NOT_FOUND');
   });
 
-  it('returns the flat fee as an estimate for a self_manual store (no Uber call)', async () => {
-    prismaMock.store.findFirst.mockResolvedValue({
-      deliveryProvider: 'self_manual',
-      deliveryFeeCents: 500,
-      pickupAddress: null,
-    } as never);
-
+  it('returns the option array from createQuote', async () => {
     const res = await POST(makePost(VALID_BODY), ctx);
-
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toEqual({ feeCents: 500, isEstimate: true });
-    expect(mockGetUberDirectDeliveryFeeCents).not.toHaveBeenCalled();
+    expect(body.options).toHaveLength(2);
+    expect(body.options.map((o: { provider: string }) => o.provider)).toEqual([
+      'MERCHANT',
+      'PICKUP',
+    ]);
+    expect(createQuote).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        storeId: 'store-1',
+        subtotalCents: 4500,
+        dropoffAddress: VALID_BODY.deliveryAddress,
+      }),
+    );
   });
 
-  it('returns the real quote for an uber_direct store', async () => {
-    prismaMock.store.findFirst.mockResolvedValue({
-      deliveryProvider: 'uber_direct',
-      deliveryFeeCents: 500,
-      pickupAddress: '1 Pickup Ave, Springfield, IL 62704',
-    } as never);
-    mockGetUberDirectDeliveryFeeCents.mockResolvedValue(1099);
-
-    const res = await POST(makePost(VALID_BODY), ctx);
-
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body).toEqual({ feeCents: 1099, isEstimate: false });
-    expect(mockGetUberDirectDeliveryFeeCents).toHaveBeenCalledWith({
-      pickupAddress: '1 Pickup Ave, Springfield, IL 62704',
-      deliveryAddress: VALID_BODY.deliveryAddress,
-      amountCents: 4500,
+  it('passes deliveryUnavailable straight through', async () => {
+    createQuote.mockResolvedValueOnce({
+      batchId: 'b2',
+      currency: 'USD',
+      customerChoosesProvider: false,
+      options: [
+        {
+          method: 'PICKUP',
+          provider: 'PICKUP',
+          friendlyName: 'Pickup',
+          quoteId: null,
+          feeCents: 0,
+          serviceable: true,
+          isEstimate: false,
+          estimatedDropoffAt: null,
+          expiresAt: null,
+        },
+      ],
+      deliveryUnavailable: true,
+      notServiceable: true,
     });
-  });
-
-  it('falls back to the flat fee (marked as an estimate) when the quote comes back null', async () => {
-    prismaMock.store.findFirst.mockResolvedValue({
-      deliveryProvider: 'uber_direct',
-      deliveryFeeCents: 500,
-      pickupAddress: '1 Pickup Ave, Springfield, IL 62704',
-    } as never);
-    mockGetUberDirectDeliveryFeeCents.mockResolvedValue(null);
-
-    const res = await POST(makePost(VALID_BODY), ctx);
-
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body).toEqual({ feeCents: 500, isEstimate: true });
+    const body = await (await POST(makePost(VALID_BODY), ctx)).json();
+    expect(body.deliveryUnavailable).toBe(true);
   });
 });
 

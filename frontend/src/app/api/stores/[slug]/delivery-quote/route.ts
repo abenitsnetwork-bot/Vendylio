@@ -1,18 +1,15 @@
-// POST /api/stores/[slug]/delivery-quote — public, guest-accessible preview
-// of what Delivery will cost at THIS store, so the checkout page can show a
-// real number before the buyer submits payment.
+// POST /api/stores/[slug]/delivery-quote — public, guest-accessible checkout
+// preview of every fulfillment option for THIS store, so the checkout page can
+// show real fees + ETAs before the buyer pays.
 //
-// Uses the exact same getUberDirectDeliveryFeeCents() helper the checkout
-// route (POST /api/orders) calls to compute the actual charge — same
-// inputs in, same fee out, so the preview shown here never drifts from
-// what gets charged (barring Uber's price moving between the two calls,
-// typically seconds apart).
+// Since Prompt #12 this returns an ARRAY of options (one per enabled +
+// serviceable method) with persisted `quoteId`s. `POST /api/orders` then
+// re-validates / re-quotes the selected one — the number shown here is what
+// gets charged (barring a courier's price moving in the seconds between).
 //
-// `isEstimate: true` tells the frontend the number is the store's flat
-// Store.deliveryFeeCents, not a live Uber Direct quote — either because the
-// store uses self_manual, or because a live quote couldn't be fetched (bad
-// address, Uber API error, not configured). Never fails the request for
-// that — a missed live quote just falls back silently, same as checkout.
+// Partial failure is tolerated: a slow / erroring provider simply drops out.
+// If no delivery method can service the address, PICKUP is still offered and
+// `deliveryUnavailable` / `notServiceable` drive the checkout copy.
 export const runtime = 'nodejs';
 
 import 'server-only';
@@ -20,7 +17,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/server/prisma';
 import { verifyCsrf } from '@/lib/server/auth';
-import { getUberDirectDeliveryFeeCents } from '@/lib/server/delivery/uber-direct';
+import { createQuote } from '@/lib/server/fulfillment/service';
+import { readFulfillmentConfig } from '@/lib/server/fulfillment/config';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
 interface RouteCtx {
@@ -29,9 +27,6 @@ interface RouteCtx {
 
 const Body = z.object({
   deliveryAddress: z.record(z.string(), z.unknown()),
-  // Cart subtotal — Uber's quote can factor package value into the fee
-  // (insurance/liability sizing), so this preview passes the same amount
-  // the real checkout charge will use rather than a placeholder.
   amountCents: z.number().int().min(0).default(0),
 });
 
@@ -52,7 +47,14 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
 
     const store = await prisma.store.findFirst({
       where: { slug, published: true },
-      select: { deliveryProvider: true, deliveryFeeCents: true, pickupAddress: true },
+      select: {
+        id: true,
+        phone: true,
+        pickupAddress: true,
+        deliveryProvider: true,
+        deliveryFeeCents: true,
+        fulfillmentConfig: true,
+      },
     });
     if (!store) {
       return NextResponse.json(
@@ -61,24 +63,18 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       );
     }
 
-    if (store.deliveryProvider !== 'uber_direct') {
-      return NextResponse.json(
-        { feeCents: store.deliveryFeeCents, isEstimate: true },
-        { headers: { 'x-request-id': reqCtx.requestId } },
-      );
-    }
-
-    const quotedFee = await getUberDirectDeliveryFeeCents({
+    const config = readFulfillmentConfig(store);
+    const result = await createQuote(prisma, {
+      storeId: store.id,
+      config,
       pickupAddress: store.pickupAddress,
-      deliveryAddress: parsed.data.deliveryAddress,
-      amountCents: parsed.data.amountCents,
+      pickupPhone: store.phone,
+      dropoffAddress: parsed.data.deliveryAddress,
+      dropoffPhone: null,
+      subtotalCents: parsed.data.amountCents,
+      currency: 'USD',
     });
 
-    return NextResponse.json(
-      quotedFee === null
-        ? { feeCents: store.deliveryFeeCents, isEstimate: true }
-        : { feeCents: quotedFee, isEstimate: false },
-      { headers: { 'x-request-id': reqCtx.requestId } },
-    );
+    return NextResponse.json(result, { headers: { 'x-request-id': reqCtx.requestId } });
   });
 }

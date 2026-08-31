@@ -41,6 +41,7 @@ import {
   hashDropoffAddress,
   initFulfillment,
   legacyProviderFor,
+  priceDeliveryForOrder,
   quoteMethod,
   recordTransition,
   selectProvider,
@@ -717,6 +718,81 @@ describe('hashDropoffAddress', () => {
     });
     expect(a).toBe(b);
     expect(a).not.toBe(hashDropoffAddress({ street: '9 Oak', city: 'X', state: 'Y', zip: '1' }));
+  });
+});
+
+describe('priceDeliveryForOrder', () => {
+  const store = {
+    id: 'store_1',
+    fulfillmentConfig: { merchant: { enabled: true, feeCents: 500 } },
+    deliveryProvider: 'self_manual',
+    deliveryFeeCents: 500,
+    pickupAddress: '1 Main',
+    phone: null,
+  };
+  const base = {
+    store,
+    deliveryAddress: { street: '2 Elm', city: 'X', state: 'Y', zip: '1' },
+    customerPhone: null,
+    subtotalCents: 4000,
+    currency: 'USD',
+  };
+
+  it('no quoteId → merchant flat fee, never fails the checkout', async () => {
+    const res = await priceDeliveryForOrder(prismaMock as never, { ...base, quoteId: null });
+    expect(res).toMatchObject({ ok: true, feeCents: 500, providerType: 'MERCHANT' });
+  });
+
+  it('rejects a quoteId bound to a different cart', async () => {
+    prismaMock.quote.findUnique.mockResolvedValue({
+      id: 'q1',
+      storeId: 'store_1',
+      providerType: 'MERCHANT',
+      feeCents: 500,
+      subtotalCents: 9999, // mismatch
+      dropoffAddressHash: hashDropoffAddress(base.deliveryAddress),
+      expiresAt: null,
+    } as never);
+    const res = await priceDeliveryForOrder(prismaMock as never, { ...base, quoteId: 'q1' });
+    expect(res).toMatchObject({ ok: false, code: 'DELIVERY_QUOTE_INVALID' });
+  });
+
+  it('uses a fresh flat quote as-is', async () => {
+    prismaMock.quote.findUnique.mockResolvedValue({
+      id: 'q1',
+      storeId: 'store_1',
+      providerType: 'MERCHANT',
+      feeCents: 500,
+      subtotalCents: 4000,
+      dropoffAddressHash: hashDropoffAddress(base.deliveryAddress),
+      expiresAt: new Date(Date.now() + 60_000),
+      providerQuoteId: null,
+      providerCostCents: null,
+    } as never);
+    const res = await priceDeliveryForOrder(prismaMock as never, { ...base, quoteId: 'q1' });
+    expect(res).toMatchObject({ ok: true, feeCents: 500, deliveryQuoteId: 'q1' });
+  });
+
+  it('re-quotes a courier quote and 409s when it is now unserviceable', async () => {
+    mockProvider.isConfigured.mockReturnValue(true);
+    mockProvider.quote.mockResolvedValue({
+      provider: 'DOORDASH',
+      serviceable: false,
+      feeCents: 0,
+      currency: 'USD',
+      unserviceableReason: 'out of area',
+    });
+    prismaMock.quote.findUnique.mockResolvedValue({
+      id: 'q1',
+      storeId: 'store_1',
+      providerType: 'DOORDASH',
+      feeCents: 820,
+      subtotalCents: 4000,
+      dropoffAddressHash: hashDropoffAddress(base.deliveryAddress),
+      expiresAt: new Date(Date.now() + 60_000),
+    } as never);
+    const res = await priceDeliveryForOrder(prismaMock as never, { ...base, quoteId: 'q1' });
+    expect(res).toMatchObject({ ok: false, code: 'DELIVERY_UNAVAILABLE' });
   });
 });
 

@@ -21,6 +21,33 @@ interface OrderErrorBody {
 
 type PaymentMethod = 'card' | 'cashapp' | 'zelle';
 
+interface DeliveryOption {
+  method: 'DELIVERY' | 'PICKUP';
+  provider: string;
+  friendlyName: string;
+  quoteId: string | null;
+  feeCents: number;
+  serviceable: boolean;
+  isEstimate: boolean;
+  estimatedDropoffAt: string | null;
+  unserviceableReason?: string;
+}
+interface DeliveryQuoteResponse {
+  options: DeliveryOption[];
+  customerChoosesProvider: boolean;
+  deliveryUnavailable: boolean;
+  notServiceable: boolean;
+}
+
+function etaLabel(iso: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const mins = Math.round((d.getTime() - Date.now()) / 60000);
+  if (mins <= 0 || mins > 240) return null;
+  return `~${mins} min`;
+}
+
 type CartChange =
   | 'REMOVED'
   | 'OPTION_UNAVAILABLE'
@@ -116,7 +143,6 @@ function CheckoutFormInner({
   cashAppCashtag,
   zelleContact,
   deliveryFeeCents,
-  deliveryProvider,
   pickupAddress,
 }: {
   storeSlug: string;
@@ -124,7 +150,9 @@ function CheckoutFormInner({
   cashAppCashtag: string | null;
   zelleContact: string | null;
   deliveryFeeCents: number;
-  deliveryProvider: string;
+  /** Legacy prop — kept for caller compatibility, the engine resolves the
+   *  provider server-side now. */
+  deliveryProvider?: string;
   pickupAddress: string | null;
 }) {
   const router = useRouter();
@@ -144,6 +172,14 @@ function CheckoutFormInner({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('card');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Prompt #12 — the live delivery options for the typed address.
+  const [deliveryOptions, setDeliveryOptions] = useState<DeliveryOption[] | null>(null);
+  const [deliveryUnavailable, setDeliveryUnavailable] = useState(false);
+  const [customerChoosesProvider, setCustomerChoosesProvider] = useState(false);
+  const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
+  const [selectedProviderType, setSelectedProviderType] = useState<string | null>(null);
+  const [quoteNonce, setQuoteNonce] = useState(0);
 
   // Phase D — promo code. `appliedCode` is set only after /validate says OK;
   // the order POST re-checks authoritatively and can still 400 (expired
@@ -258,20 +294,16 @@ function CheckoutFormInner({
   );
   const addressComplete = Boolean(street.trim() && city.trim() && state.trim() && zip.trim());
 
-  const [liveDeliveryFeeCents, setLiveDeliveryFeeCents] = useState<number | null>(null);
   const [quoting, setQuoting] = useState(false);
 
-  // Uber Direct prices by real distance — once the buyer finishes typing
-  // their address, fetch what delivery will actually cost so the total
-  // shown here matches what checkout will charge (rather than the store's
-  // flat Store.deliveryFeeCents, which self_manual stores still use as-is).
+  // Prompt #12 — once the buyer finishes typing their address, fetch every
+  // serviceable delivery option (Uber / DoorDash / merchant) so the fee +
+  // ETA shown here match what checkout will charge. A slow/erroring provider
+  // just drops out; if none can service the address, only pickup remains.
   useEffect(() => {
-    if (
-      fulfillmentMethod !== 'delivery' ||
-      deliveryProvider !== 'uber_direct' ||
-      !addressComplete
-    ) {
-      setLiveDeliveryFeeCents(null);
+    if (fulfillmentMethod !== 'delivery' || !addressComplete) {
+      setDeliveryOptions(null);
+      setDeliveryUnavailable(false);
       return;
     }
     let cancelled = false;
@@ -286,12 +318,18 @@ function CheckoutFormInner({
         }),
       })
         .then((res) => (res.ok ? res.json() : null))
-        .then((data: { feeCents?: number; isEstimate?: boolean } | null) => {
+        .then((data: DeliveryQuoteResponse | null) => {
           if (cancelled) return;
-          setLiveDeliveryFeeCents(data && !data.isEstimate ? (data.feeCents ?? null) : null);
+          const opts = (data?.options ?? []).filter((o) => o.method === 'DELIVERY');
+          setDeliveryOptions(opts);
+          setCustomerChoosesProvider(Boolean(data?.customerChoosesProvider));
+          setDeliveryUnavailable(Boolean(data?.deliveryUnavailable));
         })
         .catch(() => {
-          if (!cancelled) setLiveDeliveryFeeCents(null);
+          if (!cancelled) {
+            setDeliveryOptions(null);
+            setDeliveryUnavailable(false);
+          }
         })
         .finally(() => {
           if (!cancelled) setQuoting(false);
@@ -304,7 +342,6 @@ function CheckoutFormInner({
     };
   }, [
     fulfillmentMethod,
-    deliveryProvider,
     addressComplete,
     street,
     city,
@@ -312,14 +349,47 @@ function CheckoutFormInner({
     zip,
     storeSlug,
     subtotalCents,
+    quoteNonce,
   ]);
 
+  const serviceableOptions = useMemo(
+    () => (deliveryOptions ?? []).filter((o) => o.serviceable),
+    [deliveryOptions],
+  );
+  const showProviderPicker = customerChoosesProvider && serviceableOptions.length > 1;
+
+  // Auto-pick the cheapest serviceable option (or honour the buyer's pick when
+  // it is still valid).
+  useEffect(() => {
+    if (fulfillmentMethod !== 'delivery' || serviceableOptions.length === 0) {
+      setSelectedQuoteId(null);
+      setSelectedProviderType(null);
+      return;
+    }
+    const stillValid = serviceableOptions.find((o) => o.provider === selectedProviderType);
+    const pick =
+      showProviderPicker && stillValid
+        ? stillValid
+        : serviceableOptions.reduce((a, b) => (b.feeCents < a.feeCents ? b : a));
+    setSelectedQuoteId(pick.quoteId);
+    setSelectedProviderType(pick.provider);
+  }, [serviceableOptions, showProviderPicker, selectedProviderType, fulfillmentMethod]);
+
+  const selectedOption =
+    serviceableOptions.find((o) => o.provider === selectedProviderType) ?? null;
+
   const rawDeliveryFeeCents =
-    fulfillmentMethod !== 'delivery' ? 0 : (liveDeliveryFeeCents ?? deliveryFeeCents);
+    fulfillmentMethod !== 'delivery'
+      ? 0
+      : selectedOption
+        ? selectedOption.feeCents
+        : deliveryFeeCents;
   // V1's only promo mechanism, FREE_DELIVERY, waives the whole delivery fee.
   const freeDelivery = appliedCode !== null && fulfillmentMethod === 'delivery';
   const appliedDeliveryFeeCents = freeDelivery ? 0 : rawDeliveryFeeCents;
   const totalCents = subtotalCents + appliedDeliveryFeeCents;
+  const deliveryBlocked =
+    fulfillmentMethod === 'delivery' && addressComplete && !quoting && deliveryUnavailable;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -331,6 +401,10 @@ function CheckoutFormInner({
     }
     if (fulfillmentMethod === 'delivery' && !deliveryAddress) {
       setError('A delivery address is required, or choose Pickup instead.');
+      return;
+    }
+    if (deliveryBlocked) {
+      setError('Delivery isn’t available for this address — try another address or choose Pickup.');
       return;
     }
     if (checkoutBlocked || needsPriceAck) {
@@ -360,6 +434,14 @@ function CheckoutFormInner({
           ...(customerEmail.trim() ? { customerEmail: customerEmail.trim() } : {}),
           fulfillmentMethod,
           ...(fulfillmentMethod === 'delivery' && deliveryAddress ? { deliveryAddress } : {}),
+          ...(fulfillmentMethod === 'delivery' && selectedQuoteId
+            ? { quoteId: selectedQuoteId }
+            : {}),
+          ...(fulfillmentMethod === 'delivery' &&
+          selectedProviderType &&
+          selectedProviderType !== 'PICKUP'
+            ? { deliveryProviderType: selectedProviderType }
+            : {}),
           ...(appliedCode ? { discountCode: appliedCode } : {}),
           paymentMethod,
         }),
@@ -384,10 +466,18 @@ function CheckoutFormInner({
           PAYMENT_FAILED: 'Payment could not be started. Please try again.',
           DISCOUNT_INVALID:
             body.message ?? 'That promo code can’t be applied — it may have just expired.',
+          DELIVERY_UNAVAILABLE:
+            body.message ??
+            'Delivery isn’t available for this address — try Pickup or a new address.',
+          DELIVERY_QUOTE_INVALID:
+            'Your delivery quote expired. We’ve refreshed it — please review and try again.',
         };
         if (body.error === 'DISCOUNT_INVALID') {
           setAppliedCode(null);
           setPromoMsg({ ok: false, text: 'Promo code removed — it is no longer valid.' });
+        }
+        if (body.error === 'DELIVERY_UNAVAILABLE' || body.error === 'DELIVERY_QUOTE_INVALID') {
+          setQuoteNonce((n) => n + 1); // re-fetch fresh options
         }
         // Let the revalidation banner take over with per-item specifics
         // instead of a single flat line.
@@ -546,11 +636,21 @@ function CheckoutFormInner({
                 subtitle={
                   freeDelivery
                     ? 'Free with your promo code'
-                    : deliveryProvider === 'uber_direct'
-                      ? 'Priced by address at checkout'
-                      : deliveryFeeCents > 0
-                        ? formatUsd(deliveryFeeCents)
-                        : 'Free'
+                    : deliveryBlocked
+                      ? 'Not available for this address'
+                      : !addressComplete
+                        ? 'Priced by address below'
+                        : quoting
+                          ? 'Getting a price…'
+                          : selectedOption
+                            ? `${selectedOption.feeCents > 0 ? formatUsd(selectedOption.feeCents) : 'Free'}${
+                                etaLabel(selectedOption.estimatedDropoffAt)
+                                  ? ` · ${etaLabel(selectedOption.estimatedDropoffAt)}`
+                                  : ''
+                              }`
+                            : deliveryFeeCents > 0
+                              ? formatUsd(deliveryFeeCents)
+                              : 'Free'
                 }
               />
               <OptionCard
@@ -599,6 +699,50 @@ function CheckoutFormInner({
                     onChange={(e) => setZip(e.target.value)}
                   />
                 </div>
+
+                {deliveryBlocked && (
+                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                    Delivery isn’t available for this address right now. Try a different address, or
+                    choose <strong>Pickup</strong> above.
+                  </div>
+                )}
+
+                {showProviderPicker && !deliveryBlocked && (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-foreground">Choose a courier</p>
+                    {serviceableOptions.map((o) => (
+                      <label
+                        key={o.provider}
+                        className={`flex cursor-pointer items-center justify-between rounded-lg border p-3 text-sm ${
+                          selectedProviderType === o.provider
+                            ? 'border-primary bg-secondary'
+                            : 'border-border'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name="deliveryProvider"
+                            checked={selectedProviderType === o.provider}
+                            onChange={() => {
+                              setSelectedProviderType(o.provider);
+                              setSelectedQuoteId(o.quoteId);
+                            }}
+                          />
+                          <span className="font-medium text-foreground">{o.friendlyName}</span>
+                          {etaLabel(o.estimatedDropoffAt) && (
+                            <span className="text-muted-foreground">
+                              {etaLabel(o.estimatedDropoffAt)}
+                            </span>
+                          )}
+                        </span>
+                        <span className="font-semibold text-foreground">
+                          {o.feeCents > 0 ? formatUsd(o.feeCents) : 'Free'}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}

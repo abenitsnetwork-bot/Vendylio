@@ -54,7 +54,7 @@ import { parseOrderNumberQuery } from '@/lib/orderNumber';
 import { newTrackingToken } from '@/lib/server/orders/trackingToken';
 import { storeAcceptsOrders } from '@/lib/server/store/availability';
 import { roundQuantity } from '@/lib/quantity';
-import { getUberDirectDeliveryFeeCents } from '@/lib/server/delivery/uber-direct';
+import { priceDeliveryForOrder } from '@/lib/server/fulfillment/service';
 import { evaluateDiscount, normalizeDiscountCode } from '@/lib/server/discounts/evaluate';
 
 const IDEM_KEY_MAX_LEN = 200;
@@ -81,6 +81,7 @@ function fingerprintBody(input: {
   items: CartLine[];
   fulfillmentMethod: string;
   discountCode: string | null;
+  deliveryProviderType: string | null;
 }): string {
   const sortedItems = [...input.items]
     .map((i) => ({ productId: i.productId, quantity: i.quantity, variantId: i.variantId ?? null }))
@@ -92,6 +93,8 @@ function fingerprintBody(input: {
     // Phase D — a re-submit that adds/removes/swaps the promo code changes
     // what's charged, so it must not silently reuse the old amount.
     discountCode: input.discountCode,
+    // Prompt #12 — swapping the delivery provider changes the fee.
+    deliveryProviderType: input.deliveryProviderType,
   });
   return createHash('sha256').update(canonical).digest('hex');
 }
@@ -127,6 +130,12 @@ const Body = z.object({
   // Phase D — optional promo code. Validated + priced server-side below; an
   // invalid/expired code 400s (DISCOUNT_INVALID) rather than being ignored.
   discountCode: z.string().trim().min(1).max(40).optional(),
+  // Prompt #12 — the persisted delivery quote the buyer selected at checkout
+  // (from POST /api/stores/[slug]/delivery-quote). Re-validated + re-quoted
+  // server-side; the browser-sent fee is never trusted.
+  quoteId: z.string().trim().min(1).max(40).optional(),
+  // The buyer's provider pick when the store lets customers choose.
+  deliveryProviderType: z.enum(['UBER_DIRECT', 'DOORDASH', 'MERCHANT']).optional(),
 });
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -177,6 +186,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       deliveryAddress,
       paymentMethod,
       fulfillmentMethod,
+      quoteId,
+      deliveryProviderType: chosenProviderType,
     } = parsed.data;
     const discountCode = parsed.data.discountCode
       ? normalizeDiscountCode(parsed.data.discountCode)
@@ -228,7 +239,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const bodyHash = fingerprintBody({ storeId: store.id, items, fulfillmentMethod, discountCode });
+    const bodyHash = fingerprintBody({
+      storeId: store.id,
+      items,
+      fulfillmentMethod,
+      discountCode,
+      deliveryProviderType: chosenProviderType ?? null,
+    });
 
     // 6. Replay (echo the outcome, not a re-derivation of the row)
     const existing = await prisma.order.findUnique({ where: { idempotencyKey: idemKey } });
@@ -355,15 +372,43 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // Uber API error) so a checkout never fails just because a live quote
     // didn't come back.
     let deliveryFeeCents = 0;
+    let deliveryProviderType: string | null = null;
+    let deliveryQuoteId: string | null = null;
+    let providerQuoteId: string | null = null;
+    let deliveryQuoteExpiresAt: Date | null = null;
+    let providerCostCents: number | null = null;
     if (fulfillmentMethod === 'delivery') {
-      deliveryFeeCents =
-        store.deliveryProvider === 'uber_direct'
-          ? ((await getUberDirectDeliveryFeeCents({
-              pickupAddress: store.pickupAddress,
-              deliveryAddress: deliveryAddress ?? null,
-              amountCents: subtotalCents,
-            })) ?? store.deliveryFeeCents)
-          : store.deliveryFeeCents;
+      const priced = await priceDeliveryForOrder(prisma, {
+        store: {
+          id: store.id,
+          fulfillmentConfig: store.fulfillmentConfig,
+          deliveryProvider: store.deliveryProvider,
+          deliveryFeeCents: store.deliveryFeeCents,
+          pickupAddress: store.pickupAddress,
+          phone: store.phone,
+        },
+        quoteId: quoteId ?? null,
+        chosenProviderType: chosenProviderType ?? null,
+        deliveryAddress: deliveryAddress ?? null,
+        customerPhone,
+        subtotalCents,
+        currency: 'USD',
+      });
+      if (!priced.ok) {
+        return NextResponse.json(
+          { error: priced.code, message: priced.message },
+          {
+            status: priced.code === 'DELIVERY_UNAVAILABLE' ? 409 : 400,
+            headers: { 'x-request-id': ctx.requestId },
+          },
+        );
+      }
+      deliveryFeeCents = priced.feeCents;
+      deliveryProviderType = priced.providerType;
+      deliveryQuoteId = priced.deliveryQuoteId;
+      providerQuoteId = priced.providerQuoteId;
+      deliveryQuoteExpiresAt = priced.quoteExpiresAt;
+      providerCostCents = priced.providerCostCents;
     }
     // Phase D — apply a promo code AFTER the delivery fee is known (V1's
     // only mechanism, FREE_DELIVERY, zeroes it). An invalid/expired code is
@@ -417,6 +462,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       discountCents,
       ...(appliedDiscountCode ? { discountCode: appliedDiscountCode } : {}),
       fulfillmentMethod: fulfillmentMethod.toUpperCase(),
+      ...(deliveryProviderType ? { deliveryProviderType } : {}),
+      ...(deliveryQuoteId ? { deliveryQuoteId } : {}),
+      ...(providerQuoteId ? { providerQuoteId } : {}),
+      ...(deliveryQuoteExpiresAt ? { deliveryQuoteExpiresAt } : {}),
+      ...(providerCostCents !== null ? { providerCostCents } : {}),
       customerName,
       customerPhone,
       ...(customerEmail ? { customerEmail } : {}),

@@ -24,6 +24,7 @@ import {
   isClosedStatus,
   type FulfillmentMethod,
 } from '@/lib/server/orders/customerView';
+import { PROVIDER_FRIENDLY_NAME, type ProviderType } from '@/lib/server/fulfillment/types';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
 interface RouteCtx {
@@ -62,8 +63,31 @@ const TRACK_SELECT = {
     select: { status: true, createdAt: true },
     orderBy: { createdAt: 'asc' },
   },
-  delivery: { select: { status: true, trackingUrl: true } },
+  delivery: {
+    select: {
+      status: true,
+      state: true,
+      providerType: true,
+      trackingUrl: true,
+      estimatedDropoffAt: true,
+    },
+  },
 } as const satisfies Prisma.OrderSelect;
+
+/** Customer-safe delivery sub-view: friendly provider name, a real ETA only
+ *  when the provider gave one, and a tracking link only when it exists. Never
+ *  exposes the raw provider status string or courier PII. */
+const DELIVERY_STAGE: Record<string, string> = {
+  PENDING: 'Arranging delivery',
+  QUOTED: 'Arranging delivery',
+  REQUESTED: 'Courier requested',
+  CONFIRMED: 'Courier assigned',
+  PICKED_UP: 'Picked up',
+  OUT_FOR_DELIVERY: 'On the way',
+  DELIVERED: 'Delivered',
+  CANCELLED: 'Delivery cancelled',
+  FAILED: 'Delivery delayed',
+};
 
 interface RawLineItem {
   name?: string;
@@ -136,7 +160,17 @@ export async function GET(req: NextRequest, ctx: RouteCtx): Promise<NextResponse
       },
       deliveryAddress: (order.deliveryAddress as Prisma.JsonValue) ?? null,
       delivery: order.delivery
-        ? { status: order.delivery.status, trackingUrl: order.delivery.trackingUrl }
+        ? {
+            status: order.delivery.status,
+            stage: DELIVERY_STAGE[order.delivery.state ?? ''] ?? null,
+            providerName: order.delivery.providerType
+              ? (PROVIDER_FRIENDLY_NAME[order.delivery.providerType as ProviderType] ?? null)
+              : null,
+            trackingUrl: order.delivery.trackingUrl ?? null,
+            etaAt: order.delivery.estimatedDropoffAt
+              ? order.delivery.estimatedDropoffAt.toISOString()
+              : null,
+          }
         : null,
       timeline: buildOrderTimeline(order.statusEvents, fulfillmentMethod),
       store: {

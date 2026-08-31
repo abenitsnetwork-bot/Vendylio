@@ -40,7 +40,13 @@ interface TrackedOrder {
     currency: string;
   };
   deliveryAddress: Record<string, unknown> | null;
-  delivery: { status: string; trackingUrl: string | null } | null;
+  delivery: {
+    status: string;
+    stage: string | null;
+    providerName: string | null;
+    trackingUrl: string | null;
+    etaAt: string | null;
+  } | null;
   timeline: TimelineStep[];
   store: {
     name: string;
@@ -242,17 +248,32 @@ export function OrderStatusTracker({ token }: { token: string }) {
         </div>
       )}
 
-      {order.delivery?.trackingUrl && order.status.key === 'ON_THE_WAY' && (
-        <p className="mt-4">
-          <a
-            href={order.delivery.trackingUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-block rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
-          >
-            Track your delivery
-          </a>
-        </p>
+      {!isPickup && order.delivery && order.status.key !== 'DELIVERED' && !order.closed && (
+        <div className="mt-4 rounded-lg border border-border bg-secondary/40 p-3 text-sm">
+          <p className="font-medium text-foreground">
+            {order.delivery.stage ?? 'Delivery'}
+            {order.delivery.providerName ? ` · ${order.delivery.providerName}` : ''}
+          </p>
+          {order.delivery.etaAt && new Date(order.delivery.etaAt).getTime() > Date.now() && (
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Estimated arrival{' '}
+              {new Date(order.delivery.etaAt).toLocaleTimeString([], {
+                hour: 'numeric',
+                minute: '2-digit',
+              })}
+            </p>
+          )}
+          {order.delivery.trackingUrl && (
+            <a
+              href={order.delivery.trackingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-block rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground"
+            >
+              Track your delivery
+            </a>
+          )}
+        </div>
       )}
 
       {order.delivery?.status === 'FAILED' && order.status.key !== 'DELIVERED' && (

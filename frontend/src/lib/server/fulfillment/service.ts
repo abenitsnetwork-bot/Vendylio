@@ -26,7 +26,12 @@ import type {
   ProviderType,
 } from './types';
 import { getDeliveryProvider, type ProviderContext } from './registry';
-import { enabledProviderTypes, readFulfillmentConfig, type FulfillmentConfig } from './config';
+import {
+  enabledProviderTypes,
+  readFulfillmentConfig,
+  resolveOrderProviderType,
+  type FulfillmentConfig,
+} from './config';
 import { PROVIDER_FRIENDLY_NAME } from './types';
 import { createNotification } from '@/lib/server/notifications';
 import {
@@ -614,6 +619,148 @@ export async function createQuote(
     options,
     deliveryUnavailable: !serviceableDelivery,
     notServiceable: !serviceableDelivery && courierTried,
+  };
+}
+
+// ── priceDeliveryForOrder ───────────────────────────────────────────────
+
+export interface PriceDeliveryInput {
+  store: {
+    id: string;
+    fulfillmentConfig: unknown;
+    deliveryProvider: string;
+    deliveryFeeCents: number;
+    pickupAddress: string | null;
+    phone: string | null;
+  };
+  /** The `Quote` row id the buyer selected at checkout, if any. */
+  quoteId?: string | null;
+  /** The buyer's provider pick (only honored when the store allows it). */
+  chosenProviderType?: string | null;
+  deliveryAddress: Record<string, unknown> | null;
+  customerPhone: string | null;
+  subtotalCents: number;
+  currency: string;
+}
+
+export type PriceDeliveryResult =
+  | {
+      ok: true;
+      feeCents: number;
+      providerType: ProviderType;
+      deliveryQuoteId: string | null;
+      providerQuoteId: string | null;
+      quoteExpiresAt: Date | null;
+      providerCostCents: number | null;
+    }
+  | { ok: false; code: 'DELIVERY_QUOTE_INVALID' | 'DELIVERY_UNAVAILABLE'; message: string };
+
+/**
+ * The authoritative delivery-fee computation for `POST /api/orders`. Never
+ * trusts a browser-sent fee.
+ *
+ * - With a `quoteId`: bind-checks the persisted `Quote` (store + cart + address
+ *   hash). A courier quote — or any expired quote — is **re-quoted live**; if
+ *   the courier is now unserviceable → `DELIVERY_UNAVAILABLE` (checkout offers
+ *   pickup / a new address). A fresh flat (merchant) quote is used as-is.
+ * - Without a `quoteId`: resolves the provider from the store config + the
+ *   buyer's pick and quotes it live, falling back to the merchant flat fee.
+ */
+export async function priceDeliveryForOrder(
+  prisma: PrismaClient,
+  input: PriceDeliveryInput,
+): Promise<PriceDeliveryResult> {
+  const cfg = readFulfillmentConfig({
+    fulfillmentConfig: input.store.fulfillmentConfig ?? {},
+    deliveryProvider: input.store.deliveryProvider,
+    deliveryFeeCents: input.store.deliveryFeeCents,
+  });
+  const ctx: ProviderContext = { merchant: cfg.merchant, pickup: cfg.pickup };
+  const quoteInput: DeliveryQuoteInput = {
+    pickupAddress: input.store.pickupAddress,
+    pickupPhone: input.store.phone,
+    dropoffAddress: input.deliveryAddress,
+    dropoffPhone: input.customerPhone,
+    subtotalCents: input.subtotalCents,
+    currency: input.currency,
+  };
+  const dropoffHash = hashDropoffAddress(input.deliveryAddress);
+
+  const liveQuote = async (providerType: ProviderType): Promise<PriceDeliveryResult> => {
+    const q = await quoteMethod(providerType, quoteInput, ctx, QUOTE_TIMEOUT_MS);
+    if (!q.serviceable) {
+      if (isCourierProvider(providerType)) {
+        return {
+          ok: false,
+          code: 'DELIVERY_UNAVAILABLE',
+          message: q.unserviceableReason ?? 'This delivery method is not available right now.',
+        };
+      }
+      // A merchant flat fee that came back "unserviceable" means the cart is
+      // below the minimum order — a hard stop, same as a courier.
+      return {
+        ok: false,
+        code: 'DELIVERY_UNAVAILABLE',
+        message: q.unserviceableReason ?? 'Delivery is not available for this order.',
+      };
+    }
+    return {
+      ok: true,
+      feeCents: q.feeCents,
+      providerType,
+      deliveryQuoteId: input.quoteId ?? null,
+      providerQuoteId: q.providerQuoteId ?? null,
+      quoteExpiresAt: q.expiresAt ?? null,
+      providerCostCents: typeof q.providerCostCents === 'number' ? q.providerCostCents : null,
+    };
+  };
+
+  if (input.quoteId) {
+    const quote = await prisma.quote.findUnique({ where: { id: input.quoteId } });
+    if (
+      !quote ||
+      quote.storeId !== input.store.id ||
+      quote.subtotalCents !== input.subtotalCents ||
+      quote.dropoffAddressHash !== dropoffHash
+    ) {
+      return {
+        ok: false,
+        code: 'DELIVERY_QUOTE_INVALID',
+        message: 'Your delivery quote is no longer valid — please review your cart.',
+      };
+    }
+    const providerType = quote.providerType as ProviderType;
+    const expired = quote.expiresAt ? quote.expiresAt.getTime() < Date.now() : false;
+    if (isCourierProvider(providerType) || expired) {
+      return liveQuote(providerType);
+    }
+    return {
+      ok: true,
+      feeCents: quote.feeCents,
+      providerType,
+      deliveryQuoteId: quote.id,
+      providerQuoteId: quote.providerQuoteId ?? null,
+      quoteExpiresAt: quote.expiresAt ?? null,
+      providerCostCents: quote.providerCostCents ?? null,
+    };
+  }
+
+  // No persisted quote (a legacy client, or a store with no courier chosen).
+  // Quote the resolved provider live, but NEVER fail the checkout on it — a
+  // missed live quote falls back to the store's flat fee, same principle the
+  // Phase-5 checkout used. (The strict "quote expired → 409" path only applies
+  // when the buyer actually selected a persisted quote.)
+  const providerType = resolveOrderProviderType(input.chosenProviderType ?? null, cfg);
+  const live = await liveQuote(providerType);
+  if (live.ok) return live;
+  return {
+    ok: true,
+    feeCents: cfg.merchant.feeCents,
+    providerType,
+    deliveryQuoteId: null,
+    providerQuoteId: null,
+    quoteExpiresAt: null,
+    providerCostCents: null,
   };
 }
 
