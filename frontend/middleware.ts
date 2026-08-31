@@ -22,6 +22,30 @@ const ACCESS_COOKIE = `${COOKIE_PREFIX}-token`;
 const REFRESH_COOKIE = `${COOKIE_PREFIX}-refresh`;
 const LOGIN_PATH = process.env.AUTH_LOGIN_PATH || '/login';
 
+function isAdminPath(pathname: string): boolean {
+  return pathname === '/admin' || pathname.startsWith('/admin/');
+}
+
+// /admin pre-filter — an anonymous request never even receives the admin
+// HTML shell. The real authorization is the server-side role check in
+// src/app/admin/layout.tsx (`notFound()` for non-admins); this just keeps
+// the surface undiscoverable to visitors with no session at all. A
+// logged-in admin whose short-lived access cookie has expired is bounced
+// through the same silent-refresh path as any other protected page.
+function guardAdmin(req: NextRequest): NextResponse | null {
+  if (!isAdminPath(req.nextUrl.pathname)) return null;
+  if (req.cookies.get(ACCESS_COOKIE)?.value) return NextResponse.next();
+
+  const { pathname, search } = req.nextUrl;
+  if (req.cookies.get(REFRESH_COOKIE)?.value) {
+    const url = req.nextUrl.clone();
+    url.pathname = '/api/auth/refresh-and-return';
+    url.search = `?next=${encodeURIComponent(pathname + search)}`;
+    return NextResponse.redirect(url, 303);
+  }
+  return new NextResponse(null, { status: 404 });
+}
+
 const AUTHED_PREFIXES = (process.env.AUTH_PROTECTED_PREFIXES || '')
   .split(',')
   .map((s) => s.trim())
@@ -32,6 +56,9 @@ function isAuthedPath(pathname: string): boolean {
 }
 
 export function middleware(req: NextRequest): NextResponse {
+  const adminGuard = guardAdmin(req);
+  if (adminGuard) return adminGuard;
+
   if (AUTHED_PREFIXES.length === 0) return NextResponse.next();
 
   const { pathname, search } = req.nextUrl;

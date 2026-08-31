@@ -1,77 +1,25 @@
-'use client';
+import { notFound } from 'next/navigation';
+import { NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/server/middleware';
+import { AdminShell } from './AdminShell';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { AdminProvider, useAdminAuth } from '@/contexts/AdminContext';
-import { AdminSidebar } from '@/components/admin/AdminSidebar';
-import { AdminHeader } from '@/components/admin/AdminHeader';
-import { Icon } from '@/components/ui/Icon';
+// SERVER-SIDE admin gate. Every /admin/* page renders through this layout,
+// so a non-admin (or signed-out) request gets `notFound()` — a real 404,
+// indistinguishable from a route that doesn't exist. The old client-only
+// gate still shipped the admin HTML shell to everyone and only *then* said
+// "Access denied"; this makes the back-office undiscoverable.
+//
+// `requireAdmin` re-reads the role from the DB (not the JWT), so a
+// just-revoked admin loses access on the very next navigation. The edge
+// middleware (`src/middleware.ts`) is a cheap pre-filter that 404s anonymous
+// requests before this even runs.
+export const dynamic = 'force-dynamic';
 
-function AdminGate({ children }: { children: React.ReactNode }) {
-  const { admin, loading, error, refresh } = useAdminAuth();
-  const router = useRouter();
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  const auth = await requireAdmin('ADMIN');
+  if (auth instanceof NextResponse) notFound();
 
-  useEffect(() => {
-    if (error === 'UNAUTHENTICATED') router.replace('/login');
-  }, [error, router]);
-
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <p className="text-sm text-muted-foreground">Loading…</p>
-      </div>
-    );
-  }
-
-  if (error === 'FORBIDDEN') {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background px-4 text-center">
-        <Icon i="shield" size={32} className="text-muted-foreground" />
-        <div>
-          <p className="mb-1 font-headings text-lg font-bold text-foreground">Access denied</p>
-          <p className="text-sm text-muted-foreground">
-            This account doesn&apos;t have admin access.
-          </p>
-        </div>
-        <a href="/dashboard" className="text-sm font-medium text-primary">
-          Back to your dashboard
-        </a>
-      </div>
-    );
-  }
-
-  if (error === 'NETWORK') {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-background px-4 text-center">
-        <p className="text-sm text-red-600">Could not reach the server.</p>
-        <button
-          type="button"
-          onClick={() => void refresh()}
-          className="text-sm font-medium text-primary"
-        >
-          Try again
-        </button>
-      </div>
-    );
-  }
-
-  if (!admin) return null; // redirecting to /login
-
-  return (
-    <div className="min-h-screen bg-background">
-      <AdminSidebar />
-      <div className="pb-16 lg:pb-0 lg:pl-56">
-        <AdminHeader admin={admin} />
-        {children}
-      </div>
-    </div>
-  );
-}
-
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <AdminProvider>
-      <AdminGate>{children}</AdminGate>
-    </AdminProvider>
-  );
+  // requireAdmin('ADMIN') has filtered USER away — narrow for AdminInfo.
+  const admin = { ...auth.admin, role: auth.admin.role as 'ADMIN' | 'SUPERADMIN' };
+  return <AdminShell admin={admin}>{children}</AdminShell>;
 }
