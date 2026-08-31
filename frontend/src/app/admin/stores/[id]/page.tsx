@@ -163,7 +163,12 @@ export default function AdminStoreDetailPage({ params }: { params: Promise<{ id:
                 </div>
                 <div>
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Orders</p>
-                  <p className="font-semibold text-foreground">{store.orderCount}</p>
+                  <Link
+                    href={`/admin/orders?storeId=${store.id}`}
+                    className="font-semibold text-primary hover:underline"
+                  >
+                    {store.orderCount} →
+                  </Link>
                 </div>
                 <div>
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Created</p>

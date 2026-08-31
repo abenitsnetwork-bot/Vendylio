@@ -49,9 +49,28 @@ describe('/api/admin/orders [Wave 1] — list', () => {
 
     const args = prismaMock.order.findMany.mock.calls[0]?.[0];
     expect(args?.orderBy).toEqual([{ createdAt: 'desc' }, { id: 'desc' }]);
-    expect(args?.select).toMatchObject({ id: true, status: true, amount: true });
+    expect(args?.select).toMatchObject({ id: true, status: true, amount: true, storeId: true });
+    expect((args?.select as Record<string, unknown> | undefined)?.['store']).toEqual({
+      select: { id: true, name: true, slug: true },
+    });
     // metadata excluded — confirms whitelist
     expect((args?.select as Record<string, unknown> | undefined)?.['metadata']).toBeUndefined();
+  });
+
+  it('GET filters by storeId and flattens store name/slug onto each row', async () => {
+    const row = {
+      ...seedOrder({ id: 'o1' }),
+      store: { id: 's1', name: 'Chez Ada', slug: 'chez-ada' },
+    };
+    prismaMock.order.findMany.mockResolvedValueOnce([row] as never);
+
+    const res = await GET(makeGet('http://test/api/admin/orders?storeId=s1'));
+    const body = (await res.json()) as { items: Array<Record<string, unknown>> };
+    expect(body.items[0]).toMatchObject({ id: 'o1', storeName: 'Chez Ada', storeSlug: 'chez-ada' });
+    expect(body.items[0]).not.toHaveProperty('store');
+
+    const where = prismaMock.order.findMany.mock.calls[0]?.[0]?.where as Record<string, unknown>;
+    expect(where['storeId']).toBe('s1');
   });
 
   it('GET returns empty 200 (never 404) on no rows', async () => {

@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import { Icon } from '@/components/ui/Icon';
 import { StatusBadge, formatUsd } from '@/components/seller/OrdersTable';
@@ -10,6 +11,9 @@ interface AdminOrder {
   id: string;
   orderNumber: number;
   userId: string | null;
+  storeId: string;
+  storeName: string | null;
+  storeSlug: string | null;
   amount: number;
   currency: string;
   status: string;
@@ -17,6 +21,12 @@ interface AdminOrder {
   provider: string;
   paymentMethod: string | null;
   createdAt: string;
+}
+
+interface StoreOption {
+  id: string;
+  name: string;
+  slug: string;
 }
 
 const STATUS_FILTERS = [
@@ -33,38 +43,57 @@ const STATUS_FILTERS = [
   'FAILED',
 ];
 
-export default function AdminOrdersPage() {
+function AdminOrdersInner() {
+  const searchParams = useSearchParams();
   const [status, setStatus] = useState('');
+  const [storeId, setStoreId] = useState(searchParams.get('storeId') ?? '');
+  const [stores, setStores] = useState<StoreOption[]>([]);
   const [orders, setOrders] = useState<AdminOrder[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback((filterStatus: string) => {
+  useEffect(() => {
+    api<{ stores: StoreOption[] }>('/api/admin/stores/list')
+      .then((res) => setStores(res.stores))
+      .catch(() => setStores([]));
+  }, []);
+
+  const buildQs = useCallback(
+    (extra: Record<string, string> = {}) => {
+      const qs = new URLSearchParams(extra);
+      if (status) qs.set('status', status);
+      if (storeId) qs.set('storeId', storeId);
+      return qs.toString();
+    },
+    [status, storeId],
+  );
+
+  const load = useCallback(() => {
     setOrders(null);
     setCursor(null);
     setError(null);
-    const qs = filterStatus ? `?status=${filterStatus}` : '';
-    api<{ items: AdminOrder[]; nextCursor: string | null }>(`/api/admin/orders${qs}`)
+    const qs = buildQs();
+    api<{ items: AdminOrder[]; nextCursor: string | null }>(
+      `/api/admin/orders${qs ? `?${qs}` : ''}`,
+    )
       .then((res) => {
         setOrders(res.items);
         setCursor(res.nextCursor);
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : 'Could not load orders.'));
-  }, []);
+  }, [buildQs]);
 
   useEffect(() => {
-    load(status);
-  }, [status, load]);
+    load();
+  }, [load]);
 
   async function loadMore() {
     if (!cursor || loadingMore) return;
     setLoadingMore(true);
     try {
-      const qs = new URLSearchParams({ cursor });
-      if (status) qs.set('status', status);
       const res = await api<{ items: AdminOrder[]; nextCursor: string | null }>(
-        `/api/admin/orders?${qs.toString()}`,
+        `/api/admin/orders?${buildQs({ cursor })}`,
       );
       setOrders((prev) => [...(prev ?? []), ...res.items]);
       setCursor(res.nextCursor);
@@ -75,6 +104,8 @@ export default function AdminOrdersPage() {
     }
   }
 
+  const activeStore = stores.find((s) => s.id === storeId);
+
   return (
     <div className="px-4 py-8 font-body lg:px-8">
       <h1
@@ -83,6 +114,29 @@ export default function AdminOrdersPage() {
       >
         Orders
       </h1>
+
+      <div className="mb-4">
+        <select
+          value={storeId}
+          onChange={(e) => setStoreId(e.target.value)}
+          className="w-full max-w-sm rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground"
+        >
+          <option value="">All stores</option>
+          {stores.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+        {activeStore && (
+          <a
+            href={`/admin/stores/${activeStore.id}`}
+            className="ml-3 text-xs font-semibold text-primary"
+          >
+            Open {activeStore.name} →
+          </a>
+        )}
+      </div>
 
       <div className="mb-6 flex flex-wrap gap-2">
         {STATUS_FILTERS.map((s) => (
@@ -121,9 +175,9 @@ export default function AdminOrdersPage() {
                   <p className="truncate text-sm font-semibold text-foreground">
                     {o.customerEmail ?? 'Guest'}
                   </p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatOrderNumber(o.orderNumber)} · {o.provider} ·{' '}
-                    {new Date(o.createdAt).toLocaleString()}
+                  <p className="truncate text-xs text-muted-foreground">
+                    {o.storeName ?? 'Unknown store'} · {formatOrderNumber(o.orderNumber)} ·{' '}
+                    {o.provider} · {new Date(o.createdAt).toLocaleString()}
                   </p>
                 </div>
                 <p className="w-20 flex-shrink-0 text-right text-sm font-bold text-foreground">
@@ -148,5 +202,13 @@ export default function AdminOrdersPage() {
         </>
       )}
     </div>
+  );
+}
+
+export default function AdminOrdersPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminOrdersInner />
+    </Suspense>
   );
 }

@@ -22,6 +22,7 @@ const ORDER_SELECT = {
   id: true,
   orderNumber: true,
   userId: true,
+  storeId: true,
   amount: true,
   currency: true,
   status: true,
@@ -33,7 +34,15 @@ const ORDER_SELECT = {
   expiresAt: true,
   paidAt: true,
   createdAt: true,
+  store: { select: { id: true, name: true, slug: true } },
 } as const satisfies Prisma.OrderSelect;
+
+type OrderRow = Prisma.OrderGetPayload<{ select: typeof ORDER_SELECT }>;
+
+function flattenOrder(row: OrderRow) {
+  const { store, ...rest } = row;
+  return { ...rest, storeName: store?.name ?? null, storeSlug: store?.slug ?? null };
+}
 
 function parseDate(raw: string | null): Date | null {
   if (!raw) return null;
@@ -53,12 +62,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const url = req.nextUrl;
     const limit = clampLimit(url.searchParams.get('limit'));
     const status = url.searchParams.get('status');
+    const storeId = url.searchParams.get('storeId');
     const since = parseDate(url.searchParams.get('since'));
     const until = parseDate(url.searchParams.get('until'));
     const cursor = decodeCursor(url.searchParams.get('cursor'));
 
     const where: Prisma.OrderWhereInput = {
       ...(status ? { status } : {}),
+      ...(storeId ? { storeId } : {}),
       ...(since || until
         ? {
             createdAt: {
@@ -78,8 +89,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     });
 
     const page = buildPage(rows, limit);
-    return NextResponse.json(page, {
-      headers: { 'x-request-id': ctx.requestId },
-    });
+    return NextResponse.json(
+      { ...page, items: page.items.map(flattenOrder) },
+      { headers: { 'x-request-id': ctx.requestId } },
+    );
   });
 }
