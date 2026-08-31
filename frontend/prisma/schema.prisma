@@ -31,6 +31,11 @@ model User {
   // refused with 403 ACCOUNT_SUSPENDED. Mutated via /api/admin/users/[id]/status
   // (ADMIN can suspend; only SUPERADMIN can restore).
   status            String    @default("ACTIVE") // ACTIVE | SUSPENDED
+  // Set true when a SUPERADMIN issues a one-time temporary password via
+  // /api/admin/users/[id]/temp-password. Login still succeeds but the authed
+  // shell redirects to /settings until the user picks a new password;
+  // cleared by change-password / reset-password.
+  mustChangePassword Boolean  @default(false)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 

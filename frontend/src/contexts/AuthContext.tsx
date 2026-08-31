@@ -18,6 +18,9 @@ export interface User {
   name: string | null;
   /** Provider names already linked, e.g. ['google']. Empty for pure email/password accounts. */
   linkedProviders: string[];
+  /** True while an admin-issued temporary password is in force — the app
+   *  should route the user to /settings to choose a new password. */
+  mustChangePassword: boolean;
 }
 
 interface AuthContextValue {

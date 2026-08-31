@@ -99,6 +99,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         emailVerifiedAt: true,
         tokenVersion: true,
         status: true,
+        mustChangePassword: true,
       },
     });
 
@@ -175,7 +176,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     await setCsrfCookie();
 
     return NextResponse.json(
-      { ok: true, user: { sub: user.id, email: user.email } },
+      {
+        ok: true,
+        user: { sub: user.id, email: user.email },
+        // Advisory — login still succeeds. Set when a SUPERADMIN issued a
+        // temp password; the client routes to /settings to pick a new one.
+        mustChangePassword: user.mustChangePassword ?? false,
+      },
       { status: 200, headers: { 'x-request-id': ctx.requestId } },
     );
   });

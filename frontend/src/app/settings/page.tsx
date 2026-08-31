@@ -67,6 +67,18 @@ export default function SettingsPage() {
           <p className="text-sm text-muted-foreground">Connecté en tant que {user.email}</p>
         </div>
 
+        {user.mustChangePassword && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-4">
+            <p className="text-sm font-semibold text-amber-800">
+              Définissez un nouveau mot de passe pour continuer
+            </p>
+            <p className="mt-1 text-xs text-amber-700">
+              Un administrateur vous a attribué un mot de passe temporaire. Choisissez-en un nouveau
+              ci-dessous — il remplacera le mot de passe temporaire immédiatement.
+            </p>
+          </div>
+        )}
+
         <AccountSecurityForm user={user} />
       </main>
     </div>

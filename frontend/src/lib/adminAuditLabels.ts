@@ -89,6 +89,13 @@ export const ACTION_META: Record<string, ActionMeta> = {
     group: 'People',
     phrase: ({ target }) => `resent the verification email to ${target}`,
   },
+  'user.temp_password': {
+    label: 'Temporary password issued',
+    icon: 'key',
+    tone: 'warning',
+    group: 'People',
+    phrase: ({ target }) => `issued a one-time temporary password for ${target}`,
+  },
   'store.publish': {
     label: 'Store published',
     icon: 'rocket',

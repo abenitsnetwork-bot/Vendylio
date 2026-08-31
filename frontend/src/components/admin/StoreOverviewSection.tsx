@@ -260,7 +260,7 @@ export function StoreOverviewSection() {
                       View storefront
                     </a>
                     <Link
-                      href="/admin/stores"
+                      href={`/admin/stores/${s.id}`}
                       className="flex-1 rounded-lg border border-primary py-2 text-center text-xs font-semibold text-primary hover:bg-secondary"
                     >
                       Manage

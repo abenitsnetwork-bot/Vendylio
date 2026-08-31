@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
 import { Icon } from '@/components/ui/Icon';
 import { useAdminAuth } from '@/contexts/AdminContext';
@@ -178,10 +179,8 @@ export default function AdminStoresPage() {
                 key={s.id}
                 className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between"
               >
-                <a
-                  href={`/s/${s.slug}`}
-                  target="_blank"
-                  rel="noreferrer"
+                <Link
+                  href={`/admin/stores/${s.id}`}
                   className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1 text-sm hover:text-primary"
                 >
                   <span className="font-semibold text-foreground">{s.name}</span>
@@ -191,7 +190,7 @@ export default function AdminStoresPage() {
                   <span className="text-xs font-medium text-muted-foreground">
                     {s.plan} · {s.productCount} products · {s.orderCount} orders
                   </span>
-                </a>
+                </Link>
 
                 <div className="flex flex-shrink-0 items-center gap-3">
                   <span

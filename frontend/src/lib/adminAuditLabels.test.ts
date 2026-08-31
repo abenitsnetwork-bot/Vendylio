@@ -61,6 +61,22 @@ describe('describeAuditEntry', () => {
     expect(d.actorName).toBe('An admin');
   });
 
+  it('describes an admin-issued temporary password without leaking it', () => {
+    const d = describeAuditEntry(
+      entry({
+        action: 'user.temp_password',
+        targetType: 'User',
+        targetId: 'u9',
+        metadata: { email: 'sam@shop.com', targetRole: 'USER', hadPassword: true },
+        target: { label: 'sam@shop.com', sub: null },
+      }),
+    );
+    expect(d.label).toBe('Temporary password issued');
+    expect(d.group).toBe('People');
+    expect(d.sentence).toBe('Marie issued a one-time temporary password for sam@shop.com.');
+    expect(JSON.stringify(d)).not.toMatch(/password['"]?\s*:\s*['"][A-Za-z0-9]{12,}/);
+  });
+
   it('formats booleans as Yes/No', () => {
     const d = describeAuditEntry(
       entry({

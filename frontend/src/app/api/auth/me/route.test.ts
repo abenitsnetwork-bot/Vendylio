@@ -53,9 +53,22 @@ describe('GET /api/auth/me', () => {
 
     const res = await GET(makeReq({ bearer: 'valid-access-token' }));
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({
-      user: { sub: 'u1', email: 'a@b.com' },
-    });
+    const body = await res.json();
+    expect(body).toMatchObject({ user: { sub: 'u1', email: 'a@b.com' } });
+    // Defaults false when the minimal test payload omits the column.
+    expect(body.user.mustChangePassword).toBe(false);
+  });
+
+  it('reports mustChangePassword true when set on the row', async () => {
+    vi.mocked(verifyToken).mockResolvedValue({ sub: 'u1', email: 'a@b.com', tokenVersion: 0 });
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 'u1',
+      email: 'a@b.com',
+      tokenVersion: 0,
+      mustChangePassword: true,
+    } as never);
+    const res = await GET(makeReq({ bearer: 'valid-access-token' }));
+    expect((await res.json()).user.mustChangePassword).toBe(true);
   });
 
   it('Test 2: no cookie + no bearer — 401 missing token', async () => {

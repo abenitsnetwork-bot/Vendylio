@@ -56,6 +56,7 @@ describe('POST /api/auth/reset-password', () => {
     const userArg = prismaMock.user.update.mock.calls[0]?.[0];
     expect(userArg?.data?.passwordHash).toBeTruthy();
     expect(userArg?.data?.tokenVersion).toEqual({ increment: 1 });
+    expect(userArg?.data?.mustChangePassword).toBe(false);
 
     expect(prismaMock.verificationCode.updateMany).toHaveBeenCalledTimes(1);
     const codeArg = prismaMock.verificationCode.updateMany.mock.calls[0]?.[0];

@@ -178,6 +178,7 @@ describe('PUT /api/auth/change-password (AUTH-09)', () => {
       data: {
         passwordHash: expect.any(String),
         tokenVersion: { increment: 1 },
+        mustChangePassword: false,
       },
     });
 

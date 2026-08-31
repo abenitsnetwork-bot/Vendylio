@@ -46,6 +46,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         updatedAt: true,
         passwordHash: true,
         name: true,
+        mustChangePassword: true,
         oauthAccounts: { select: { provider: true } },
       },
     });
@@ -73,6 +74,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         : null,
       hasPassword: !!dbUser?.passwordHash,
       name: dbUser?.name ?? null,
+      // True while an admin-issued temp password is in force — the authed
+      // shell routes the user to /settings until they choose a new one.
+      mustChangePassword: dbUser?.mustChangePassword ?? false,
       linkedProviders: (dbUser?.oauthAccounts ?? []).map((a) => a.provider),
     };
 

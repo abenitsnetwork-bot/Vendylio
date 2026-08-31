@@ -34,6 +34,92 @@ interface RouteCtx {
   params: Promise<{ id: string }>;
 }
 
+// GET — store detail for the back-office store-management page. ADMIN-level
+// (same as the store list). Returns the store's publish state, counts, and
+// its team (owner + every OrganizationMember) so a SUPERADMIN can act on a
+// locked-out merchant without hunting through the users list.
+export async function GET(req: NextRequest, ctx: RouteCtx): Promise<NextResponse> {
+  const reqCtx = makeRequestContext(req.headers);
+  return withRequestContext(reqCtx, async () => {
+    const auth = await requireAdmin('ADMIN');
+    if (auth instanceof NextResponse) return auth;
+
+    const limited = await enforceAdminRateLimit(auth.admin.id);
+    if (limited) return limited;
+
+    const { id } = await ctx.params;
+    const store = await prisma.store.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        slug: true,
+        name: true,
+        published: true,
+        publishedAt: true,
+        ordersPaused: true,
+        plan: true,
+        createdAt: true,
+        _count: { select: { products: true, orders: true } },
+        organization: {
+          select: {
+            id: true,
+            ownerId: true,
+            members: {
+              select: {
+                role: true,
+                user: {
+                  select: {
+                    id: true,
+                    email: true,
+                    name: true,
+                    role: true,
+                    status: true,
+                    emailVerifiedAt: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!store) {
+      return NextResponse.json(
+        { error: 'STORE_NOT_FOUND', message: 'Store not found' },
+        { status: 404, headers: { 'x-request-id': reqCtx.requestId } },
+      );
+    }
+
+    const { organization, _count, ...rest } = store;
+    const team = organization.members
+      .map((m) => ({
+        id: m.user.id,
+        email: m.user.email,
+        name: m.user.name,
+        appRole: m.user.role,
+        status: m.user.status,
+        emailVerified: m.user.emailVerifiedAt !== null,
+        orgRole: m.role,
+        isOwner: m.user.id === organization.ownerId,
+      }))
+      .sort((a, b) => Number(b.isOwner) - Number(a.isOwner));
+
+    return NextResponse.json(
+      {
+        store: {
+          ...rest,
+          publishedAt: rest.publishedAt ? rest.publishedAt.toISOString() : null,
+          createdAt: rest.createdAt.toISOString(),
+          productCount: _count.products,
+          orderCount: _count.orders,
+        },
+        team,
+      },
+      { headers: { 'x-request-id': reqCtx.requestId } },
+    );
+  });
+}
+
 export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<NextResponse> {
   const reqCtx = makeRequestContext(req.headers);
   return withRequestContext(reqCtx, async () => {

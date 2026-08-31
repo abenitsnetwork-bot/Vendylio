@@ -17,7 +17,7 @@ vi.mock('@/lib/server/admin/audit', () => ({
 import { requireAdmin, requireSuperadmin } from '@/lib/server/middleware';
 import { enforceAdminRateLimit } from '@/lib/server/middleware/rate-limit-by-userid';
 import { logAdminAction } from '@/lib/server/admin/audit';
-import { PATCH, DELETE } from './route';
+import { GET, PATCH, DELETE } from './route';
 
 const mockRequireAdmin = vi.mocked(requireAdmin);
 const mockRequireSuperadmin = vi.mocked(requireSuperadmin);
@@ -34,7 +34,7 @@ const superadminCtx = {
 };
 
 function makeReq(
-  method: 'PATCH' | 'DELETE',
+  method: 'GET' | 'PATCH' | 'DELETE',
   body?: unknown,
   csrf: 'match' | 'missing' = 'match',
 ): NextRequest {
@@ -59,6 +59,72 @@ beforeEach(() => {
   mockRequireAdmin.mockResolvedValue(adminCtx);
   mockRequireSuperadmin.mockResolvedValue(superadminCtx);
   mockRateLimit.mockResolvedValue(null);
+});
+
+describe('GET /api/admin/stores/[id]', () => {
+  const storeRow = {
+    id: 's1',
+    slug: 'demo',
+    name: 'Demo',
+    published: true,
+    publishedAt: new Date('2026-01-01T00:00:00Z'),
+    ordersPaused: false,
+    plan: 'FREE',
+    createdAt: new Date('2026-01-01T00:00:00Z'),
+    _count: { products: 4, orders: 2 },
+    organization: {
+      id: 'org1',
+      ownerId: 'u_owner',
+      members: [
+        {
+          role: 'MEMBER',
+          user: {
+            id: 'u_member',
+            email: 'm@shop.com',
+            name: 'Mel',
+            role: 'USER',
+            status: 'ACTIVE',
+            emailVerifiedAt: new Date(),
+          },
+        },
+        {
+          role: 'OWNER',
+          user: {
+            id: 'u_owner',
+            email: 'owner@shop.com',
+            name: null,
+            role: 'USER',
+            status: 'ACTIVE',
+            emailVerifiedAt: null,
+          },
+        },
+      ],
+    },
+  };
+
+  it('propagates 403 from requireAdmin', async () => {
+    mockRequireAdmin.mockResolvedValueOnce(
+      NextResponse.json({ error: 'ADMIN_REQUIRED' }, { status: 403 }),
+    );
+    const res = await GET(makeReq('GET'), ctxWith('s1'));
+    expect(res.status).toBe(403);
+  });
+
+  it('404s when the store does not exist', async () => {
+    prismaMock.store.findUnique.mockResolvedValueOnce(null);
+    const res = await GET(makeReq('GET'), ctxWith('missing'));
+    expect(res.status).toBe(404);
+  });
+
+  it('returns the store + team with the owner first', async () => {
+    prismaMock.store.findUnique.mockResolvedValueOnce(storeRow as never);
+    const res = await GET(makeReq('GET'), ctxWith('s1'));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.store).toMatchObject({ id: 's1', productCount: 4, orderCount: 2 });
+    expect(body.team[0]).toMatchObject({ id: 'u_owner', isOwner: true, orgRole: 'OWNER' });
+    expect(body.team[1]).toMatchObject({ id: 'u_member', isOwner: false, emailVerified: true });
+  });
 });
 
 describe('PATCH /api/admin/stores/[id]', () => {

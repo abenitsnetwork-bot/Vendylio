@@ -161,6 +161,8 @@ export async function PUT(req: NextRequest): Promise<NextResponse> {
       data: {
         passwordHash: newHash,
         tokenVersion: { increment: 1 },
+        // Clears any admin-issued temp-password forced-change state.
+        mustChangePassword: false,
       },
       select: { id: true, email: true, tokenVersion: true },
     });

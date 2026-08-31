@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { AdminProvider, useAdminAuth, type AdminInfo } from '@/contexts/AdminContext';
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
 import { AdminHeader } from '@/components/admin/AdminHeader';
+import { ForcePasswordChange } from '@/components/auth/ForcePasswordChange';
 
 // The admin layout (a server component) has already verified this request
 // belongs to an ADMIN/SUPERADMIN — it calls `notFound()` otherwise. So this
@@ -26,6 +27,7 @@ function Chrome({ serverAdmin, children }: { serverAdmin: AdminInfo; children: R
 
   return (
     <div className="min-h-screen bg-background">
+      <ForcePasswordChange />
       <AdminSidebar />
       <div className="pb-16 lg:pb-0 lg:pl-56">
         <AdminHeader admin={shown} />

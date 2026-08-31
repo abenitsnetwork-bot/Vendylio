@@ -72,10 +72,27 @@ describe('POST /api/auth/login', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toMatchObject({ ok: true, user: { sub: 'u1', email: 'a@b.com' } });
+    expect(body.mustChangePassword).toBe(false);
     expect(recordSuccess).toHaveBeenCalledWith('a@b.com');
     expect(__cookieStore.has('app-token')).toBe(true);
     expect(__cookieStore.has('app-refresh')).toBe(true);
     expect(__cookieStore.has('app-csrf')).toBe(true);
+  });
+
+  it('surfaces mustChangePassword when an admin issued a temp password', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 'u1',
+      email: 'a@b.com',
+      passwordHash: '$2a$12$hashhashhashhashhashhashhashhashhashhashhashhashhashhha',
+      emailVerifiedAt: new Date(),
+      tokenVersion: 0,
+      mustChangePassword: true,
+    } as never);
+    vi.mocked(verifyPassword).mockResolvedValue(true);
+
+    const res = await POST(makeReq({ email: 'a@b.com', password: 'longenough' }));
+    expect(res.status).toBe(200);
+    expect((await res.json()).mustChangePassword).toBe(true);
   });
 
   it('Test 2: no user — INVALID_CREDENTIALS, dummy compare called, no recordFailure', async () => {

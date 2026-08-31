@@ -53,7 +53,7 @@ beforeEach(() => {
 });
 
 describe('GET /api/admin/me [Wave 1]', () => {
-  it('GET returns role + capability list for ADMIN (8-item exact list)', async () => {
+  it('GET returns role + capability list for ADMIN (9-item exact list)', async () => {
     mockRequireAdmin.mockResolvedValueOnce(adminCtx);
     const res = await GET(makeGet());
     expect(res.status).toBe(200);
@@ -66,6 +66,7 @@ describe('GET /api/admin/me [Wave 1]', () => {
     expect(body.can).toEqual([
       'users:read',
       'users:status:suspend',
+      'stores:manage',
       'orders:read',
       'withdrawals:read',
       'audit-log:read',
@@ -73,7 +74,7 @@ describe('GET /api/admin/me [Wave 1]', () => {
       'email-queue:read',
       'rate-limits:read',
     ]);
-    expect(body.can).toHaveLength(8);
+    expect(body.can).toHaveLength(9);
   });
 
   it('GET returns broader capability list for SUPERADMIN including users:role and withdrawals:cancel', async () => {
@@ -89,10 +90,11 @@ describe('GET /api/admin/me [Wave 1]', () => {
     expect(body.can).toContain('users:role');
     expect(body.can).toContain('withdrawals:cancel');
     expect(body.can).toContain('users:status:restore');
-    expect(body.can).toHaveLength(11);
+    expect(body.can).toContain('users:password-reset');
+    expect(body.can).toHaveLength(13);
   });
 
-  it('SUPERADMIN list is the exact 11-item set required by D-ADMIN-04', async () => {
+  it('SUPERADMIN list is the exact 13-item set required by D-ADMIN-04', async () => {
     mockRequireAdmin.mockResolvedValueOnce(superadminCtx);
     const res = await GET(makeGet());
     const body = await res.json();
@@ -101,6 +103,8 @@ describe('GET /api/admin/me [Wave 1]', () => {
       'users:role',
       'users:status:suspend',
       'users:status:restore',
+      'users:password-reset',
+      'stores:manage',
       'orders:read',
       'withdrawals:read',
       'withdrawals:cancel',
@@ -153,6 +157,7 @@ describe('GET /api/admin/me [Wave 1]', () => {
     const body = await res.json();
     expect(body.can).not.toContain('users:role');
     expect(body.can).not.toContain('users:status:restore');
+    expect(body.can).not.toContain('users:password-reset');
     expect(body.can).not.toContain('withdrawals:cancel');
   });
 });
@@ -167,7 +172,7 @@ describe('source invariants', () => {
     expect(src).toContain('withRequestContext');
   });
 
-  it("each SUPERADMIN-only capability ('users:role', 'users:status:restore', 'withdrawals:cancel') appears exactly once in the code (not counting comments)", () => {
+  it("each SUPERADMIN-only capability ('users:role', 'users:status:restore', 'users:password-reset', 'withdrawals:cancel') appears exactly once in the code (not counting comments)", () => {
     // Strip line- and block-comments before counting so the docstring
     // listing the SUPERADMIN-only capabilities doesn't inflate the count
     // (the acceptance check is "appears in SUPERADMIN list only, not ADMIN").
@@ -177,5 +182,6 @@ describe('source invariants', () => {
     expect(occurrences('users:role')).toBe(1);
     expect(occurrences('withdrawals:cancel')).toBe(1);
     expect(occurrences('users:status:restore')).toBe(1);
+    expect(occurrences('users:password-reset')).toBe(1);
   });
 });

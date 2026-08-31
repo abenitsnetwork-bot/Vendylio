@@ -1,6 +1,7 @@
 'use client';
 
 import { SellerSidebar } from '@/components/seller/SellerSidebar';
+import { ForcePasswordChange } from '@/components/auth/ForcePasswordChange';
 
 // Phase 9 — persistent nav shell for the day-to-day seller pages (Dashboard,
 // Orders, Products, Customers, Reviews, Delivery, Settings, Billing,
@@ -15,6 +16,7 @@ import { SellerSidebar } from '@/components/seller/SellerSidebar';
 export default function DashboardShellLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background">
+      <ForcePasswordChange />
       <SellerSidebar />
       <div className="pb-16 lg:pb-0 lg:pl-56">{children}</div>
     </div>

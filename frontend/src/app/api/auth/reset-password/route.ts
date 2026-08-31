@@ -168,6 +168,8 @@ export async function POST(req: NextRequest): Promise<Response> {
           data: {
             passwordHash,
             tokenVersion: { increment: 1 },
+            // Clears any admin-issued temp-password forced-change state.
+            mustChangePassword: false,
           },
         });
       });
