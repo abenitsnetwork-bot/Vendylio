@@ -27,6 +27,8 @@ interface StoreDetail {
   ordersPaused: boolean;
   plan: string;
   createdAt: string;
+  termsAcceptedAt: string | null;
+  termsVersion: string | null;
   productCount: number;
   orderCount: number;
 }
@@ -174,6 +176,16 @@ export default function AdminStoreDetailPage({ params }: { params: Promise<{ id:
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Created</p>
                   <p className="font-semibold text-foreground">
                     {new Date(store.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Terms accepted
+                  </p>
+                  <p className="font-semibold text-foreground">
+                    {store.termsAcceptedAt
+                      ? new Date(store.termsAcceptedAt).toLocaleDateString()
+                      : '—'}
                   </p>
                 </div>
               </div>

@@ -59,6 +59,8 @@ export async function GET(req: NextRequest, ctx: RouteCtx): Promise<NextResponse
         ordersPaused: true,
         plan: true,
         createdAt: true,
+        termsAcceptedAt: true,
+        termsVersion: true,
         _count: { select: { products: true, orders: true } },
         organization: {
           select: {
@@ -110,6 +112,7 @@ export async function GET(req: NextRequest, ctx: RouteCtx): Promise<NextResponse
           ...rest,
           publishedAt: rest.publishedAt ? rest.publishedAt.toISOString() : null,
           createdAt: rest.createdAt.toISOString(),
+          termsAcceptedAt: rest.termsAcceptedAt ? rest.termsAcceptedAt.toISOString() : null,
           productCount: _count.products,
           orderCount: _count.orders,
         },

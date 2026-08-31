@@ -6,6 +6,8 @@ import { api, ApiError } from '@/lib/api';
 import { Field, inputClass } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { previewSlug } from '@/lib/slugPreview';
+import { TermsModal } from '@/components/legal/TermsModal';
+import { TERMS_VERSION } from '@/lib/legal/terms';
 import { useOnboarding } from '../layout';
 
 const AI_ERROR_MESSAGES: Record<string, string> = {
@@ -16,6 +18,7 @@ const AI_ERROR_MESSAGES: Record<string, string> = {
 const ERROR_MESSAGES: Record<string, string> = {
   STORE_ALREADY_EXISTS: 'You already have a store.',
   VALIDATION_FAILED: 'Please check the fields and try again.',
+  TERMS_NOT_ACCEPTED: 'Please accept the Terms & Conditions to continue.',
 };
 
 export default function BusinessStepPage() {
@@ -34,6 +37,8 @@ export default function BusinessStepPage() {
   const [error, setError] = useState<string | null>(null);
   const [generatingDescription, setGeneratingDescription] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
 
   async function onGenerateDescription() {
     if (!name.trim()) {
@@ -85,6 +90,8 @@ export default function BusinessStepPage() {
             ...(state ? { state } : {}),
             ...(phone ? { phone } : {}),
             ...(slugTouched && slug ? { slug } : {}),
+            termsAccepted: true,
+            termsVersion: TERMS_VERSION,
           },
         });
       }
@@ -213,6 +220,29 @@ export default function BusinessStepPage() {
           </p>
         </Field>
 
+        {!isEditing && (
+          <div className="flex items-start gap-3 pt-2">
+            <input
+              id="terms"
+              type="checkbox"
+              checked={termsAccepted}
+              onChange={(e) => setTermsAccepted(e.target.checked)}
+              className="mt-0.5 h-5 w-5 flex-shrink-0 rounded border-border"
+            />
+            <label htmlFor="terms" className="text-sm leading-relaxed text-muted-foreground">
+              I have read and accept Vendylio&apos;s{' '}
+              <button
+                type="button"
+                onClick={() => setShowTerms(true)}
+                className="font-medium text-primary underline"
+              >
+                Terms &amp; Conditions
+              </button>
+              .
+            </label>
+          </div>
+        )}
+
         {error && (
           <p role="alert" className="text-sm text-red-600">
             {error}
@@ -220,11 +250,17 @@ export default function BusinessStepPage() {
         )}
 
         <div className="flex gap-3 pt-4">
-          <Button type="submit" disabled={submitting} className="flex-1 sm:flex-none sm:px-10">
+          <Button
+            type="submit"
+            disabled={submitting || (!isEditing && !termsAccepted)}
+            className="flex-1 sm:flex-none sm:px-10"
+          >
             {submitting ? 'Saving…' : isEditing ? 'Save & Continue' : 'Create My Store'}
           </Button>
         </div>
       </div>
+
+      {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
     </form>
   );
 }

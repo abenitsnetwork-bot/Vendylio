@@ -71,6 +71,8 @@ describe('GET /api/admin/stores/[id]', () => {
     ordersPaused: false,
     plan: 'FREE',
     createdAt: new Date('2026-01-01T00:00:00Z'),
+    termsAcceptedAt: new Date('2026-01-02T00:00:00Z'),
+    termsVersion: '2026-08-27',
     _count: { products: 4, orders: 2 },
     organization: {
       id: 'org1',
@@ -121,7 +123,13 @@ describe('GET /api/admin/stores/[id]', () => {
     const res = await GET(makeReq('GET'), ctxWith('s1'));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.store).toMatchObject({ id: 's1', productCount: 4, orderCount: 2 });
+    expect(body.store).toMatchObject({
+      id: 's1',
+      productCount: 4,
+      orderCount: 2,
+      termsAcceptedAt: '2026-01-02T00:00:00.000Z',
+      termsVersion: '2026-08-27',
+    });
     expect(body.team[0]).toMatchObject({ id: 'u_owner', isOwner: true, orgRole: 'OWNER' });
     expect(body.team[1]).toMatchObject({ id: 'u_member', isOwner: false, emailVerified: true });
   });

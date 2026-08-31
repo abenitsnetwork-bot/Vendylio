@@ -42,7 +42,13 @@ function makeReq(
 }
 
 function makePost(body: unknown, csrf: 'match' | 'missing' = 'match'): NextRequest {
-  return makeReq('POST', body, csrf);
+  // Store creation now requires Terms acceptance — default it on for the
+  // existing cases; a test that needs it absent/false sets the key itself.
+  const withTerms =
+    body && typeof body === 'object' && !('termsAccepted' in body)
+      ? { termsAccepted: true, ...(body as Record<string, unknown>) }
+      : body;
+  return makeReq('POST', withTerms, csrf);
 }
 
 beforeEach(() => {
@@ -131,6 +137,16 @@ describe('POST /api/stores', () => {
 
     const storeCreateArg = prismaMock.store.create.mock.calls[0]?.[0];
     expect(storeCreateArg?.data?.organizationId).toBe('org-1');
+    expect(storeCreateArg?.data?.termsAcceptedAt).toBeInstanceOf(Date);
+    expect(storeCreateArg?.data?.termsVersion).toBe('2026-08-27');
+  });
+
+  it('400 TERMS_NOT_ACCEPTED when the Terms checkbox was not ticked', async () => {
+    mockResolveOwnStore.mockResolvedValue(null);
+    const res = await POST(makeReq('POST', { name: 'Shea Store', termsAccepted: false }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('TERMS_NOT_ACCEPTED');
+    expect(prismaMock.store.create).not.toHaveBeenCalled();
   });
 
   it('passes phone through to Store.create when provided', async () => {

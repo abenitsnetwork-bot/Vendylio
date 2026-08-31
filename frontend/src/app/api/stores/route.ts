@@ -22,6 +22,7 @@ import { checkPickupAddressDeliverable } from '@/lib/server/delivery/uber-direct
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 import { STORE_TEMPLATE_VALUES } from '@/lib/storeTemplates';
 import { MAX_HERO_IMAGES as HERO_MAX } from '@/lib/storeHero';
+import { TERMS_VERSION } from '@/lib/legal/terms';
 
 const Body = z.object({
   name: z.string().trim().min(2).max(80),
@@ -39,6 +40,12 @@ const Body = z.object({
   // through slugify + ensureUniqueSlug below, so this can't be used to
   // bypass uniqueness/reserved-word checks.
   slug: z.string().trim().min(2).max(64).optional(),
+  // Terms of Service acceptance — the onboarding business step gates the
+  // "Create store" button behind a checkbox + a Terms modal. `z.literal(true)`
+  // so a missing / false value is a hard reject (mapped to TERMS_NOT_ACCEPTED
+  // below). `termsVersion` snapshots which text they saw.
+  termsAccepted: z.literal(true),
+  termsVersion: z.string().trim().max(40).optional(),
 });
 
 // PATCH allows re-editing name/description/city/state/logoUrl but never the
@@ -145,6 +152,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const parsed = Body.safeParse(await req.json().catch(() => null));
     if (!parsed.success) {
+      // A create that fails ONLY on `termsAccepted` gets a friendly code the
+      // onboarding form can map to a clear message.
+      const onlyTerms = parsed.error.issues.every((i) => i.path[0] === 'termsAccepted');
+      if (onlyTerms) {
+        return NextResponse.json(
+          { error: 'TERMS_NOT_ACCEPTED', message: 'You must accept the Terms & Conditions.' },
+          { status: 400, headers: { 'x-request-id': ctx.requestId } },
+        );
+      }
       return NextResponse.json(
         { error: 'VALIDATION_FAILED', issues: parsed.error.issues },
         { status: 400, headers: { 'x-request-id': ctx.requestId } },
@@ -159,7 +175,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const { name, description, city, state, logoUrl, phone, slug } = parsed.data;
+    const { name, description, city, state, logoUrl, phone, slug, termsVersion } = parsed.data;
     let store: Awaited<ReturnType<typeof prisma.store.create>> | null = null;
     await ensureUniqueSlug(slugify(slug || name) || 'store', async (candidate) => {
       store = await prisma.$transaction(async (tx) => {
@@ -179,6 +195,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             ...(state ? { state } : {}),
             ...(logoUrl ? { logoUrl } : {}),
             ...(phone ? { phone } : {}),
+            termsAcceptedAt: new Date(),
+            termsVersion: termsVersion ?? TERMS_VERSION,
           },
         });
         // Seed the starter category set so a new store isn't a blank slate.

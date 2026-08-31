@@ -684,6 +684,14 @@ model Store {
   // from the hero (which is images + a headline) and from `pauseMessage`
   // (which only shows while `ordersPaused`). Null / empty = no strip.
   announcement             String?
+  // Terms of Service acceptance, stamped by POST /api/stores at store
+  // creation. The onboarding "business" step gates "Create store" behind a
+  // checkbox + a Terms modal, and the route rejects a create without
+  // `termsAccepted: true`. `termsVersion` records WHICH version was accepted
+  // (see TERMS_VERSION in components/legal/TermsContent.tsx) so a future
+  // version bump can ask for re-acceptance. Null on stores that predate this.
+  termsAcceptedAt          DateTime?
+  termsVersion             String?
   createdAt                DateTime     @default(now())
   updatedAt                DateTime     @updatedAt
 
