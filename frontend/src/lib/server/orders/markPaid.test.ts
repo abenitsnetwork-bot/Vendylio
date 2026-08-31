@@ -38,6 +38,10 @@ const BASE_ORDER: OrderForPaidEffects = {
   customerName: null,
   customerEmail: 'buyer@example.com',
   deliveryAddress: null,
+  // Default PICKUP so the existing assertions aren't affected by the Prompt #12
+  // fulfillment-record creation (that path is covered separately below).
+  fulfillmentMethod: 'PICKUP',
+  deliveryFeeCents: 0,
 };
 
 describe('applyOrderPaidEffects', () => {
@@ -283,5 +287,78 @@ describe('applyOrderPaidEffects', () => {
 
     await applyOrderPaidEffects(prismaMock, BASE_ORDER, {});
     expect(prismaMock.discount.updateMany).not.toHaveBeenCalled();
+  });
+
+  // Prompt #12 — the fulfillment record is opened here (PENDING, no courier call).
+  describe('fulfillment record', () => {
+    function seedDeliveryStore(fulfillmentConfig: unknown = {}, deliveryProvider = 'self_manual') {
+      prismaMock.store.findUnique.mockResolvedValueOnce({
+        plan: 'FREE',
+        defaultLowStockThreshold: 3,
+        fulfillmentConfig,
+        deliveryProvider,
+        deliveryFeeCents: 500,
+        organization: { ownerId: 'seller-1' },
+      } as never);
+      prismaMock.product.findUnique.mockResolvedValueOnce({ id: 'prod-a' } as never);
+      prismaMock.delivery.upsert.mockResolvedValue({} as never);
+    }
+
+    it('opens a PENDING Delivery for a DELIVERY order (MERCHANT by default)', async () => {
+      seedDeliveryStore();
+      await applyOrderPaidEffects(
+        prismaMock,
+        { ...BASE_ORDER, fulfillmentMethod: 'DELIVERY', deliveryFeeCents: 500 },
+        {},
+      );
+      const arg = prismaMock.delivery.upsert.mock.calls[0]?.[0];
+      expect(arg?.where).toEqual({ orderId: 'order-1' });
+      expect(arg?.create).toMatchObject({
+        state: 'PENDING',
+        providerType: 'MERCHANT',
+        provider: 'self_manual',
+        feeCents: 500,
+      });
+    });
+
+    it('routes to UBER_DIRECT when the store config enables it', async () => {
+      seedDeliveryStore({ uberDirect: { enabled: true }, merchant: { enabled: false } });
+      await applyOrderPaidEffects(
+        prismaMock,
+        { ...BASE_ORDER, fulfillmentMethod: 'DELIVERY', deliveryFeeCents: 500 },
+        {},
+      );
+      expect(prismaMock.delivery.upsert.mock.calls[0]?.[0]?.create).toMatchObject({
+        providerType: 'UBER_DIRECT',
+        provider: 'uber_direct',
+      });
+    });
+
+    it('honours an explicit Order.deliveryProviderType', async () => {
+      seedDeliveryStore();
+      await applyOrderPaidEffects(
+        prismaMock,
+        {
+          ...BASE_ORDER,
+          fulfillmentMethod: 'DELIVERY',
+          deliveryFeeCents: 500,
+          deliveryProviderType: 'DOORDASH',
+        },
+        {},
+      );
+      expect(prismaMock.delivery.upsert.mock.calls[0]?.[0]?.create).toMatchObject({
+        providerType: 'DOORDASH',
+      });
+    });
+
+    it('does NOT open a Delivery for a PICKUP order', async () => {
+      prismaMock.store.findUnique.mockResolvedValueOnce({
+        plan: 'FREE',
+        organization: { ownerId: 'seller-1' },
+      } as never);
+      prismaMock.product.findUnique.mockResolvedValueOnce({ quantity: 10 } as never);
+      await applyOrderPaidEffects(prismaMock, BASE_ORDER, {});
+      expect(prismaMock.delivery.upsert).not.toHaveBeenCalled();
+    });
   });
 });

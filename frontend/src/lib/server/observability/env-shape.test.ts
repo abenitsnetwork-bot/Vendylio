@@ -97,3 +97,35 @@ describe('.env.example phase 5 additions (CRON-05 + Phase 5 ENV)', () => {
     expect(src).toContain('ORDER_EXPIRATION_MINUTES="30"');
   });
 });
+
+// ───────────────────────────────────────────────────────────────────────
+// Prompt #12 — Delivery & Fulfillment Engine. DoorDash Drive credentials +
+// the engine tunables. Tripwire: a refactor that strips these breaks CI here.
+// ───────────────────────────────────────────────────────────────────────
+describe('.env.example Prompt #12 additions (fulfillment engine)', () => {
+  const src = readFileSync(ENV_EXAMPLE, 'utf8');
+
+  it('declares the DoorDash Drive credential + webhook keys with empty defaults', () => {
+    for (const key of [
+      'DOORDASH_DEVELOPER_ID',
+      'DOORDASH_KEY_ID',
+      'DOORDASH_SIGNING_SECRET',
+      'DOORDASH_WEBHOOK_SECRET',
+      'DOORDASH_WEBHOOK_USERNAME',
+      'DOORDASH_WEBHOOK_PASSWORD',
+      'DOORDASH_SANDBOX',
+    ]) {
+      expect(src).toMatch(new RegExp(`^${key}=""$`, 'm'));
+    }
+  });
+
+  it('declares the fulfillment engine tunables with defaults', () => {
+    expect(src).toContain('FULFILLMENT_DISPATCH_MAX_ATTEMPTS="6"');
+    expect(src).toContain('FULFILLMENT_QUOTE_TIMEOUT_MS="4000"');
+    expect(src).toContain('FULFILLMENT_QUOTE_FALLBACK_TTL_SECONDS="300"');
+  });
+
+  it('keeps the platform-level (not per-seller) credentials note', () => {
+    expect(src).toContain('PLATFORM-level');
+  });
+});

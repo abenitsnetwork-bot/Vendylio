@@ -1,13 +1,49 @@
 import { prismaMock } from '@/test-utils/prisma-mock';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+const mockProvider = {
+  type: 'UBER_DIRECT' as const,
+  friendlyName: 'Uber',
+  capabilities: {
+    external: true,
+    quotes: true,
+    cancellation: true,
+    webhooks: true,
+    tracking: true,
+  },
+  isConfigured: vi.fn(() => true),
+  quote: vi.fn(),
+  createDelivery: vi.fn(),
+  getDelivery: vi.fn(),
+  cancelDelivery: vi.fn(),
+  normalizeStatus: vi.fn(),
+  testConnection: vi.fn(),
+};
+vi.mock('./registry', async (orig) => {
+  const actual = await orig<typeof import('./registry')>();
+  return {
+    ...actual,
+    getDeliveryProvider: vi.fn((type: string, ctx?: unknown) =>
+      type === 'UBER_DIRECT' || type === 'DOORDASH'
+        ? mockProvider
+        : actual.getDeliveryProvider(type as never, ctx as never),
+    ),
+  };
+});
+vi.mock('@/lib/server/notifications', () => ({ createNotification: vi.fn() }));
+
 import {
+  cancelFulfillment,
+  createFulfillment,
   handleProviderEvent,
   initFulfillment,
   legacyProviderFor,
   quoteMethod,
   recordTransition,
   selectProvider,
+  updateFulfillment,
 } from './service';
+import { createNotification } from '@/lib/server/notifications';
 import type { DeliveryQuote, ProviderSnapshot } from './types';
 import { readFulfillmentConfig } from './config';
 
@@ -38,7 +74,65 @@ function seedDelivery(row: Partial<DeliveryRow> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockProvider.isConfigured.mockReturnValue(true);
+  prismaMock.$transaction.mockImplementation((cb: unknown) => {
+    if (typeof cb === 'function') {
+      return (cb as (tx: typeof prismaMock) => unknown)(prismaMock) as Promise<unknown>;
+    }
+    return Promise.resolve(cb);
+  });
+  prismaMock.$executeRawUnsafe.mockResolvedValue(0 as never);
 });
+
+function ctxDelivery(over: Record<string, unknown> = {}) {
+  return {
+    id: 'del_1',
+    orderId: 'ord_1',
+    state: 'PENDING',
+    providerType: 'UBER_DIRECT',
+    externalDeliveryId: null,
+    providerDeliveryId: null,
+    dispatchedAt: null,
+    attemptCount: 0,
+    order: {
+      id: 'ord_1',
+      orderNumber: 10042,
+      status: 'READY',
+      amount: 5000,
+      currency: 'USD',
+      customerName: 'Jo',
+      customerPhone: '+15550000000',
+      deliveryAddress: { street: '1 Main St' },
+      lineItems: [{ name: 'Widget', quantity: 1 }],
+      storeId: 'store_1',
+      store: {
+        name: 'Shop',
+        phone: '+15551111111',
+        pickupAddress: '2 Elm St',
+        deliveryProvider: 'uber_direct',
+        deliveryFeeCents: 500,
+        fulfillmentConfig: {},
+        organization: { ownerId: 'owner_1' },
+      },
+    },
+    ...over,
+  };
+}
+
+function seedTransitionMocks(state = 'PENDING') {
+  prismaMock.delivery.findUnique.mockImplementation((args: unknown) => {
+    const a = args as { select?: Record<string, unknown> };
+    // recordTransition uses a narrow select; createFulfillment uses the wide one
+    if (a.select && 'order' in a.select) return ctxDelivery({ state }) as never;
+    return { id: 'del_1', orderId: 'ord_1', state, providerType: 'UBER_DIRECT' } as never;
+  });
+  prismaMock.deliveryEvent.findUnique.mockResolvedValue(null as never);
+  prismaMock.deliveryEvent.create.mockResolvedValue({} as never);
+  prismaMock.delivery.update.mockResolvedValue({} as never);
+  prismaMock.order.findUnique.mockResolvedValue({ status: 'READY' } as never);
+  prismaMock.order.update.mockResolvedValue({} as never);
+  prismaMock.orderStatusEvent.create.mockResolvedValue({} as never);
+}
 
 describe('recordTransition', () => {
   it('applies a legal forward transition + dual-writes the legacy status', async () => {
@@ -254,6 +348,7 @@ describe('selectProvider', () => {
 
 describe('quoteMethod', () => {
   it('returns unserviceable when the provider is not configured', async () => {
+    mockProvider.isConfigured.mockReturnValueOnce(false);
     const res = await quoteMethod(
       'DOORDASH',
       {
@@ -285,6 +380,165 @@ describe('quoteMethod', () => {
       1000,
     );
     expect(res).toMatchObject({ serviceable: true, feeCents: 350 });
+  });
+});
+
+describe('createFulfillment', () => {
+  it('courier: fresh dispatch → REQUESTED + external id + merchant notification', async () => {
+    seedTransitionMocks('PENDING');
+    mockProvider.createDelivery.mockResolvedValue({
+      providerDeliveryId: 'uber_123',
+      state: 'REQUESTED',
+      trackingUrl: 'https://track/uber_123',
+    });
+    const res = await createFulfillment(prismaMock as never, 'del_1', { actor: 'SYSTEM' });
+    expect(res).toMatchObject({ state: 'REQUESTED', dispatched: true });
+    expect(mockProvider.createDelivery).toHaveBeenCalledWith(
+      expect.objectContaining({ externalDeliveryId: 'vend_del_1' }),
+    );
+    expect(createNotification).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ type: 'FULFILLMENT_DISPATCHED' }),
+    );
+  });
+
+  it('courier: on error below the cap it stays PENDING (cron retries)', async () => {
+    seedTransitionMocks('PENDING');
+    mockProvider.createDelivery.mockRejectedValue(new Error('provider 503'));
+    const res = await createFulfillment(prismaMock as never, 'del_1', { actor: 'SYSTEM' });
+    expect(res).toMatchObject({ state: 'PENDING', error: 'provider 503' });
+    // no FAILED transition event yet
+    const failEvent = prismaMock.deliveryEvent.create.mock.calls.find(
+      (c) => (c[0] as { data: { state: string } }).data.state === 'FAILED',
+    );
+    expect(failEvent).toBeUndefined();
+  });
+
+  it('courier: at the attempt cap it moves to FAILED + notifies the merchant', async () => {
+    seedTransitionMocks('PENDING');
+    prismaMock.delivery.findUnique.mockImplementation((args: unknown) => {
+      const a = args as { select?: Record<string, unknown> };
+      if (a.select && 'order' in a.select) {
+        return ctxDelivery({ state: 'PENDING', attemptCount: 5 }) as never;
+      }
+      return {
+        id: 'del_1',
+        orderId: 'ord_1',
+        state: 'PENDING',
+        providerType: 'UBER_DIRECT',
+      } as never;
+    });
+    mockProvider.createDelivery.mockRejectedValue(new Error('permanently broken'));
+    const res = await createFulfillment(prismaMock as never, 'del_1', { actor: 'SYSTEM' });
+    expect(res.state).toBe('FAILED');
+    expect(createNotification).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ type: 'FULFILLMENT_FAILED' }),
+    );
+  });
+
+  it('courier: already dispatched → reconciles via getDelivery, never re-creates', async () => {
+    seedTransitionMocks('REQUESTED');
+    prismaMock.delivery.findUnique.mockImplementation((args: unknown) => {
+      const a = args as { select?: Record<string, unknown> };
+      if (a.select && 'order' in a.select) {
+        return ctxDelivery({
+          state: 'REQUESTED',
+          externalDeliveryId: 'vend_del_1',
+          dispatchedAt: new Date(),
+        }) as never;
+      }
+      return {
+        id: 'del_1',
+        orderId: 'ord_1',
+        state: 'REQUESTED',
+        providerType: 'UBER_DIRECT',
+      } as never;
+    });
+    mockProvider.getDelivery.mockResolvedValue({
+      providerDeliveryId: 'uber_123',
+      rawStatus: 'pickup_complete',
+      state: 'PICKED_UP',
+    });
+    const res = await createFulfillment(prismaMock as never, 'del_1', {
+      actor: 'MERCHANT',
+      force: true,
+    });
+    expect(mockProvider.createDelivery).not.toHaveBeenCalled();
+    expect(mockProvider.getDelivery).toHaveBeenCalledWith('vend_del_1');
+    expect(res.state).toBe('PICKED_UP');
+  });
+
+  it('merchant provider: advances to OUT_FOR_DELIVERY with no external call', async () => {
+    seedTransitionMocks('PENDING');
+    prismaMock.delivery.findUnique.mockImplementation((args: unknown) => {
+      const a = args as { select?: Record<string, unknown> };
+      if (a.select && 'order' in a.select) {
+        return ctxDelivery({
+          state: 'PENDING',
+          providerType: 'MERCHANT',
+          order: {
+            ...ctxDelivery().order,
+            store: { ...ctxDelivery().order.store, deliveryProvider: 'self_manual' },
+          },
+        }) as never;
+      }
+      return { id: 'del_1', orderId: 'ord_1', state: 'PENDING', providerType: 'MERCHANT' } as never;
+    });
+    const res = await createFulfillment(prismaMock as never, 'del_1', { actor: 'MERCHANT' });
+    expect(res).toEqual({ state: 'OUT_FOR_DELIVERY', dispatched: false });
+    expect(mockProvider.createDelivery).not.toHaveBeenCalled();
+  });
+});
+
+describe('updateFulfillment / cancelFulfillment', () => {
+  it('updateFulfillment marks a merchant delivery DELIVERED', async () => {
+    seedTransitionMocks('OUT_FOR_DELIVERY');
+    prismaMock.order.findUnique.mockResolvedValue({ status: 'OUT_FOR_DELIVERY' } as never);
+    const res = await updateFulfillment(prismaMock as never, 'del_1', 'DELIVERED', 'MERCHANT');
+    expect(res.changed).toBe(true);
+    expect(res.state).toBe('DELIVERED');
+  });
+
+  it('cancelFulfillment refuses when the courier will not cancel', async () => {
+    seedTransitionMocks('OUT_FOR_DELIVERY');
+    prismaMock.delivery.findUnique.mockImplementation((args: unknown) => {
+      const a = args as { select?: Record<string, unknown> };
+      if (a.select && 'order' in a.select) {
+        return ctxDelivery({
+          state: 'OUT_FOR_DELIVERY',
+          externalDeliveryId: 'vend_del_1',
+        }) as never;
+      }
+      return {
+        id: 'del_1',
+        orderId: 'ord_1',
+        state: 'OUT_FOR_DELIVERY',
+        providerType: 'UBER_DIRECT',
+      } as never;
+    });
+    mockProvider.cancelDelivery.mockResolvedValue({ cancelled: false, reason: 'courier assigned' });
+    const res = await cancelFulfillment(prismaMock as never, 'del_1');
+    expect(res).toMatchObject({ cancelled: false, reason: 'courier assigned' });
+  });
+
+  it('cancelFulfillment cancels a merchant delivery', async () => {
+    seedTransitionMocks('OUT_FOR_DELIVERY');
+    prismaMock.delivery.findUnique.mockImplementation((args: unknown) => {
+      const a = args as { select?: Record<string, unknown> };
+      if (a.select && 'order' in a.select) {
+        return ctxDelivery({ state: 'OUT_FOR_DELIVERY', providerType: 'MERCHANT' }) as never;
+      }
+      return {
+        id: 'del_1',
+        orderId: 'ord_1',
+        state: 'OUT_FOR_DELIVERY',
+        providerType: 'MERCHANT',
+      } as never;
+    });
+    prismaMock.order.findUnique.mockResolvedValue({ status: 'OUT_FOR_DELIVERY' } as never);
+    const res = await cancelFulfillment(prismaMock as never, 'del_1', { reason: 'buyer no-show' });
+    expect(res.cancelled).toBe(true);
   });
 });
 

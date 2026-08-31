@@ -1,10 +1,20 @@
-// POST + PATCH /api/orders/[id]/delivery — Phase 5.
+// POST + PATCH /api/orders/[id]/delivery — seller-facing delivery controls.
 //
-// Additive richer path alongside the generic PATCH /api/orders/[id] (see
-// that file's TRANSITIONS comment): requesting delivery here creates a
-// Delivery row (tracking info, provider correlation) and advances the Order
-// through the same READY→OUT_FOR_DELIVERY→DELIVERED states. A seller who
-// doesn't need delivery tracking can keep using the generic PATCH instead.
+// Since Prompt #12 (the fulfillment engine) a `Delivery` row already exists in
+// `state: PENDING` for every paid delivery order (markPaid.ts), and the
+// `fulfillment-tick` cron dispatches courier deliveries automatically once the
+// seller marks the order READY. This route is the seller's manual lever:
+//
+//   POST  — "Request delivery" / "Retry": dispatch the PENDING (or FAILED)
+//           delivery to the courier NOW instead of waiting for the next cron
+//           tick. Goes through `fulfillmentService.createFulfillment`, which
+//           reconciles rather than re-creating if an external delivery already
+//           exists.
+//   PATCH — "Mark delivered": only for MERCHANT (self) delivery — a courier
+//           delivery completes from its own webhook, never a seller click.
+//
+// Every state change funnels through the fulfillment service — this route
+// never writes Delivery.state / Order.status itself.
 export const runtime = 'nodejs';
 
 import 'server-only';
@@ -13,9 +23,8 @@ import { verifyCsrf } from '@/lib/server/auth';
 import { requireAuth } from '@/lib/server/middleware';
 import { prisma } from '@/lib/server/prisma';
 import { findOwnedOrder } from '@/lib/server/orders/ownership';
-import { getDeliveryProviderFor } from '@/lib/server/delivery';
-import { enqueueOutbox } from '@/lib/server/outbox';
-import { formatQuantityWithUnit } from '@/lib/productUnits';
+import { createFulfillment, updateFulfillment } from '@/lib/server/fulfillment/service';
+import { isCourierProvider, type ProviderType } from '@/lib/server/fulfillment/types';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
 interface RouteCtx {
@@ -40,6 +49,16 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       );
     }
 
+    if (order.fulfillmentMethod === 'PICKUP') {
+      return NextResponse.json(
+        {
+          error: 'FULFILLMENT_METHOD_MISMATCH',
+          message: 'This order is a pickup — mark it picked up from the order page instead.',
+        },
+        { status: 422, headers: { 'x-request-id': reqCtx.requestId } },
+      );
+    }
+
     if (order.status !== 'READY') {
       return NextResponse.json(
         {
@@ -50,116 +69,45 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       );
     }
 
-    // A PICKUP order has no courier involved — dispatching one here would be
-    // a real (possibly billable) Uber Direct request for an order the buyer
-    // is collecting in person. Use the generic PATCH /api/orders/[id]
-    // (READY→DELIVERED) for pickup instead.
-    if (order.fulfillmentMethod === 'PICKUP') {
+    const delivery = await prisma.delivery.findUnique({
+      where: { orderId: order.id },
+      select: { id: true, state: true },
+    });
+    if (!delivery) {
       return NextResponse.json(
         {
-          error: 'FULFILLMENT_METHOD_MISMATCH',
+          error: 'DELIVERY_NOT_FOUND',
           message:
-            'This order is a pickup — mark it delivered directly instead of requesting a courier.',
+            'No fulfillment record for this order. This can happen for orders paid before the engine shipped — contact support.',
         },
-        { status: 422, headers: { 'x-request-id': reqCtx.requestId } },
+        { status: 404, headers: { 'x-request-id': reqCtx.requestId } },
       );
     }
 
-    // A FAILED delivery (courier cancelled/returned — see the Uber Direct
-    // webhook's onFailed handler) is retryable: it already reverted
-    // Order.status to READY specifically so this route stays reachable.
-    // Anything else (REQUESTED, DELIVERED) still blocks a second request.
-    const existing = await prisma.delivery.findUnique({ where: { orderId: order.id } });
-    if (existing && existing.status !== 'FAILED') {
+    // A REQUESTED / CONFIRMED / … delivery is already in flight. FAILED is
+    // retryable; PENDING is the normal "dispatch me now" case.
+    if (delivery.state !== 'PENDING' && delivery.state !== 'FAILED') {
       return NextResponse.json(
         {
           error: 'DELIVERY_ALREADY_REQUESTED',
-          message: 'Delivery was already requested for this order.',
+          message: 'Delivery is already in progress for this order.',
         },
         { status: 409, headers: { 'x-request-id': reqCtx.requestId } },
       );
     }
 
-    const provider = getDeliveryProviderFor(store.deliveryProvider);
-    const lineItems = order.lineItems as unknown as {
-      name: string;
-      quantity: number;
-      unit?: string;
-    }[];
-    let result;
-    try {
-      result = await provider.requestDelivery({
-        orderId: order.id,
-        storeId: store.id,
-        customerName: order.customerName,
-        customerPhone: order.customerPhone,
-        deliveryAddress: order.deliveryAddress as Record<string, unknown> | null,
-        pickupAddress: store.pickupAddress,
-        storeName: store.name,
-        storePhone: store.phone,
-        amountCents: order.amount,
-        // Uber Direct's manifest_items.quantity is a package count and must
-        // be a whole number — sending a weight-based line item's raw
-        // quantity (e.g. 5.3 lb) fails with a 400 whose body carries no
-        // usable message (confirmed live). A weight/measure-sold item
-        // (unit !== 'UNIT') is physically one package regardless of its
-        // weight, so it always reports quantity 1 with the weight folded
-        // into the name instead; a UNIT item keeps its real count, rounded
-        // and floored at 1 as a defensive minimum.
-        manifestItems: lineItems.map((item) => {
-          const unit = item.unit ?? 'UNIT';
-          return unit === 'UNIT'
-            ? { name: item.name, quantity: Math.max(1, Math.round(item.quantity)) }
-            : {
-                name: `${item.name} (${formatQuantityWithUnit(item.quantity, unit)})`,
-                quantity: 1,
-              };
-        }),
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown delivery provider error';
+    const result = await createFulfillment(prisma, delivery.id, { actor: 'MERCHANT', force: true });
+
+    if (result.state === 'FAILED' && result.error) {
       return NextResponse.json(
-        { error: 'DELIVERY_PROVIDER_UNCONFIGURED', message },
+        { error: 'DELIVERY_CREATION_FAILED', message: result.error },
         { status: 503, headers: { 'x-request-id': reqCtx.requestId } },
       );
     }
 
-    const { delivery, order: updatedOrder } = await prisma.$transaction(async (tx) => {
-      // Delivery.orderId is unique — a retry after FAILED reuses the same
-      // row (upsert) rather than inserting a second one for this order.
-      const createdDelivery = await tx.delivery.upsert({
-        where: { orderId: order.id },
-        create: {
-          orderId: order.id,
-          provider: store.deliveryProvider,
-          providerDeliveryId: result.providerDeliveryId,
-          status: result.status,
-          ...(result.trackingUrl ? { trackingUrl: result.trackingUrl } : {}),
-        },
-        update: {
-          provider: store.deliveryProvider,
-          providerDeliveryId: result.providerDeliveryId,
-          status: result.status,
-          trackingUrl: result.trackingUrl ?? null,
-          deliveredAt: null,
-        },
-      });
-      const updated = await tx.order.update({
-        where: { id: order.id },
-        data: { status: 'OUT_FOR_DELIVERY' },
-      });
-      await tx.orderStatusEvent.create({
-        data: { orderId: order.id, status: 'OUT_FOR_DELIVERY', actorType: 'SELLER' },
-      });
-      await enqueueOutbox(tx, {
-        kind: 'email.order_status',
-        payload: { orderId: order.id, kind: 'ON_THE_WAY' },
-      });
-      return { delivery: createdDelivery, order: updated };
-    });
-
+    const updated = await prisma.delivery.findUnique({ where: { id: delivery.id } });
     return NextResponse.json(
-      { delivery, order: updatedOrder },
+      { delivery: updated },
       { status: 201, headers: { 'x-request-id': reqCtx.requestId } },
     );
   });
@@ -183,7 +131,10 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<NextRespon
       );
     }
 
-    const delivery = await prisma.delivery.findUnique({ where: { orderId: order.id } });
+    const delivery = await prisma.delivery.findUnique({
+      where: { orderId: order.id },
+      select: { id: true, state: true, providerType: true },
+    });
     if (!delivery) {
       return NextResponse.json(
         { error: 'DELIVERY_NOT_FOUND', message: 'No delivery was requested for this order.' },
@@ -191,7 +142,18 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<NextRespon
       );
     }
 
-    if (order.status !== 'OUT_FOR_DELIVERY' || delivery.status === 'DELIVERED') {
+    if (delivery.providerType && isCourierProvider(delivery.providerType as ProviderType)) {
+      return NextResponse.json(
+        {
+          error: 'COURIER_COMPLETES_AUTOMATICALLY',
+          message:
+            'This delivery is handled by a courier and completes automatically once the courier confirms drop-off.',
+        },
+        { status: 422, headers: { 'x-request-id': reqCtx.requestId } },
+      );
+    }
+
+    if (order.status !== 'OUT_FOR_DELIVERY' || delivery.state === 'DELIVERED') {
       return NextResponse.json(
         {
           error: 'INVALID_STATUS_TRANSITION',
@@ -201,39 +163,11 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<NextRespon
       );
     }
 
-    const provider = getDeliveryProviderFor(delivery.provider);
-    try {
-      await provider.markDelivered(delivery.providerDeliveryId);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown delivery provider error';
-      return NextResponse.json(
-        { error: 'DELIVERY_PROVIDER_UNCONFIGURED', message },
-        { status: 503, headers: { 'x-request-id': reqCtx.requestId } },
-      );
-    }
+    await updateFulfillment(prisma, delivery.id, 'DELIVERED', 'MERCHANT');
 
-    const { updatedDelivery, updatedOrder } = await prisma.$transaction(async (tx) => {
-      const deliveredAt = new Date();
-      const nextDelivery = await tx.delivery.update({
-        where: { id: delivery.id },
-        data: { status: 'DELIVERED', deliveredAt },
-      });
-      const nextOrder = await tx.order.update({
-        where: { id: order.id },
-        data: { status: 'DELIVERED' },
-      });
-      await tx.orderStatusEvent.create({
-        data: { orderId: order.id, status: 'DELIVERED', actorType: 'SELLER' },
-      });
-      await enqueueOutbox(tx, {
-        kind: 'email.order_status',
-        payload: { orderId: order.id, kind: 'DELIVERED' },
-      });
-      return { updatedDelivery: nextDelivery, updatedOrder: nextOrder };
-    });
-
+    const updated = await prisma.delivery.findUnique({ where: { id: delivery.id } });
     return NextResponse.json(
-      { delivery: updatedDelivery, order: updatedOrder },
+      { delivery: updated },
       { headers: { 'x-request-id': reqCtx.requestId } },
     );
   });

@@ -8,7 +8,7 @@
  * store that predates the engine behaves exactly as before.
  */
 import 'server-only';
-import type { ProviderType } from './types';
+import { PROVIDER_TYPES, type ProviderType } from './types';
 
 export interface MethodConfigPickup {
   enabled: boolean;
@@ -89,6 +89,25 @@ export function enabledProviderTypes(cfg: FulfillmentConfig): ProviderType[] {
   if (cfg.merchant.enabled) out.push('MERCHANT');
   if (cfg.pickup.enabled) out.push('PICKUP');
   return out;
+}
+
+/**
+ * The provider that should fulfill one delivery order. `explicit` is
+ * `Order.deliveryProviderType` — set from Phase 4 onward by the checkout
+ * selection. When it is null (a pre-Phase-4 order, or a store with no courier
+ * chosen), fall back to the merchant's enabled set: a courier if exactly the
+ * config points at one, else MERCHANT.
+ */
+export function resolveOrderProviderType(
+  explicit: string | null,
+  cfg: FulfillmentConfig,
+): ProviderType {
+  if (explicit && (PROVIDER_TYPES as readonly string[]).includes(explicit)) {
+    return explicit as ProviderType;
+  }
+  if (cfg.uberDirect.enabled) return 'UBER_DIRECT';
+  if (cfg.doordash.enabled) return 'DOORDASH';
+  return 'MERCHANT';
 }
 
 /** Serialize back to the JSON column (used by the settings PATCH route). */

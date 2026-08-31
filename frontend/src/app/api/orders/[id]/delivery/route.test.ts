@@ -2,44 +2,31 @@ import { prismaMock } from '@/test-utils/prisma-mock';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest, NextResponse } from 'next/server';
 
-vi.mock('@/lib/server/middleware', () => ({
-  requireAuth: vi.fn(),
-}));
-vi.mock('@/lib/server/orders/ownership', () => ({
-  findOwnedOrder: vi.fn(),
-}));
-vi.mock('@/lib/server/delivery', () => ({
-  getDeliveryProviderFor: vi.fn(),
+vi.mock('@/lib/server/middleware', () => ({ requireAuth: vi.fn() }));
+vi.mock('@/lib/server/orders/ownership', () => ({ findOwnedOrder: vi.fn() }));
+vi.mock('@/lib/server/fulfillment/service', () => ({
+  createFulfillment: vi.fn(),
+  updateFulfillment: vi.fn(),
 }));
 
 import { requireAuth } from '@/lib/server/middleware';
 import { findOwnedOrder } from '@/lib/server/orders/ownership';
-import { getDeliveryProviderFor } from '@/lib/server/delivery';
+import { createFulfillment, updateFulfillment } from '@/lib/server/fulfillment/service';
 import { POST, PATCH } from './route';
 
 const mockRequireAuth = vi.mocked(requireAuth);
 const mockFindOwnedOrder = vi.mocked(findOwnedOrder);
-const mockGetDeliveryProviderFor = vi.mocked(getDeliveryProviderFor);
+const mockCreateFulfillment = vi.mocked(createFulfillment);
+const mockUpdateFulfillment = vi.mocked(updateFulfillment);
 
 const authedCtx = { user: { sub: 'user-1', email: 'me@example.com' } };
 const ctx = { params: Promise.resolve({ id: 'order-1' }) };
-const STORE = {
-  id: 'store-1',
-  name: 'Amara Shop',
-  phone: '+15559990000',
-  deliveryProvider: 'self_manual',
-  pickupAddress: null,
-};
+const STORE = { id: 'store-1', name: 'Amara Shop' };
 const READY_ORDER = {
   id: 'order-1',
   storeId: 'store-1',
   status: 'READY',
-  amount: 4500,
   fulfillmentMethod: 'DELIVERY',
-  customerName: 'Amara',
-  customerPhone: '+15551234567',
-  deliveryAddress: null,
-  lineItems: [{ productId: 'prod-1', name: 'Widget', priceCents: 4500, quantity: 1 }],
 };
 
 function makeReq(method: 'POST' | 'PATCH', csrf: 'match' | 'missing' = 'match'): NextRequest {
@@ -48,58 +35,45 @@ function makeReq(method: 'POST' | 'PATCH', csrf: 'match' | 'missing' = 'match'):
   return new NextRequest('http://test/api/orders/order-1/delivery', { method, headers });
 }
 
-const mockRequestDelivery = vi.fn(async () => ({
-  providerDeliveryId: null,
-  status: 'REQUESTED' as const,
-}));
-const mockMarkDelivered = vi.fn(async () => ({ status: 'DELIVERED' as const }));
-
 beforeEach(() => {
   vi.clearAllMocks();
   mockRequireAuth.mockResolvedValue(authedCtx);
   mockFindOwnedOrder.mockResolvedValue({ store: STORE, order: READY_ORDER } as never);
-  mockGetDeliveryProviderFor.mockReturnValue({
-    name: 'self_manual',
-    requestDelivery: mockRequestDelivery,
-    markDelivered: mockMarkDelivered,
-  });
-  prismaMock.$transaction.mockImplementation(async (fn: unknown) =>
-    (fn as (tx: typeof prismaMock) => unknown)(prismaMock),
-  );
+  prismaMock.delivery.findUnique.mockResolvedValue({
+    id: 'del-1',
+    state: 'PENDING',
+    providerType: 'MERCHANT',
+  } as never);
+  mockCreateFulfillment.mockResolvedValue({ state: 'OUT_FOR_DELIVERY', dispatched: false });
+  mockUpdateFulfillment.mockResolvedValue({ changed: true, deduped: false, state: 'DELIVERED' });
 });
 
 describe('POST /api/orders/[id]/delivery', () => {
   it('403s when CSRF header is missing', async () => {
-    const res = await POST(makeReq('POST', 'missing'), ctx);
-    expect(res.status).toBe(403);
+    expect((await POST(makeReq('POST', 'missing'), ctx)).status).toBe(403);
   });
 
   it('401s when requireAuth bails', async () => {
-    mockRequireAuth.mockResolvedValueOnce(
-      NextResponse.json({ error: 'Missing token' }, { status: 401 }),
-    );
-    const res = await POST(makeReq('POST'), ctx);
-    expect(res.status).toBe(401);
+    mockRequireAuth.mockResolvedValueOnce(NextResponse.json({ error: 'x' }, { status: 401 }));
+    expect((await POST(makeReq('POST'), ctx)).status).toBe(401);
   });
 
   it("404s ORDER_NOT_FOUND when the order isn't the caller's", async () => {
     mockFindOwnedOrder.mockResolvedValue({ store: null, order: null });
     const res = await POST(makeReq('POST'), ctx);
     expect(res.status).toBe(404);
-    const body = await res.json();
-    expect(body.error).toBe('ORDER_NOT_FOUND');
+    expect((await res.json()).error).toBe('ORDER_NOT_FOUND');
   });
 
-  it('422s FULFILLMENT_METHOD_MISMATCH when the order is a pickup (no courier)', async () => {
+  it('422s FULFILLMENT_METHOD_MISMATCH for a pickup order', async () => {
     mockFindOwnedOrder.mockResolvedValue({
       store: STORE,
       order: { ...READY_ORDER, fulfillmentMethod: 'PICKUP' },
     } as never);
     const res = await POST(makeReq('POST'), ctx);
     expect(res.status).toBe(422);
-    const body = await res.json();
-    expect(body.error).toBe('FULFILLMENT_METHOD_MISMATCH');
-    expect(mockRequestDelivery).not.toHaveBeenCalled();
+    expect((await res.json()).error).toBe('FULFILLMENT_METHOD_MISMATCH');
+    expect(mockCreateFulfillment).not.toHaveBeenCalled();
   });
 
   it('422s when the order is not READY', async () => {
@@ -107,209 +81,102 @@ describe('POST /api/orders/[id]/delivery', () => {
       store: STORE,
       order: { ...READY_ORDER, status: 'PREPARING' },
     } as never);
-    const res = await POST(makeReq('POST'), ctx);
-    expect(res.status).toBe(422);
-    const body = await res.json();
-    expect(body.error).toBe('INVALID_STATUS_TRANSITION');
+    expect((await POST(makeReq('POST'), ctx)).status).toBe(422);
   });
 
-  it('409s DELIVERY_ALREADY_REQUESTED when a Delivery row already exists', async () => {
-    prismaMock.delivery.findUnique.mockResolvedValue({ id: 'del-1', status: 'REQUESTED' } as never);
+  it('404s DELIVERY_NOT_FOUND when the order has no fulfillment record', async () => {
+    prismaMock.delivery.findUnique.mockResolvedValueOnce(null);
+    const res = await POST(makeReq('POST'), ctx);
+    expect(res.status).toBe(404);
+    expect((await res.json()).error).toBe('DELIVERY_NOT_FOUND');
+  });
+
+  it('409s DELIVERY_ALREADY_REQUESTED when the delivery is already in flight', async () => {
+    prismaMock.delivery.findUnique.mockResolvedValueOnce({
+      id: 'del-1',
+      state: 'OUT_FOR_DELIVERY',
+      providerType: 'UBER_DIRECT',
+    } as never);
     const res = await POST(makeReq('POST'), ctx);
     expect(res.status).toBe(409);
-    const body = await res.json();
-    expect(body.error).toBe('DELIVERY_ALREADY_REQUESTED');
-    expect(mockRequestDelivery).not.toHaveBeenCalled();
+    expect(mockCreateFulfillment).not.toHaveBeenCalled();
   });
 
-  it('allows a retry (upsert, not a 409) when the existing Delivery is FAILED', async () => {
-    prismaMock.delivery.findUnique.mockResolvedValue({ id: 'del-1', status: 'FAILED' } as never);
-    prismaMock.delivery.upsert.mockResolvedValue({
+  it('retries when the existing delivery is FAILED', async () => {
+    prismaMock.delivery.findUnique.mockResolvedValueOnce({
       id: 'del-1',
-      orderId: 'order-1',
-      provider: 'self_manual',
-      status: 'REQUESTED',
+      state: 'FAILED',
+      providerType: 'UBER_DIRECT',
     } as never);
-    prismaMock.order.update.mockResolvedValue({
-      ...READY_ORDER,
-      status: 'OUT_FOR_DELIVERY',
-    } as never);
-
+    mockCreateFulfillment.mockResolvedValueOnce({ state: 'REQUESTED', dispatched: true });
     const res = await POST(makeReq('POST'), ctx);
-
     expect(res.status).toBe(201);
-    expect(mockRequestDelivery).toHaveBeenCalledOnce();
-    expect(prismaMock.delivery.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { orderId: 'order-1' } }),
+    expect(mockCreateFulfillment).toHaveBeenCalledWith(
+      expect.anything(),
+      'del-1',
+      expect.objectContaining({ force: true }),
     );
   });
 
-  it('503s DELIVERY_PROVIDER_UNCONFIGURED when the provider throws (e.g. Uber Direct stub)', async () => {
-    prismaMock.delivery.findUnique.mockResolvedValue(null);
-    mockGetDeliveryProviderFor.mockReturnValue({
-      name: 'uber_direct',
-      requestDelivery: vi.fn(async () => {
-        throw new Error('Uber Direct is not configured');
-      }),
-      markDelivered: vi.fn(),
+  it('503s DELIVERY_CREATION_FAILED when the courier request fails', async () => {
+    prismaMock.delivery.findUnique.mockResolvedValueOnce({
+      id: 'del-1',
+      state: 'PENDING',
+      providerType: 'UBER_DIRECT',
+    } as never);
+    mockCreateFulfillment.mockResolvedValueOnce({
+      state: 'FAILED',
+      dispatched: false,
+      error: 'Uber Direct is not configured',
     });
     const res = await POST(makeReq('POST'), ctx);
     expect(res.status).toBe(503);
-    const body = await res.json();
-    expect(body.error).toBe('DELIVERY_PROVIDER_UNCONFIGURED');
+    expect((await res.json()).error).toBe('DELIVERY_CREATION_FAILED');
   });
 
-  it('creates a Delivery row, moves the Order to OUT_FOR_DELIVERY, and logs the status event', async () => {
-    prismaMock.delivery.findUnique.mockResolvedValue(null);
-    prismaMock.delivery.upsert.mockResolvedValue({
-      id: 'del-1',
-      orderId: 'order-1',
-      provider: 'self_manual',
-      status: 'REQUESTED',
-    } as never);
-    prismaMock.order.update.mockResolvedValue({
-      ...READY_ORDER,
-      status: 'OUT_FOR_DELIVERY',
-    } as never);
-
+  it('dispatches via the fulfillment service and returns 201', async () => {
     const res = await POST(makeReq('POST'), ctx);
-
     expect(res.status).toBe(201);
-    expect(mockRequestDelivery).toHaveBeenCalledWith({
-      orderId: 'order-1',
-      storeId: 'store-1',
-      customerName: 'Amara',
-      customerPhone: '+15551234567',
-      deliveryAddress: null,
-      pickupAddress: null,
-      storeName: 'Amara Shop',
-      storePhone: '+15559990000',
-      amountCents: 4500,
-      manifestItems: [{ name: 'Widget', quantity: 1 }],
-    });
-    expect(prismaMock.delivery.upsert).toHaveBeenCalledWith({
-      where: { orderId: 'order-1' },
-      create: {
-        orderId: 'order-1',
-        provider: 'self_manual',
-        providerDeliveryId: null,
-        status: 'REQUESTED',
-      },
-      update: {
-        provider: 'self_manual',
-        providerDeliveryId: null,
-        status: 'REQUESTED',
-        trackingUrl: null,
-        deliveredAt: null,
-      },
-    });
-    expect(prismaMock.order.update).toHaveBeenCalledWith({
-      where: { id: 'order-1' },
-      data: { status: 'OUT_FOR_DELIVERY' },
-    });
-    expect(prismaMock.orderStatusEvent.create).toHaveBeenCalledWith({
-      data: { orderId: 'order-1', status: 'OUT_FOR_DELIVERY', actorType: 'SELLER' },
-    });
-  });
-
-  it('sends a weight-sold line item as one manifest package with the weight folded into the name (Uber rejects fractional package counts)', async () => {
-    mockFindOwnedOrder.mockResolvedValue({
-      store: STORE,
-      order: {
-        ...READY_ORDER,
-        lineItems: [
-          {
-            productId: 'prod-1',
-            name: 'poisson maquereau',
-            priceCents: 900,
-            quantity: 5.3,
-            unit: 'LB',
-          },
-        ],
-      },
-    } as never);
-    prismaMock.delivery.findUnique.mockResolvedValue(null);
-    prismaMock.delivery.upsert.mockResolvedValue({
-      id: 'del-1',
-      orderId: 'order-1',
-      provider: 'self_manual',
-      status: 'REQUESTED',
-    } as never);
-    prismaMock.order.update.mockResolvedValue({
-      ...READY_ORDER,
-      status: 'OUT_FOR_DELIVERY',
-    } as never);
-
-    await POST(makeReq('POST'), ctx);
-
-    expect(mockRequestDelivery).toHaveBeenCalledWith(
-      expect.objectContaining({
-        manifestItems: [{ name: 'poisson maquereau (5.30 lb)', quantity: 1 }],
-      }),
-    );
-  });
-
-  it('rounds and floors a fractional UNIT-item quantity at 1 (defensive minimum)', async () => {
-    mockFindOwnedOrder.mockResolvedValue({
-      store: STORE,
-      order: {
-        ...READY_ORDER,
-        lineItems: [{ productId: 'prod-1', name: 'Widget', priceCents: 4500, quantity: 0.4 }],
-      },
-    } as never);
-    prismaMock.delivery.findUnique.mockResolvedValue(null);
-    prismaMock.delivery.upsert.mockResolvedValue({
-      id: 'del-1',
-      orderId: 'order-1',
-      provider: 'self_manual',
-      status: 'REQUESTED',
-    } as never);
-    prismaMock.order.update.mockResolvedValue({
-      ...READY_ORDER,
-      status: 'OUT_FOR_DELIVERY',
-    } as never);
-
-    await POST(makeReq('POST'), ctx);
-
-    expect(mockRequestDelivery).toHaveBeenCalledWith(
-      expect.objectContaining({
-        manifestItems: [{ name: 'Widget', quantity: 1 }],
-      }),
+    expect(mockCreateFulfillment).toHaveBeenCalledWith(
+      expect.anything(),
+      'del-1',
+      expect.objectContaining({ actor: 'MERCHANT', force: true }),
     );
   });
 });
 
 describe('PATCH /api/orders/[id]/delivery', () => {
-  const OUT_FOR_DELIVERY_ORDER = { ...READY_ORDER, status: 'OUT_FOR_DELIVERY' };
-  const REQUESTED_DELIVERY = {
-    id: 'del-1',
-    orderId: 'order-1',
-    provider: 'self_manual',
-    providerDeliveryId: null,
-    status: 'REQUESTED',
-  };
-
   beforeEach(() => {
-    mockFindOwnedOrder.mockResolvedValue({ store: STORE, order: OUT_FOR_DELIVERY_ORDER } as never);
+    mockFindOwnedOrder.mockResolvedValue({
+      store: STORE,
+      order: { ...READY_ORDER, status: 'OUT_FOR_DELIVERY' },
+    } as never);
+    prismaMock.delivery.findUnique.mockResolvedValue({
+      id: 'del-1',
+      state: 'OUT_FOR_DELIVERY',
+      providerType: 'MERCHANT',
+    } as never);
   });
 
   it('403s when CSRF header is missing', async () => {
-    const res = await PATCH(makeReq('PATCH', 'missing'), ctx);
-    expect(res.status).toBe(403);
+    expect((await PATCH(makeReq('PATCH', 'missing'), ctx)).status).toBe(403);
   });
 
-  it("404s ORDER_NOT_FOUND when the order isn't the caller's", async () => {
-    mockFindOwnedOrder.mockResolvedValue({ store: null, order: null });
-    const res = await PATCH(makeReq('PATCH'), ctx);
-    expect(res.status).toBe(404);
+  it('404s DELIVERY_NOT_FOUND when no delivery exists', async () => {
+    prismaMock.delivery.findUnique.mockResolvedValueOnce(null);
+    expect((await PATCH(makeReq('PATCH'), ctx)).status).toBe(404);
   });
 
-  it('404s DELIVERY_NOT_FOUND when no delivery was ever requested', async () => {
-    prismaMock.delivery.findUnique.mockResolvedValue(null);
+  it('422s for a courier delivery (completes from its webhook, not a click)', async () => {
+    prismaMock.delivery.findUnique.mockResolvedValueOnce({
+      id: 'del-1',
+      state: 'OUT_FOR_DELIVERY',
+      providerType: 'DOORDASH',
+    } as never);
     const res = await PATCH(makeReq('PATCH'), ctx);
-    expect(res.status).toBe(404);
-    const body = await res.json();
-    expect(body.error).toBe('DELIVERY_NOT_FOUND');
+    expect(res.status).toBe(422);
+    expect((await res.json()).error).toBe('COURIER_COMPLETES_AUTOMATICALLY');
+    expect(mockUpdateFulfillment).not.toHaveBeenCalled();
   });
 
   it('422s when the order is not OUT_FOR_DELIVERY', async () => {
@@ -317,46 +184,18 @@ describe('PATCH /api/orders/[id]/delivery', () => {
       store: STORE,
       order: { ...READY_ORDER, status: 'READY' },
     } as never);
-    prismaMock.delivery.findUnique.mockResolvedValue(REQUESTED_DELIVERY as never);
-    const res = await PATCH(makeReq('PATCH'), ctx);
-    expect(res.status).toBe(422);
+    expect((await PATCH(makeReq('PATCH'), ctx)).status).toBe(422);
   });
 
-  it('422s when the delivery is already DELIVERED', async () => {
-    prismaMock.delivery.findUnique.mockResolvedValue({
-      ...REQUESTED_DELIVERY,
-      status: 'DELIVERED',
-    } as never);
+  it('marks a merchant delivery DELIVERED via the service', async () => {
     const res = await PATCH(makeReq('PATCH'), ctx);
-    expect(res.status).toBe(422);
-  });
-
-  it('marks the Delivery + Order DELIVERED and logs the status event', async () => {
-    prismaMock.delivery.findUnique.mockResolvedValue(REQUESTED_DELIVERY as never);
-    prismaMock.delivery.update.mockResolvedValue({
-      ...REQUESTED_DELIVERY,
-      status: 'DELIVERED',
-      deliveredAt: new Date(),
-    } as never);
-    prismaMock.order.update.mockResolvedValue({
-      ...OUT_FOR_DELIVERY_ORDER,
-      status: 'DELIVERED',
-    } as never);
-
-    const res = await PATCH(makeReq('PATCH'), ctx);
-
     expect(res.status).toBe(200);
-    const updateArgs = prismaMock.delivery.update.mock.calls[0]?.[0];
-    expect(updateArgs?.where).toEqual({ id: 'del-1' });
-    expect(updateArgs?.data).toMatchObject({ status: 'DELIVERED' });
-    expect(updateArgs?.data?.deliveredAt).toBeInstanceOf(Date);
-    expect(prismaMock.order.update).toHaveBeenCalledWith({
-      where: { id: 'order-1' },
-      data: { status: 'DELIVERED' },
-    });
-    expect(prismaMock.orderStatusEvent.create).toHaveBeenCalledWith({
-      data: { orderId: 'order-1', status: 'DELIVERED', actorType: 'SELLER' },
-    });
+    expect(mockUpdateFulfillment).toHaveBeenCalledWith(
+      expect.anything(),
+      'del-1',
+      'DELIVERED',
+      'MERCHANT',
+    );
   });
 });
 

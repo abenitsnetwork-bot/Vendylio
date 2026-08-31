@@ -96,6 +96,51 @@ export function deliveryFailed(
 }
 
 /**
+ * Prompt #12 — notifies the store owner once a courier delivery has been
+ * successfully requested (the courier is on the way to pick up). Emitted by
+ * the fulfillment-tick cron / the seller's "Request delivery" click.
+ */
+export function fulfillmentDispatched(
+  userId: string,
+  orderId: string,
+  providerName: string,
+  reference?: string,
+): CreateNotificationInput {
+  const ref = reference ?? orderId;
+  return {
+    userId,
+    type: 'FULFILLMENT_DISPATCHED',
+    title: 'Courier requested',
+    body: `A ${providerName} courier has been requested for order ${ref}.`,
+    data: { orderId, providerName },
+    dedupeKey: `fulfillment-dispatched:${orderId}`,
+  };
+}
+
+/**
+ * Prompt #12 — notifies the store owner when the engine could not arrange a
+ * courier after all retries. The order stays PAID; the seller retries from the
+ * order detail page once the underlying issue is fixed. Distinct from
+ * `deliveryFailed` (a courier that WAS assigned then cancelled/returned).
+ */
+export function fulfillmentSetupFailed(
+  userId: string,
+  orderId: string,
+  reason: string,
+  reference?: string,
+): CreateNotificationInput {
+  const ref = reference ?? orderId;
+  return {
+    userId,
+    type: 'FULFILLMENT_FAILED',
+    title: 'Delivery setup needs attention',
+    body: `We couldn't arrange a courier for order ${ref} (${reason}). The order is paid — retry delivery from the order page once you're ready.`,
+    data: { orderId, reason },
+    dedupeKey: `fulfillment-failed:${orderId}`,
+  };
+}
+
+/**
  * Phase 4 — notifies the store owner when a product/variant drops to or
  * below its effective low-stock threshold (but is not yet out). Emitted
  * from markPaid.ts (on the crossing decrement) and the low-stock-sweep

@@ -55,19 +55,17 @@ describe('canTransition — PROVIDER / CRON (forward-only)', () => {
 });
 
 describe('canTransition — MERCHANT', () => {
-  it('walks the manual happy path one step at a time', () => {
-    expect(canTransition('PENDING', 'REQUESTED', 'MERCHANT')).toBe(true);
-    expect(canTransition('REQUESTED', 'OUT_FOR_DELIVERY', 'MERCHANT')).toBe(true);
+  it('walks the two-click self-delivery path one step at a time', () => {
+    expect(canTransition('PENDING', 'OUT_FOR_DELIVERY', 'MERCHANT')).toBe(true);
     expect(canTransition('OUT_FOR_DELIVERY', 'DELIVERED', 'MERCHANT')).toBe(true);
   });
 
-  it('does not let a merchant skip steps', () => {
-    expect(canTransition('PENDING', 'OUT_FOR_DELIVERY', 'MERCHANT')).toBe(false);
-    expect(canTransition('REQUESTED', 'DELIVERED', 'MERCHANT')).toBe(false);
+  it('does not let a merchant skip to DELIVERED', () => {
+    expect(canTransition('PENDING', 'DELIVERED', 'MERCHANT')).toBe(false);
   });
 
   it('can cancel from any non-terminal state', () => {
-    expect(canTransition('REQUESTED', 'CANCELLED', 'MERCHANT')).toBe(true);
+    expect(canTransition('PENDING', 'CANCELLED', 'MERCHANT')).toBe(true);
     expect(canTransition('OUT_FOR_DELIVERY', 'CANCELLED', 'MERCHANT')).toBe(true);
     expect(canTransition('DELIVERED', 'CANCELLED', 'MERCHANT')).toBe(false);
   });

@@ -25,7 +25,14 @@ import type {
   ProviderType,
 } from './types';
 import { getDeliveryProvider, type ProviderContext } from './registry';
-import type { FulfillmentConfig } from './config';
+import { readFulfillmentConfig, type FulfillmentConfig } from './config';
+import { createNotification } from '@/lib/server/notifications';
+import {
+  fulfillmentDispatched,
+  fulfillmentSetupFailed,
+} from '@/lib/server/notifications/templates';
+import { formatOrderNumber } from '@/lib/orderNumber';
+import { isCourierProvider } from './types';
 
 /** Minimal tx client shape the service needs (real tx or the deep mock) —
  *  same alias `markPaid.ts` / the webhook factory use. */
@@ -362,3 +369,351 @@ export async function quoteMethod(
 
 /** Simple singleton-style Prisma type export for the cron/route call sites. */
 export type FulfillmentPrisma = PrismaClient;
+
+// ── createFulfillment (courier dispatch) ─────────────────────────────────
+
+export const DISPATCH_MAX_ATTEMPTS = Math.max(
+  1,
+  Number(process.env.FULFILLMENT_DISPATCH_MAX_ATTEMPTS ?? 6) || 6,
+);
+
+/** Transaction-scoped advisory lock, keyed on the deliveryId — serializes
+ *  two workers that both try to dispatch / mutate the same delivery. */
+async function lockDeliveryTx(tx: FulfillmentTx, deliveryId: string): Promise<void> {
+  await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', deliveryId);
+}
+
+interface DeliveryWithContext {
+  id: string;
+  orderId: string;
+  state: NormalizedState;
+  providerType: ProviderType | null;
+  externalDeliveryId: string | null;
+  providerDeliveryId: string | null;
+  dispatchedAt: Date | null;
+  attemptCount: number;
+  order: {
+    id: string;
+    orderNumber: number;
+    status: string;
+    amount: number;
+    currency: string;
+    customerName: string | null;
+    customerPhone: string | null;
+    deliveryAddress: unknown;
+    lineItems: unknown;
+    storeId: string;
+    store: {
+      name: string;
+      phone: string | null;
+      pickupAddress: string | null;
+      deliveryProvider: string;
+      deliveryFeeCents: number;
+      fulfillmentConfig: unknown;
+      organization: { ownerId: string };
+    };
+  };
+}
+
+const DELIVERY_CTX_SELECT = {
+  id: true,
+  orderId: true,
+  state: true,
+  providerType: true,
+  externalDeliveryId: true,
+  providerDeliveryId: true,
+  dispatchedAt: true,
+  attemptCount: true,
+  order: {
+    select: {
+      id: true,
+      orderNumber: true,
+      status: true,
+      amount: true,
+      currency: true,
+      customerName: true,
+      customerPhone: true,
+      deliveryAddress: true,
+      lineItems: true,
+      storeId: true,
+      store: {
+        select: {
+          name: true,
+          phone: true,
+          pickupAddress: true,
+          deliveryProvider: true,
+          deliveryFeeCents: true,
+          fulfillmentConfig: true,
+          organization: { select: { ownerId: true } },
+        },
+      },
+    },
+  },
+} as const;
+
+function providerCtxFor(store: DeliveryWithContext['order']['store']): ProviderContext {
+  const cfg = readFulfillmentConfig({
+    fulfillmentConfig: store.fulfillmentConfig ?? {},
+    deliveryProvider: store.deliveryProvider,
+    deliveryFeeCents: store.deliveryFeeCents,
+  });
+  return { merchant: cfg.merchant, pickup: cfg.pickup };
+}
+
+function manifestItemsFrom(lineItems: unknown): { name: string; quantity: number }[] {
+  if (!Array.isArray(lineItems)) return [];
+  return lineItems.map((li) => {
+    const item = li as { name?: unknown; quantity?: unknown };
+    return {
+      name: typeof item.name === 'string' ? item.name : 'Item',
+      quantity: Math.max(1, Math.round(Number(item.quantity) || 1)),
+    };
+  });
+}
+
+export interface CreateFulfillmentOptions {
+  actor?: FulfillmentActor;
+  /** Merchant "Request delivery" / "Retry" — re-check a courier delivery even
+   *  when the row isn't PENDING (reconciles, never re-creates). */
+  force?: boolean;
+}
+
+export interface CreateFulfillmentResult {
+  state: NormalizedState;
+  /** True when a courier delivery was actually requested this call. */
+  dispatched: boolean;
+  /** Set when the courier request failed this call. */
+  error?: string;
+}
+
+/**
+ * Dispatch one delivery. Opens its own Serializable tx + advisory lock.
+ *
+ * - MERCHANT / PICKUP: PENDING → REQUESTED, no external call.
+ * - Courier, already has an `externalDeliveryId`: reconcile via `getDelivery`
+ *   (never create a second delivery).
+ * - Courier, fresh: stamp `externalDeliveryId = vend_<id>`, call
+ *   `createDelivery`. On failure bump `attemptCount`; at `DISPATCH_MAX_ATTEMPTS`
+ *   move to FAILED + notify the merchant (recoverable via the retry route).
+ */
+export async function createFulfillment(
+  prisma: PrismaClient,
+  deliveryId: string,
+  opts: CreateFulfillmentOptions = {},
+): Promise<CreateFulfillmentResult> {
+  const actor: FulfillmentActor = opts.actor ?? 'SYSTEM';
+
+  return prisma.$transaction(
+    async (tx) => {
+      await lockDeliveryTx(tx, deliveryId);
+
+      const delivery = (await tx.delivery.findUnique({
+        where: { id: deliveryId },
+        select: DELIVERY_CTX_SELECT,
+      })) as DeliveryWithContext | null;
+      if (!delivery) throw new Error(`createFulfillment: no Delivery ${deliveryId}`);
+
+      const providerType = delivery.providerType ?? 'MERCHANT';
+      const store = delivery.order.store;
+      const provider = getDeliveryProvider(providerType, providerCtxFor(store));
+
+      // ── Non-external providers: advance the state, no courier call. A
+      //    MERCHANT "Request delivery" click means the seller is heading out,
+      //    so it goes straight to OUT_FOR_DELIVERY (two-click dashboard flow). ──
+      if (!isCourierProvider(providerType)) {
+        const target: NormalizedState =
+          providerType === 'MERCHANT' ? 'OUT_FOR_DELIVERY' : 'REQUESTED';
+        if (delivery.state === 'PENDING') {
+          await recordTransition(tx, {
+            deliveryId,
+            toState: target,
+            actor,
+            patch: { dispatchedAt: new Date() },
+          });
+        }
+        return { state: target, dispatched: false };
+      }
+
+      // ── Courier already dispatched (a real external delivery exists) →
+      //    reconcile from the provider, never create a second one. ──
+      if (delivery.dispatchedAt && delivery.externalDeliveryId) {
+        try {
+          const snapshot = await provider.getDelivery(delivery.externalDeliveryId);
+          if (snapshot.state !== 'UNKNOWN') {
+            const res = await handleProviderEvent(tx, {
+              deliveryId,
+              snapshot,
+              source: 'CRON',
+              providerEventId: `reconcile:${Date.now()}`,
+            });
+            return { state: res.state, dispatched: false };
+          }
+        } catch (err) {
+          log.warn('fulfillment: reconcile getDelivery failed', {
+            deliveryId,
+            err: err instanceof Error ? err.message : String(err),
+          });
+        }
+        return { state: delivery.state, dispatched: false };
+      }
+
+      if (delivery.state !== 'PENDING' && !opts.force) {
+        return { state: delivery.state, dispatched: false };
+      }
+
+      // ── Courier: fresh dispatch. Persist the stable external id first so a
+      //    later retry can GET-reconcile if the create half-succeeded. ──
+      const externalDeliveryId = delivery.externalDeliveryId ?? `vend_${deliveryId}`;
+      await tx.delivery.update({ where: { id: deliveryId }, data: { externalDeliveryId } });
+
+      try {
+        const result = await provider.createDelivery({
+          externalDeliveryId,
+          orderId: delivery.orderId,
+          storeId: delivery.order.storeId,
+          storeName: store.name,
+          pickupAddress: store.pickupAddress,
+          pickupPhone: store.phone,
+          customerName: delivery.order.customerName,
+          customerPhone: delivery.order.customerPhone,
+          dropoffAddress:
+            (delivery.order.deliveryAddress as Record<string, unknown> | null) ?? null,
+          subtotalCents: delivery.order.amount,
+          currency: delivery.order.currency,
+          manifestItems: manifestItemsFrom(delivery.order.lineItems),
+        });
+
+        await recordTransition(tx, {
+          deliveryId,
+          toState: result.state,
+          actor,
+          patch: {
+            dispatchedAt: new Date(),
+            attemptCount: { increment: 1 },
+            ...(result.providerDeliveryId ? { providerDeliveryId: result.providerDeliveryId } : {}),
+            ...(result.trackingUrl ? { trackingUrl: result.trackingUrl } : {}),
+            ...(result.estimatedPickupAt ? { estimatedPickupAt: result.estimatedPickupAt } : {}),
+            ...(result.estimatedDropoffAt ? { estimatedDropoffAt: result.estimatedDropoffAt } : {}),
+          },
+        });
+
+        await createNotification(
+          tx as unknown as PrismaClient,
+          fulfillmentDispatched(
+            store.organization.ownerId,
+            delivery.orderId,
+            provider.friendlyName,
+            formatOrderNumber(delivery.order.orderNumber),
+          ),
+        );
+
+        return { state: 'REQUESTED', dispatched: true };
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        const attempts = delivery.attemptCount + 1;
+        const giveUp = attempts >= DISPATCH_MAX_ATTEMPTS;
+
+        if (giveUp) {
+          await recordTransition(tx, {
+            deliveryId,
+            toState: 'FAILED',
+            actor,
+            patch: { attemptCount: attempts, failureReason: reason },
+          });
+          await createNotification(
+            tx as unknown as PrismaClient,
+            fulfillmentSetupFailed(
+              store.organization.ownerId,
+              delivery.orderId,
+              reason,
+              formatOrderNumber(delivery.order.orderNumber),
+            ),
+          );
+        } else {
+          // stay PENDING; the cron retries with the bumped attemptCount.
+          await tx.delivery.update({
+            where: { id: deliveryId },
+            data: { attemptCount: attempts, failureReason: reason },
+          });
+        }
+        return { state: giveUp ? 'FAILED' : 'PENDING', dispatched: false, error: reason };
+      }
+    },
+    { isolationLevel: 'Serializable' },
+  );
+}
+
+// ── updateFulfillment (merchant quick actions) ──────────────────────────
+
+export async function updateFulfillment(
+  prisma: PrismaClient,
+  deliveryId: string,
+  toState: NormalizedState,
+  actor: FulfillmentActor = 'MERCHANT',
+): Promise<RecordTransitionResult> {
+  return prisma.$transaction(
+    async (tx) => {
+      await lockDeliveryTx(tx, deliveryId);
+      return recordTransition(tx, { deliveryId, toState, actor });
+    },
+    { isolationLevel: 'Serializable' },
+  );
+}
+
+// ── cancelFulfillment ──────────────────────────────────────────────────
+
+export interface CancelFulfillmentResult {
+  cancelled: boolean;
+  reason?: string;
+  state?: NormalizedState;
+}
+
+export async function cancelFulfillment(
+  prisma: PrismaClient,
+  deliveryId: string,
+  opts: { actor?: FulfillmentActor; reason?: string } = {},
+): Promise<CancelFulfillmentResult> {
+  const actor: FulfillmentActor = opts.actor ?? 'MERCHANT';
+
+  return prisma.$transaction(
+    async (tx) => {
+      await lockDeliveryTx(tx, deliveryId);
+      const delivery = (await tx.delivery.findUnique({
+        where: { id: deliveryId },
+        select: DELIVERY_CTX_SELECT,
+      })) as DeliveryWithContext | null;
+      if (!delivery) throw new Error(`cancelFulfillment: no Delivery ${deliveryId}`);
+
+      if (delivery.state === 'CANCELLED' || delivery.state === 'DELIVERED') {
+        return {
+          cancelled: false,
+          reason: `Delivery is already ${delivery.state}.`,
+          state: delivery.state,
+        };
+      }
+
+      const providerType = delivery.providerType ?? 'MERCHANT';
+      const provider = getDeliveryProvider(providerType, providerCtxFor(delivery.order.store));
+
+      if (isCourierProvider(providerType) && delivery.externalDeliveryId) {
+        const res = await provider.cancelDelivery(delivery.externalDeliveryId);
+        if (!res.cancelled) {
+          return {
+            cancelled: false,
+            reason: res.reason ?? 'The courier will not cancel this delivery.',
+            state: delivery.state,
+          };
+        }
+      }
+
+      const t = await recordTransition(tx, {
+        deliveryId,
+        toState: 'CANCELLED',
+        actor,
+        patch: opts.reason ? { cancelReason: opts.reason } : {},
+      });
+      return { cancelled: true, state: t.state };
+    },
+    { isolationLevel: 'Serializable' },
+  );
+}

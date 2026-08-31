@@ -18,6 +18,7 @@ const customerUpdate = vi.fn();
 const productVariantFindUnique = vi.fn();
 const productVariantUpdate = vi.fn();
 const platformSettingsFindUnique = vi.fn();
+const deliveryUpsert = vi.fn();
 
 const $transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>, _opts?: unknown) =>
   fn({
@@ -34,6 +35,7 @@ const $transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>, _opts?:
     outboxEvent: { create: outboxCreate },
     orderStatusEvent: { create: orderStatusEventCreate },
     customer: { findUnique: customerFindUnique, create: customerCreate, update: customerUpdate },
+    delivery: { upsert: deliveryUpsert },
   }),
 );
 
@@ -91,6 +93,10 @@ const PAID_ORDER = {
   currency: 'USD',
   customerEmail: 'buyer@example.com',
   lineItems: [{ productId: 'prod-a', name: 'Shea Butter', priceCents: 1800, quantity: 2 }],
+  // PICKUP so these payment-side-effect assertions aren't entangled with the
+  // Prompt #12 fulfillment-record creation (covered in markPaid.test.ts).
+  fulfillmentMethod: 'PICKUP',
+  deliveryFeeCents: 0,
 };
 
 describe('POST /api/webhooks/stripe', () => {

@@ -68,12 +68,9 @@ export function canTransition(
 
   if (actor === 'MERCHANT') {
     if (to === 'CANCELLED') return !isTerminal(from);
-    const MANUAL_PATH: NormalizedState[] = [
-      'PENDING',
-      'REQUESTED',
-      'OUT_FOR_DELIVERY',
-      'DELIVERED',
-    ];
+    // Self-delivery is a two-click flow in the dashboard: "Request delivery"
+    // (PENDING → OUT_FOR_DELIVERY, the seller heads out) then "Mark delivered".
+    const MANUAL_PATH: NormalizedState[] = ['PENDING', 'OUT_FOR_DELIVERY', 'DELIVERED'];
     const i = MANUAL_PATH.indexOf(from);
     const j = MANUAL_PATH.indexOf(to);
     return i !== -1 && j === i + 1;

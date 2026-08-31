@@ -15,6 +15,8 @@ import { computeCommission, resolveCommissionRateBp } from '@/lib/server/payment
 import { getPlatformCommissionRates } from '@/lib/server/payments/platform-settings';
 import { enqueueOutbox, type OutboxEvent } from '@/lib/server/outbox';
 import { applyStockChange } from '@/lib/server/inventory/adjust';
+import { initFulfillment } from '@/lib/server/fulfillment/service';
+import { readFulfillmentConfig, resolveOrderProviderType } from '@/lib/server/fulfillment/config';
 
 interface OrderLineItem {
   productId: string;
@@ -38,6 +40,15 @@ export interface OrderForPaidEffects {
   /** Phase D — the promo code snapshot; its redemptionCount is bumped here
    * (at payment, not at checkout — best-effort cap, see the Discount model). */
   discountCode?: string | null;
+  /** Prompt #12 — used to open the fulfillment record. `fulfillmentMethod`
+   * and `deliveryFeeCents` are always present on the Order row;
+   * `deliveryProviderType` / the quote snapshot are null before Phase 4. */
+  fulfillmentMethod: string;
+  deliveryFeeCents: number;
+  deliveryProviderType?: string | null;
+  deliveryQuoteId?: string | null;
+  providerQuoteId?: string | null;
+  deliveryQuoteExpiresAt?: Date | null;
 }
 
 export async function applyOrderPaidEffects(
@@ -53,6 +64,9 @@ export async function applyOrderPaidEffects(
     select: {
       plan: true,
       defaultLowStockThreshold: true,
+      fulfillmentConfig: true,
+      deliveryProvider: true,
+      deliveryFeeCents: true,
       organization: { select: { ownerId: true } },
     },
   });
@@ -219,6 +233,29 @@ export async function applyOrderPaidEffects(
     await enqueueOutbox(tx, {
       kind: 'email.order_confirmation',
       payload: { orderId: order.id },
+    });
+  }
+
+  // Prompt #12 — open the fulfillment record for a delivery order. No external
+  // courier call here: `initFulfillment` just writes a `Delivery` row in
+  // `state: PENDING` (idempotent under a Serializable retry), and the
+  // `fulfillment-tick` cron dispatches it once the seller marks the order
+  // READY. PICKUP orders never get a Delivery row.
+  if (order.fulfillmentMethod !== 'PICKUP') {
+    const cfg = readFulfillmentConfig({
+      fulfillmentConfig: store?.fulfillmentConfig ?? {},
+      deliveryProvider: store?.deliveryProvider ?? 'self_manual',
+      deliveryFeeCents: store?.deliveryFeeCents ?? 0,
+    });
+    const providerType = resolveOrderProviderType(order.deliveryProviderType ?? null, cfg);
+    await initFulfillment(tx, {
+      orderId: order.id,
+      providerType,
+      feeCents: order.deliveryFeeCents,
+      currency: order.currency,
+      quoteId: order.deliveryQuoteId ?? null,
+      providerQuoteId: order.providerQuoteId ?? null,
+      quoteExpiresAt: order.deliveryQuoteExpiresAt ?? null,
     });
   }
 }
