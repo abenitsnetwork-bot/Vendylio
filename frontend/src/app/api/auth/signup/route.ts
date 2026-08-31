@@ -23,6 +23,7 @@ import { hashPassword, generateVerificationCode } from '@/lib/server/auth';
 import { isBanned } from '@/lib/server/auth/banned-passwords';
 import { isPwned } from '@/lib/server/auth/hibp';
 import { dummyBcryptCompare } from '@/lib/server/auth/dummy-bcrypt';
+import { verifyCaptcha, CAPTCHA_FAILED } from '@/lib/server/auth/captcha';
 import { enqueueOutbox } from '@/lib/server/outbox';
 import { sendVerificationCodeNow } from '@/lib/server/auth/send-verification-now';
 
@@ -35,6 +36,10 @@ const Body = z.object({
   // Optional display name (e.g. from a richer registration form). Purely
   // cosmetic — signup succeeds identically with or without it.
   name: z.string().trim().min(1).max(120).optional(),
+  // hCaptcha token — optional in the schema; verifyCaptcha enforces it when
+  // HCAPTCHA_SECRET is set. Checked before the enumeration branch so response
+  // parity is untouched.
+  captchaToken: z.string().optional(),
 });
 
 const limiter = createEmailLimiter(redis ? { redis } : {}, {
@@ -63,7 +68,20 @@ export async function POST(req: NextRequest): Promise<Response> {
       res.headers.set('x-request-id', ctx.requestId);
       return res;
     }
-    const { email, password, name } = parsed.data;
+    const { email, password, name, captchaToken } = parsed.data;
+
+    // 1b. Captcha — independent of email existence, so it runs before the
+    //     enumeration-resistant branch and doesn't affect timing/response
+    //     parity. No-op when hCaptcha is unconfigured.
+    const captcha = await verifyCaptcha(
+      captchaToken,
+      req.headers.get('x-forwarded-for')?.split(',')[0]?.trim(),
+    );
+    if (!captcha.ok) {
+      const res = NextResponse.json(CAPTCHA_FAILED, { status: 400 });
+      res.headers.set('x-request-id', ctx.requestId);
+      return res;
+    }
 
     // 2. Password policy gates BEFORE looking up user (D-22 — keep the no-user
     //    and existing-user branches symmetric below).

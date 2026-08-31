@@ -26,8 +26,13 @@ vi.mock('next/server', async (orig) => {
   const actual = await orig<typeof import('next/server')>();
   return { ...actual, after: (fn: () => unknown) => void fn() };
 });
+vi.mock('@/lib/server/auth/captcha', () => ({
+  verifyCaptcha: vi.fn().mockResolvedValue({ ok: true, reason: 'DISABLED' }),
+  CAPTCHA_FAILED: { error: 'CAPTCHA_FAILED', message: 'Captcha verification failed.' },
+}));
 
 import { POST } from './route';
+import { verifyCaptcha } from '@/lib/server/auth/captcha';
 import { sendVerificationCodeNow } from '@/lib/server/auth/send-verification-now';
 import { dummyBcryptCompare } from '@/lib/server/auth/dummy-bcrypt';
 import { isPwned } from '@/lib/server/auth/hibp';
@@ -50,6 +55,7 @@ function makeReq(body: unknown): NextRequest {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(verifyCaptcha).mockResolvedValue({ ok: true, reason: 'DISABLED' });
   // Default $transaction passes the prismaMock as `tx` so writes within the
   // callback hit the same mocks as the outer client (mockDeep proxies them).
   prismaMock.$transaction.mockImplementation((cb: unknown) => {
@@ -61,6 +67,14 @@ beforeEach(() => {
 });
 
 describe('POST /api/auth/signup', () => {
+  it('rejects CAPTCHA_FAILED before touching the DB', async () => {
+    vi.mocked(verifyCaptcha).mockResolvedValueOnce({ ok: false, reason: 'REJECTED' });
+    const res = await POST(makeReq({ email: 'x@example.com', password: 'a-strong-passphrase' }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('CAPTCHA_FAILED');
+    expect(prismaMock.user.findUnique).not.toHaveBeenCalled();
+  });
+
   it('creates a new user, code, and outbox event for genuinely new emails', async () => {
     prismaMock.user.findUnique.mockResolvedValue(null);
     prismaMock.user.create.mockResolvedValue({ id: 'u-new' } as never);

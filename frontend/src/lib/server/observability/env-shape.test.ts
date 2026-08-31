@@ -129,3 +129,22 @@ describe('.env.example Prompt #12 additions (fulfillment engine)', () => {
     expect(src).toContain('PLATFORM-level');
   });
 });
+
+// ───────────────────────────────────────────────────────────────────────
+// hCaptcha bot protection on the auth entry points. Tripwire: keys + the
+// "inert when unset" + "never logged" guarantees must stay documented.
+// ───────────────────────────────────────────────────────────────────────
+describe('.env.example hCaptcha additions', () => {
+  const src = readFileSync(ENV_EXAMPLE, 'utf8');
+
+  it('declares the hCaptcha keys with empty defaults', () => {
+    for (const key of ['HCAPTCHA_SECRET', 'NEXT_PUBLIC_HCAPTCHA_SITE_KEY', 'HCAPTCHA_FAIL_OPEN']) {
+      expect(src).toMatch(new RegExp(`^${key}=""$`, 'm'));
+    }
+  });
+
+  it('documents that it is inert when unset and the token is never logged', () => {
+    expect(src).toMatch(/INERT when HCAPTCHA_SECRET is unset/);
+    expect(src).toMatch(/NEVER logged/);
+  });
+});

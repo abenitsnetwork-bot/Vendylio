@@ -25,6 +25,7 @@ import {
   verifyPassword,
 } from '@/lib/server/auth';
 import { isLockedOut, recordFailure, recordSuccess } from '@/lib/server/auth/lockout';
+import { verifyCaptcha, CAPTCHA_FAILED } from '@/lib/server/auth/captcha';
 import { dummyBcryptCompare } from '@/lib/server/auth/dummy-bcrypt';
 import { createEmailLimiter } from '@/lib/server/middleware/rate-limit-by-email';
 import { getRedis } from '@/lib/server/redis';
@@ -36,6 +37,10 @@ import { log } from '@/lib/server/observability/log';
 const LoginSchema = z.object({
   email: zEmail,
   password: z.string().min(1),
+  // hCaptcha token from the browser widget. Optional in the schema so the
+  // route still parses when captcha is disabled; verifyCaptcha enforces
+  // presence when HCAPTCHA_SECRET is set.
+  captchaToken: z.string().optional(),
 });
 
 // Module-level limiter — D-08: 10 attempts / 15 min per email.
@@ -71,7 +76,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         { status: 400, headers: { 'x-request-id': ctx.requestId } },
       );
     }
-    const { email, password } = parsed.data;
+    const { email, password, captchaToken } = parsed.data;
+
+    // 1b. Captcha — before the rate-limit / lockout / bcrypt work so a bot
+    //     never reaches the expensive path. No-op when hCaptcha is unconfigured.
+    const captcha = await verifyCaptcha(
+      captchaToken,
+      req.headers.get('x-forwarded-for')?.split(',')[0]?.trim(),
+    );
+    if (!captcha.ok) {
+      return NextResponse.json(CAPTCHA_FAILED, {
+        status: 400,
+        headers: { 'x-request-id': ctx.requestId },
+      });
+    }
 
     // 2. Rate limit per email
     const rl = await limiter.check(req, email);

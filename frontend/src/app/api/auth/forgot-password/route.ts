@@ -27,6 +27,7 @@ import { makeRequestContext, withRequestContext } from '@/lib/server/observabili
 import { log } from '@/lib/server/observability/log';
 import { generateVerificationCode } from '@/lib/server/auth';
 import { dummyBcryptCompare } from '@/lib/server/auth/dummy-bcrypt';
+import { verifyCaptcha, CAPTCHA_FAILED } from '@/lib/server/auth/captcha';
 import { enqueueOutbox } from '@/lib/server/outbox';
 
 const VERIFICATION_TTL_MS = Number(process.env.AUTH_VERIFICATION_TTL_MIN ?? 15) * 60 * 1000;
@@ -37,7 +38,7 @@ const VERIFICATION_TTL_MS = Number(process.env.AUTH_VERIFICATION_TTL_MIN ?? 15) 
 // fast Neon-pooler responses. Override via env if observed P99 differs.
 const TARGET_LATENCY_MS = Number(process.env.AUTH_FORGOT_TARGET_LATENCY_MS ?? 350);
 
-const Body = z.object({ email: zEmail });
+const Body = z.object({ email: zEmail, captchaToken: z.string().optional() });
 
 const limiter = createEmailLimiter(redis ? { redis } : {}, {
   bucket: 'auth:forgot',
@@ -64,7 +65,18 @@ export async function POST(req: NextRequest): Promise<Response> {
       res.headers.set('x-request-id', ctx.requestId);
       return res;
     }
-    const { email } = parsed.data;
+    const { email, captchaToken } = parsed.data;
+
+    // Captcha — independent of email existence, before the enumeration branch.
+    const captcha = await verifyCaptcha(
+      captchaToken,
+      req.headers.get('x-forwarded-for')?.split(',')[0]?.trim(),
+    );
+    if (!captcha.ok) {
+      const res = NextResponse.json(CAPTCHA_FAILED, { status: 400 });
+      res.headers.set('x-request-id', ctx.requestId);
+      return res;
+    }
 
     const rateFail = await limiter.check(req, email);
     if (rateFail) return rateFail;

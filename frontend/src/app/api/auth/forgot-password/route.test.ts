@@ -12,10 +12,15 @@ vi.mock('@/lib/server/outbox', () => ({
 vi.mock('@/lib/server/auth/dummy-bcrypt', () => ({
   dummyBcryptCompare: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock('@/lib/server/auth/captcha', () => ({
+  verifyCaptcha: vi.fn().mockResolvedValue({ ok: true, reason: 'DISABLED' }),
+  CAPTCHA_FAILED: { error: 'CAPTCHA_FAILED', message: 'Captcha verification failed.' },
+}));
 
 import { POST } from './route';
 import { dummyBcryptCompare } from '@/lib/server/auth/dummy-bcrypt';
 import { enqueueOutbox } from '@/lib/server/outbox';
+import { verifyCaptcha } from '@/lib/server/auth/captcha';
 
 function makeReq(body: unknown): NextRequest {
   return body === undefined
@@ -32,6 +37,7 @@ function makeReq(body: unknown): NextRequest {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(verifyCaptcha).mockResolvedValue({ ok: true, reason: 'DISABLED' });
   prismaMock.$transaction.mockImplementation((cb: unknown) => {
     if (typeof cb === 'function') {
       return (cb as (tx: typeof prismaMock) => unknown)(prismaMock) as Promise<unknown>;
@@ -41,6 +47,14 @@ beforeEach(() => {
 });
 
 describe('POST /api/auth/forgot-password', () => {
+  it('rejects CAPTCHA_FAILED before the enumeration branch', async () => {
+    vi.mocked(verifyCaptcha).mockResolvedValueOnce({ ok: false, reason: 'REJECTED' });
+    const res = await POST(makeReq({ email: 'a@b.com' }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('CAPTCHA_FAILED');
+    expect(prismaMock.user.findUnique).not.toHaveBeenCalled();
+  });
+
   it('issues a PASSWORD_RESET code + outbox event when the user exists (and runs dummy bcrypt for timing parity)', async () => {
     prismaMock.user.findUnique.mockResolvedValue({ id: 'u1' } as never);
     prismaMock.verificationCode.create.mockResolvedValue({} as never);

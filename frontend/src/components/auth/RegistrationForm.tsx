@@ -7,6 +7,7 @@ import { api, ApiError } from '@/lib/api';
 import { Field, inputClass } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
+import { HCaptchaWidget, hcaptchaEnabled } from '@/components/auth/HCaptchaWidget';
 
 const PASSWORD_MIN = 10;
 
@@ -20,6 +21,8 @@ export function RegistrationForm() {
   const [agreed, setAgreed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState('');
+  const [captchaNonce, setCaptchaNonce] = useState(0);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -39,7 +42,12 @@ export function RegistrationForm() {
       const name = [firstName, lastName].filter(Boolean).join(' ').trim();
       await api('/api/auth/signup', {
         method: 'POST',
-        body: { email, password, ...(name ? { name } : {}) },
+        body: {
+          email,
+          password,
+          ...(name ? { name } : {}),
+          ...(captchaToken ? { captchaToken } : {}),
+        },
       });
       router.push(`/verify-email?email=${encodeURIComponent(email)}`);
     } catch (err) {
@@ -49,10 +57,15 @@ export function RegistrationForm() {
         PASSWORD_PWNED: 'This password appeared in a known data breach.',
         TOO_MANY_SIGNUP_ATTEMPTS: 'Too many attempts. Try again later.',
         VALIDATION_FAILED: 'Please check the fields and try again.',
+        CAPTCHA_FAILED: 'Captcha verification failed. Please try again.',
       };
       setError(
         err instanceof ApiError ? (map[err.code] ?? err.message) : 'Network error. Try again.',
       );
+      if (err instanceof ApiError && err.code === 'CAPTCHA_FAILED') {
+        setCaptchaToken('');
+        setCaptchaNonce((n) => n + 1);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -144,8 +157,14 @@ export function RegistrationForm() {
           </p>
         )}
 
+        <HCaptchaWidget onVerify={setCaptchaToken} resetSignal={captchaNonce} />
+
         <div className="flex flex-col gap-3 pt-2">
-          <Button type="submit" disabled={submitting} className="w-full py-3 text-base">
+          <Button
+            type="submit"
+            disabled={submitting || (hcaptchaEnabled() && !captchaToken)}
+            className="w-full py-3 text-base"
+          >
             {submitting ? 'Creating…' : 'Create Account'}
           </Button>
           <p className="text-center text-sm text-muted-foreground">

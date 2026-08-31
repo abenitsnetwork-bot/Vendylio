@@ -11,6 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { PublicNavBar } from '@/components/marketing/PublicNavBar';
 import { Field, inputClass } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
+import { HCaptchaWidget, hcaptchaEnabled } from '@/components/auth/HCaptchaWidget';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,6 +20,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState('');
+  const [captchaNonce, setCaptchaNonce] = useState(0);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -27,7 +30,7 @@ export default function LoginPage() {
     try {
       const res = await api<{ csrfToken?: string }>('/api/auth/login', {
         method: 'POST',
-        body: { email, password },
+        body: { email, password, ...(captchaToken ? { captchaToken } : {}) },
       });
       if (res.csrfToken) storeCsrfToken(res.csrfToken);
       await refresh();
@@ -44,6 +47,10 @@ export default function LoginPage() {
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Unknown error');
+      if (err instanceof ApiError && err.code === 'CAPTCHA_FAILED') {
+        setCaptchaToken('');
+        setCaptchaNonce((n) => n + 1);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -90,7 +97,12 @@ export default function LoginPage() {
               {error}
             </p>
           )}
-          <Button type="submit" disabled={submitting} className="w-full py-3 text-base">
+          <HCaptchaWidget onVerify={setCaptchaToken} resetSignal={captchaNonce} />
+          <Button
+            type="submit"
+            disabled={submitting || (hcaptchaEnabled() && !captchaToken)}
+            className="w-full py-3 text-base"
+          >
             {submitting ? 'Logging in…' : 'Log in'}
           </Button>
         </form>

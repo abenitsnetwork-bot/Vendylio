@@ -28,9 +28,15 @@ vi.mock('@/lib/server/auth', async () => {
   };
 });
 
+vi.mock('@/lib/server/auth/captcha', () => ({
+  verifyCaptcha: vi.fn().mockResolvedValue({ ok: true, reason: 'DISABLED' }),
+  CAPTCHA_FAILED: { error: 'CAPTCHA_FAILED', message: 'Captcha verification failed.' },
+}));
+
 import { isLockedOut, recordFailure, recordSuccess } from '@/lib/server/auth/lockout';
 import { dummyBcryptCompare } from '@/lib/server/auth/dummy-bcrypt';
 import { verifyPassword } from '@/lib/server/auth';
+import { verifyCaptcha } from '@/lib/server/auth/captcha';
 import { POST } from './route';
 import { NextRequest } from 'next/server';
 
@@ -52,6 +58,7 @@ beforeEach(() => {
   vi.mocked(isLockedOut).mockResolvedValue(false);
   vi.mocked(recordFailure).mockResolvedValue({ count: 1, locked: false });
   vi.mocked(recordSuccess).mockResolvedValue(undefined);
+  vi.mocked(verifyCaptcha).mockResolvedValue({ ok: true, reason: 'DISABLED' });
   vi.mocked(dummyBcryptCompare).mockResolvedValue(undefined);
   vi.mocked(verifyPassword).mockResolvedValue(false);
 });
@@ -77,6 +84,15 @@ describe('POST /api/auth/login', () => {
     expect(__cookieStore.has('app-token')).toBe(true);
     expect(__cookieStore.has('app-refresh')).toBe(true);
     expect(__cookieStore.has('app-csrf')).toBe(true);
+  });
+
+  it('rejects with CAPTCHA_FAILED before any user lookup when the captcha fails', async () => {
+    vi.mocked(verifyCaptcha).mockResolvedValueOnce({ ok: false, reason: 'REJECTED' });
+    const res = await POST(makeReq({ email: 'a@b.com', password: 'longenough' }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('CAPTCHA_FAILED');
+    expect(prismaMock.user.findUnique).not.toHaveBeenCalled();
+    expect(verifyPassword).not.toHaveBeenCalled();
   });
 
   it('surfaces mustChangePassword when an admin issued a temp password', async () => {
