@@ -68,10 +68,49 @@ auto-cancelled or auto-refunded by a delivery failure.
 the whole platform, in server env vars. The merchant UI toggles methods on and
 off; it never stores a secret.
 
-## Later phases
+## The safe payment sequence
 
-- **Phase 2** — safe payment sequence (`markPaid` → `initFulfillment` PENDING),
-  the `fulfillment-tick` cron (dispatch + poll + quote purge).
-- **Phase 3** — real DoorDash Drive adapter + webhook + normalized checkout quotes.
-- **Phase 4** — multi-method checkout, server re-quote, tracking DTO.
-- **Phase 5** — merchant config UI, order-detail fulfillment card, cancel, docs, security sweep.
+```
+Checkout → POST /api/orders (priceDeliveryForOrder — authoritative fee)
+         → Stripe → PAID
+         → markPaid.initFulfillment  →  Delivery { state: PENDING }   (no external call)
+         → fulfillment-tick cron     →  createFulfillment  →  provider.createDelivery
+                                     →  Delivery { state: REQUESTED, externalDeliveryId }
+         → webhook / poll            →  applyCourierWebhookEvent / handleProviderEvent
+                                     →  … CONFIRMED → PICKED_UP → OUT_FOR_DELIVERY → DELIVERED
+```
+
+A paid order whose courier request permanently fails: `Order` stays PAID, the
+`Delivery` goes `FAILED` with a `failureReason`, the merchant gets a
+`FULFILLMENT_FAILED` notification and a **Retry** button on the order detail
+page. Never an auto-cancel, never an auto-refund.
+
+## Idempotency & concurrency
+
+| Layer | Mechanism |
+|---|---|
+| one Delivery per order | `Delivery.orderId @unique` + `markPaid` upsert in the payment tx |
+| one dispatch per Delivery | `fulfillment-tick` claim (`state PENDING → DISPATCHING`) + `attemptCount` |
+| cross-worker | `pg_advisory_xact_lock(hashtext(deliveryId))` in every Delivery-mutating service tx |
+| provider-level | stable `externalDeliveryId` (`vend_<id>`); DoorDash `duplicate_delivery_id` → GET + hydrate |
+| webhook / poll replay | `DeliveryEvent @@unique([deliveryId, providerEventId])` (poll keyed `poll:<rawStatus>`) |
+
+## Routes
+
+| Route | Purpose |
+|---|---|
+| `POST /api/stores/[slug]/delivery-quote` | checkout option array (public) |
+| `POST /api/orders` | authoritative fee via `priceDeliveryForOrder` |
+| `GET`/`PATCH /api/stores/fulfillment` | merchant per-method config |
+| `POST /api/stores/fulfillment/test-connection` | safe credential probe |
+| `POST`/`PATCH /api/orders/[id]/delivery` | seller "request delivery" (dispatch now) / "mark delivered" |
+| `POST /api/orders/[id]/delivery/cancel` | seller cancel (courier may refuse → 409) |
+| `POST /api/webhooks/{uber-direct,doordash}` | courier status webhooks |
+| `POST /api/cron/fulfillment-tick` | dispatch + poll + quote purge (every 2 min) |
+
+## Non-goals (V1)
+
+No driver app, no payroll, no fleet management, no route optimization, no AI, no
+marketplace commission on delivery, no automatic provider failover, no partial
+refunds, no distance-based merchant pricing, no multi-currency (US/USD default,
+core code stays country-agnostic).

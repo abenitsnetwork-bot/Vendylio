@@ -64,5 +64,6 @@ describe('CLAUDE.md doc tripwire (DOC-01)', () => {
     expect(content).toMatch(/webhook/i);
     expect(content).toMatch(/withdrawal/i);
     expect(content).toMatch(/upload/i);
+    expect(content).toMatch(/fulfillment/i);
   });
 });

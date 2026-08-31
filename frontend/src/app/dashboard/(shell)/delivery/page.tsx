@@ -13,12 +13,33 @@ import { SellerHeader } from '@/components/seller/SellerHeader';
 import { formatUsd, type SellerOrder } from '@/components/seller/OrdersTable';
 import { formatOrderNumber } from '@/lib/orderNumber';
 
-interface DashboardStore {
-  id: string;
-  deliveryFeeCents: number;
-  deliveryProvider: string;
-  pickupAddress: string | null;
+type ConfigState = 'CONFIGURED' | 'ENABLED' | 'DISABLED' | 'UNAVAILABLE';
+
+interface FulfillmentConfig {
+  pickup: { enabled: boolean; instructions: string | null };
+  merchant: {
+    enabled: boolean;
+    feeCents: number;
+    minOrderCents: number;
+    instructions: string | null;
+  };
+  uberDirect: { enabled: boolean };
+  doordash: { enabled: boolean };
+  customerChoosesProvider: boolean;
 }
+
+interface SettingsResponse {
+  config: FulfillmentConfig;
+  providerStates: Record<string, ConfigState>;
+  warnings?: { provider: string; message: string }[];
+}
+
+const STATE_BADGE: Record<ConfigState, { label: string; cls: string }> = {
+  ENABLED: { label: 'Connected', cls: 'bg-green-100 text-green-700' },
+  CONFIGURED: { label: 'Ready', cls: 'bg-secondary text-muted-foreground' },
+  DISABLED: { label: 'Off', cls: 'bg-secondary text-muted-foreground' },
+  UNAVAILABLE: { label: 'Needs setup', cls: 'bg-amber-100 text-amber-800' },
+};
 
 function OrderRow({
   order,
@@ -31,9 +52,6 @@ function OrderRow({
   actionLabel?: string;
   onAction?: () => void;
   busy?: boolean;
-  /** When set, renders in place of the action button — used for orders a
-   * real courier (Uber Direct) handles, where clicking wouldn't do anything
-   * useful since completion arrives via webhook, not a seller click. */
   note?: string;
 }) {
   return (
@@ -69,40 +87,61 @@ function OrderRow({
   );
 }
 
+function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={() => onChange(!on)}
+      className={`relative h-6 w-11 flex-shrink-0 rounded-full transition-colors ${
+        on ? 'bg-primary' : 'bg-border'
+      }`}
+    >
+      <span
+        className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+          on ? 'translate-x-5' : 'translate-x-0.5'
+        }`}
+      />
+    </button>
+  );
+}
+
 export default function DeliveryPage() {
   const user = useUser();
   const { logout } = useAuth();
-  const [store, setStore] = useState<DashboardStore | null>(null);
-  const [feeInput, setFeeInput] = useState('');
-  const [providerInput, setProviderInput] = useState('self_manual');
-  const [pickupAddressInput, setPickupAddressInput] = useState('');
+  const [settings, setSettings] = useState<SettingsResponse | null>(null);
+  const [cfg, setCfg] = useState<FulfillmentConfig | null>(null);
+  const [merchantFee, setMerchantFee] = useState('');
+  const [merchantMin, setMerchantMin] = useState('');
   const [needsDelivery, setNeedsDelivery] = useState<SellerOrder[] | null>(null);
   const [outForDelivery, setOutForDelivery] = useState<SellerOrder[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [warning, setWarning] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [testResult, setTestResult] = useState<{
+    provider: string;
+    ok: boolean;
+    detail: string;
+  } | null>(null);
   const [busyOrderId, setBusyOrderId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     Promise.all([
-      api<{ store: DashboardStore }>('/api/stores/me'),
+      api<SettingsResponse>('/api/stores/fulfillment'),
       api<{ items: SellerOrder[] }>('/api/orders?status=READY'),
       api<{ items: SellerOrder[] }>('/api/orders?status=OUT_FOR_DELIVERY'),
     ])
-      .then(([storeRes, readyRes, outRes]) => {
-        setStore(storeRes.store);
-        setFeeInput((storeRes.store.deliveryFeeCents / 100).toFixed(2));
-        setProviderInput(storeRes.store.deliveryProvider);
-        setPickupAddressInput(storeRes.store.pickupAddress ?? '');
-        // PICKUP orders never involve a courier — they don't belong in this
-        // page's queues at all (they're managed from the generic Orders
-        // list/detail instead, via "Mark Picked Up").
+      .then(([s, readyRes, outRes]) => {
+        setSettings(s);
+        setCfg(s.config);
+        setMerchantFee((s.config.merchant.feeCents / 100).toFixed(2));
+        setMerchantMin((s.config.merchant.minOrderCents / 100).toFixed(2));
         setNeedsDelivery(readyRes.items.filter((o) => o.fulfillmentMethod !== 'PICKUP'));
         setOutForDelivery(outRes.items.filter((o) => o.fulfillmentMethod !== 'PICKUP'));
       })
-      .catch((err) => {
-        setError(err instanceof ApiError ? err.message : 'Could not load delivery data.');
-      });
+      .catch((err) =>
+        setError(err instanceof ApiError ? err.message : 'Could not load delivery settings.'),
+      );
   }, []);
 
   useEffect(() => {
@@ -110,35 +149,64 @@ export default function DeliveryPage() {
     load();
   }, [user, load]);
 
-  async function saveSettings(e: FormEvent) {
+  async function save(e: FormEvent) {
     e.preventDefault();
-    const cents = Math.round(Number(feeInput) * 100);
-    if (!Number.isFinite(cents) || cents < 0) {
-      setError('Enter a valid delivery fee.');
-      return;
-    }
-    if (providerInput === 'uber_direct' && !pickupAddressInput.trim()) {
-      setError('Set a pickup address before switching to Uber Direct.');
+    if (!cfg) return;
+    const feeCents = Math.round(Number(merchantFee) * 100);
+    const minOrderCents = Math.round(Number(merchantMin) * 100);
+    if (
+      !Number.isFinite(feeCents) ||
+      feeCents < 0 ||
+      !Number.isFinite(minOrderCents) ||
+      minOrderCents < 0
+    ) {
+      setError('Enter valid amounts for the merchant-delivery fee and minimum.');
       return;
     }
     setSaving(true);
     setError(null);
-    setWarning(null);
     try {
-      const res = await api<{ deliverabilityWarning?: string }>('/api/stores', {
+      const res = await api<SettingsResponse>('/api/stores/fulfillment', {
         method: 'PATCH',
         body: {
-          deliveryFeeCents: cents,
-          deliveryProvider: providerInput,
-          pickupAddress: pickupAddressInput.trim() || null,
+          pickup: { enabled: cfg.pickup.enabled, instructions: cfg.pickup.instructions },
+          merchant: {
+            enabled: cfg.merchant.enabled,
+            feeCents,
+            minOrderCents,
+            instructions: cfg.merchant.instructions,
+          },
+          uberDirect: { enabled: cfg.uberDirect.enabled },
+          doordash: { enabled: cfg.doordash.enabled },
+          customerChoosesProvider: cfg.customerChoosesProvider,
         },
       });
-      if (res.deliverabilityWarning) setWarning(res.deliverabilityWarning);
-      load();
+      setSettings(res);
+      setCfg(res.config);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save delivery settings.');
+      setError(err instanceof ApiError ? err.message : 'Could not save.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function testConnection(provider: 'UBER_DIRECT' | 'DOORDASH') {
+    setTestResult(null);
+    try {
+      const r = await api<{ ok: boolean; detail: string }>(
+        '/api/stores/fulfillment/test-connection',
+        {
+          method: 'POST',
+          body: { provider },
+        },
+      );
+      setTestResult({ provider, ...r });
+    } catch (err) {
+      setTestResult({
+        provider,
+        ok: false,
+        detail: err instanceof ApiError ? err.message : 'Test failed.',
+      });
     }
   }
 
@@ -169,6 +237,7 @@ export default function DeliveryPage() {
   }
 
   if (!user) return null;
+  const states = settings?.providerStates ?? {};
 
   return (
     <div className="min-h-screen bg-background font-body">
@@ -192,151 +261,246 @@ export default function DeliveryPage() {
             className="mb-2 font-headings font-bold text-foreground"
             style={{ fontSize: 'clamp(26px, 5vw, 36px)', letterSpacing: '-0.8px' }}
           >
-            Delivery
+            Delivery &amp; Fulfillment
           </h1>
           <p className="mb-10 text-base text-muted-foreground">
-            {store?.deliveryProvider === 'uber_direct'
-              ? 'A courier picks up and delivers your orders via Uber Direct.'
-              : 'You deliver your own orders — no courier setup required.'}
+            Choose how customers get their orders. Turn methods on and off — only connected,
+            serviceable methods appear at checkout.
           </p>
 
           {error && <p className="mb-6 text-sm text-red-600">{error}</p>}
-          {warning && (
-            <p className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-              ⚠️ {warning}
-            </p>
+
+          {cfg && (
+            <Card className="mb-8 p-8">
+              <h2 className="mb-6 border-b border-border pb-6 font-headings text-lg font-bold text-foreground">
+                Delivery methods
+              </h2>
+              <form onSubmit={save} className="space-y-5">
+                {/* Uber Direct */}
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      Uber Direct{' '}
+                      {states.UBER_DIRECT && (
+                        <span
+                          className={`ml-1 rounded px-1.5 py-0.5 text-[11px] font-semibold ${STATE_BADGE[states.UBER_DIRECT].cls}`}
+                        >
+                          {STATE_BADGE[states.UBER_DIRECT].label}
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      On-demand courier network.{' '}
+                      <button
+                        type="button"
+                        onClick={() => testConnection('UBER_DIRECT')}
+                        className="font-medium text-primary underline"
+                      >
+                        Test connection
+                      </button>
+                    </p>
+                  </div>
+                  <Toggle
+                    on={cfg.uberDirect.enabled}
+                    onChange={(v) => setCfg({ ...cfg, uberDirect: { enabled: v } })}
+                  />
+                </div>
+
+                {/* DoorDash */}
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      DoorDash{' '}
+                      {states.DOORDASH && (
+                        <span
+                          className={`ml-1 rounded px-1.5 py-0.5 text-[11px] font-semibold ${STATE_BADGE[states.DOORDASH].cls}`}
+                        >
+                          {STATE_BADGE[states.DOORDASH].label}
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      DoorDash Drive courier network.{' '}
+                      <button
+                        type="button"
+                        onClick={() => testConnection('DOORDASH')}
+                        className="font-medium text-primary underline"
+                      >
+                        Test connection
+                      </button>
+                    </p>
+                  </div>
+                  <Toggle
+                    on={cfg.doordash.enabled}
+                    onChange={(v) => setCfg({ ...cfg, doordash: { enabled: v } })}
+                  />
+                </div>
+
+                {testResult && (
+                  <p
+                    className={`rounded-lg p-3 text-xs ${
+                      testResult.ok ? 'bg-green-50 text-green-800' : 'bg-amber-50 text-amber-900'
+                    }`}
+                  >
+                    {testResult.provider}: {testResult.detail}
+                  </p>
+                )}
+
+                {/* Merchant delivery */}
+                <div className="border-t border-border pt-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Merchant delivery</p>
+                      <p className="text-xs text-muted-foreground">You deliver orders yourself.</p>
+                    </div>
+                    <Toggle
+                      on={cfg.merchant.enabled}
+                      onChange={(v) =>
+                        setCfg({ ...cfg, merchant: { ...cfg.merchant, enabled: v } })
+                      }
+                    />
+                  </div>
+                  {cfg.merchant.enabled && (
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                      <Field label="Delivery fee ($)" htmlFor="mFee">
+                        <input
+                          id="mFee"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className={inputClass}
+                          value={merchantFee}
+                          onChange={(e) => setMerchantFee(e.target.value)}
+                        />
+                      </Field>
+                      <Field label="Minimum order ($, 0 = none)" htmlFor="mMin">
+                        <input
+                          id="mMin"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className={inputClass}
+                          value={merchantMin}
+                          onChange={(e) => setMerchantMin(e.target.value)}
+                        />
+                      </Field>
+                      <Field label="Delivery instructions (optional)" htmlFor="mInstr">
+                        <input
+                          id="mInstr"
+                          type="text"
+                          className={inputClass}
+                          value={cfg.merchant.instructions ?? ''}
+                          onChange={(e) =>
+                            setCfg({
+                              ...cfg,
+                              merchant: { ...cfg.merchant, instructions: e.target.value || null },
+                            })
+                          }
+                        />
+                      </Field>
+                    </div>
+                  )}
+                </div>
+
+                {/* Pickup */}
+                <div className="border-t border-border pt-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Customer pickup</p>
+                      <p className="text-xs text-muted-foreground">
+                        Buyers collect in person at your store address.
+                      </p>
+                    </div>
+                    <Toggle
+                      on={cfg.pickup.enabled}
+                      onChange={(v) => setCfg({ ...cfg, pickup: { ...cfg.pickup, enabled: v } })}
+                    />
+                  </div>
+                  {cfg.pickup.enabled && (
+                    <Field label="Pickup instructions (optional)" htmlFor="pInstr">
+                      <input
+                        id="pInstr"
+                        type="text"
+                        className={inputClass}
+                        value={cfg.pickup.instructions ?? ''}
+                        onChange={(e) =>
+                          setCfg({
+                            ...cfg,
+                            pickup: { ...cfg.pickup, instructions: e.target.value || null },
+                          })
+                        }
+                      />
+                    </Field>
+                  )}
+                </div>
+
+                {/* Customer choice */}
+                <label className="flex items-center gap-3 border-t border-border pt-5 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={cfg.customerChoosesProvider}
+                    onChange={(e) => setCfg({ ...cfg, customerChoosesProvider: e.target.checked })}
+                  />
+                  <span className="text-foreground">
+                    Let customers choose their courier when more than one is available
+                    <span className="block text-xs text-muted-foreground">
+                      Off = the cheapest serviceable option is used automatically.
+                    </span>
+                  </span>
+                </label>
+
+                <Button type="submit" disabled={saving} className="mt-2">
+                  {saving ? 'Saving…' : 'Save settings'}
+                </Button>
+                {settings?.warnings?.map((w) => (
+                  <p key={w.provider} className="text-xs text-amber-700">
+                    ⚠️ {w.message}
+                  </p>
+                ))}
+              </form>
+            </Card>
           )}
 
           <Card className="mb-8 p-8">
             <h2 className="mb-6 border-b border-border pb-6 font-headings text-lg font-bold text-foreground">
-              Delivery Provider
-            </h2>
-            <form onSubmit={saveSettings}>
-              <button
-                type="button"
-                onClick={() => setProviderInput('self_manual')}
-                className={`mb-4 flex w-full items-center justify-between rounded-lg border p-4 text-left ${
-                  providerInput === 'self_manual' ? 'border-primary bg-secondary' : 'border-border'
-                }`}
-              >
-                <div>
-                  <p className="text-sm font-semibold text-foreground">Self / Manual</p>
-                  <p className="text-xs text-muted-foreground">
-                    You deliver orders yourself. Works out of the box.
-                  </p>
-                </div>
-                {providerInput === 'self_manual' && (
-                  <span className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">
-                    Selected
-                  </span>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => setProviderInput('uber_direct')}
-                className={`mb-6 flex w-full items-center justify-between rounded-lg border p-4 text-left ${
-                  providerInput === 'uber_direct' ? 'border-primary bg-secondary' : 'border-border'
-                }`}
-              >
-                <div>
-                  <p className="text-sm font-semibold text-foreground">Uber Direct</p>
-                  <p className="text-xs text-muted-foreground">
-                    On-demand courier network — a real courier picks up and delivers for you.
-                  </p>
-                </div>
-                {providerInput === 'uber_direct' && (
-                  <span className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">
-                    Selected
-                  </span>
-                )}
-              </button>
-
-              {providerInput === 'uber_direct' && (
-                <Field
-                  label="Pickup Address (where the courier collects orders)"
-                  htmlFor="pickupAddress"
-                >
-                  <input
-                    id="pickupAddress"
-                    type="text"
-                    placeholder="123 Main St, Springfield, IL 62704"
-                    className={inputClass}
-                    value={pickupAddressInput}
-                    onChange={(e) => setPickupAddressInput(e.target.value)}
-                  />
-                </Field>
-              )}
-
-              <Field label="Delivery Fee (charged to customers at checkout)" htmlFor="deliveryFee">
-                <div className="relative">
-                  <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-muted-foreground">
-                    $
-                  </span>
-                  <input
-                    id="deliveryFee"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    className={`${inputClass} pl-7`}
-                    value={feeInput}
-                    onChange={(e) => setFeeInput(e.target.value)}
-                  />
-                </div>
-              </Field>
-              <Button type="submit" disabled={saving || !store} className="mt-4">
-                {saving ? 'Saving…' : 'Save Delivery Settings'}
-              </Button>
-            </form>
-          </Card>
-
-          <Card className="mb-8 p-8">
-            <h2 className="mb-6 border-b border-border pb-6 font-headings text-lg font-bold text-foreground">
-              Needs Delivery
+              Needs delivery
             </h2>
             {needsDelivery === null && <p className="text-sm text-muted-foreground">Loading…</p>}
-            {needsDelivery !== null && needsDelivery.length === 0 && (
+            {needsDelivery?.length === 0 && (
               <p className="text-sm text-muted-foreground">No orders ready for delivery.</p>
             )}
-            {needsDelivery && needsDelivery.length > 0 && (
-              <div className="space-y-2">
-                {needsDelivery.map((order) => (
-                  <OrderRow
-                    key={order.id}
-                    order={order}
-                    actionLabel="Request Delivery"
-                    onAction={() => requestDelivery(order.id)}
-                    busy={busyOrderId === order.id}
-                  />
-                ))}
-              </div>
-            )}
+            <div className="space-y-2">
+              {needsDelivery?.map((order) => (
+                <OrderRow
+                  key={order.id}
+                  order={order}
+                  actionLabel="Request delivery"
+                  onAction={() => requestDelivery(order.id)}
+                  busy={busyOrderId === order.id}
+                />
+              ))}
+            </div>
           </Card>
 
           <Card className="p-8">
             <h2 className="mb-6 border-b border-border pb-6 font-headings text-lg font-bold text-foreground">
-              Out for Delivery
+              Out for delivery
             </h2>
             {outForDelivery === null && <p className="text-sm text-muted-foreground">Loading…</p>}
-            {outForDelivery !== null && outForDelivery.length === 0 && (
+            {outForDelivery?.length === 0 && (
               <p className="text-sm text-muted-foreground">Nothing out for delivery right now.</p>
             )}
-            {outForDelivery && outForDelivery.length > 0 && (
-              <div className="space-y-2">
-                {outForDelivery.map((order) =>
-                  store?.deliveryProvider === 'uber_direct' ? (
-                    <OrderRow key={order.id} order={order} note="Waiting for courier" />
-                  ) : (
-                    <OrderRow
-                      key={order.id}
-                      order={order}
-                      actionLabel="Mark Delivered"
-                      onAction={() => markDelivered(order.id)}
-                      busy={busyOrderId === order.id}
-                    />
-                  ),
-                )}
-              </div>
-            )}
+            <div className="space-y-2">
+              {outForDelivery?.map((order) => (
+                <OrderRow
+                  key={order.id}
+                  order={order}
+                  actionLabel="Mark delivered"
+                  onAction={() => markDelivered(order.id)}
+                  busy={busyOrderId === order.id}
+                />
+              ))}
+            </div>
           </Card>
         </div>
       </div>

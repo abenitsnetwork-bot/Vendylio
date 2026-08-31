@@ -96,8 +96,17 @@ export async function GET(req: NextRequest, ctx: RouteCtx): Promise<NextResponse
       prisma.delivery.findUnique({ where: { orderId: order.id } }),
     ]);
 
+    // Prompt #12 — the fulfillment card's event history (append-only).
+    const deliveryEvents = delivery
+      ? await prisma.deliveryEvent.findMany({
+          where: { deliveryId: delivery.id },
+          orderBy: { createdAt: 'asc' },
+          select: { state: true, providerStatus: true, source: true, createdAt: true },
+        })
+      : [];
+
     return NextResponse.json(
-      { order, statusEvents, delivery },
+      { order, statusEvents, delivery, deliveryEvents },
       { headers: { 'x-request-id': reqCtx.requestId } },
     );
   });

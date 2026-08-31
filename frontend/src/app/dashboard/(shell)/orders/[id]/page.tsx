@@ -22,10 +22,42 @@ interface StatusEvent {
 interface DeliveryInfo {
   id: string;
   status: string;
+  state: string;
   provider: string;
+  providerType: string | null;
   trackingUrl: string | null;
   deliveredAt: string | null;
+  estimatedPickupAt: string | null;
+  estimatedDropoffAt: string | null;
+  failureReason: string | null;
+  attemptCount: number;
 }
+
+interface DeliveryEvent {
+  state: string;
+  providerStatus: string | null;
+  source: string;
+  createdAt: string;
+}
+
+const PROVIDER_LABEL: Record<string, string> = {
+  UBER_DIRECT: 'Uber',
+  DOORDASH: 'DoorDash',
+  MERCHANT: 'Merchant delivery',
+  PICKUP: 'Pickup',
+};
+const DELIVERY_STATE_LABEL: Record<string, string> = {
+  PENDING: 'Setup pending',
+  QUOTED: 'Setup pending',
+  REQUESTED: 'Courier requested',
+  CONFIRMED: 'Courier assigned',
+  PICKED_UP: 'Picked up',
+  OUT_FOR_DELIVERY: 'On the way',
+  DELIVERED: 'Delivered',
+  CANCELLED: 'Cancelled',
+  FAILED: 'Setup failed',
+};
+const COURIER_TYPES = new Set(['UBER_DIRECT', 'DOORDASH']);
 
 interface NextAction {
   label: string;
@@ -68,17 +100,22 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [order, setOrder] = useState<SellerOrder | null>(null);
   const [statusEvents, setStatusEvents] = useState<StatusEvent[]>([]);
   const [delivery, setDelivery] = useState<DeliveryInfo | null>(null);
+  const [deliveryEvents, setDeliveryEvents] = useState<DeliveryEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
 
   const load = useCallback(() => {
-    api<{ order: SellerOrder; statusEvents: StatusEvent[]; delivery: DeliveryInfo | null }>(
-      `/api/orders/${id}`,
-    )
+    api<{
+      order: SellerOrder;
+      statusEvents: StatusEvent[];
+      delivery: DeliveryInfo | null;
+      deliveryEvents: DeliveryEvent[];
+    }>(`/api/orders/${id}`)
       .then((res) => {
         setOrder(res.order);
         setStatusEvents(res.statusEvents);
         setDelivery(res.delivery);
+        setDeliveryEvents(res.deliveryEvents ?? []);
       })
       .catch((err) => {
         const message =
@@ -104,6 +141,33 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not update this order.');
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  async function retryDelivery() {
+    setUpdating(true);
+    setError(null);
+    try {
+      await api(`/api/orders/${id}/delivery`, { method: 'POST' });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not retry the delivery.');
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  async function cancelDelivery() {
+    if (!window.confirm('Cancel this delivery? The order stays paid.')) return;
+    setUpdating(true);
+    setError(null);
+    try {
+      await api(`/api/orders/${id}/delivery/cancel`, { method: 'POST', body: {} });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not cancel this delivery.');
     } finally {
       setUpdating(false);
     }
@@ -277,6 +341,85 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 </Card>
               )}
 
+              {delivery && order.fulfillmentMethod === 'DELIVERY' && (
+                <Card className="mb-6">
+                  <p className="mb-3 text-sm font-semibold text-foreground">Fulfillment</p>
+                  <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+                    <dt className="text-muted-foreground">Method</dt>
+                    <dd className="text-foreground">
+                      {PROVIDER_LABEL[delivery.providerType ?? ''] ??
+                        delivery.provider.replaceAll('_', ' ')}
+                    </dd>
+                    <dt className="text-muted-foreground">Status</dt>
+                    <dd className="text-foreground">
+                      {DELIVERY_STATE_LABEL[delivery.state] ?? delivery.state}
+                    </dd>
+                    {delivery.estimatedDropoffAt && (
+                      <>
+                        <dt className="text-muted-foreground">Est. dropoff</dt>
+                        <dd className="text-foreground">
+                          {new Date(delivery.estimatedDropoffAt).toLocaleString()}
+                        </dd>
+                      </>
+                    )}
+                    {delivery.failureReason && (
+                      <>
+                        <dt className="text-muted-foreground">Last error</dt>
+                        <dd className="text-red-600">{delivery.failureReason}</dd>
+                      </>
+                    )}
+                  </dl>
+
+                  {delivery.trackingUrl && (
+                    <a
+                      href={delivery.trackingUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-3 inline-block text-sm font-medium text-primary underline"
+                    >
+                      Open courier tracking
+                    </a>
+                  )}
+
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    {(delivery.state === 'FAILED' || delivery.state === 'PENDING') &&
+                      order.status === 'READY' && (
+                        <button
+                          type="button"
+                          disabled={updating}
+                          onClick={retryDelivery}
+                          className="rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+                        >
+                          {delivery.state === 'FAILED' ? 'Retry delivery' : 'Dispatch now'}
+                        </button>
+                      )}
+                    {COURIER_TYPES.has(delivery.providerType ?? '') &&
+                      !['DELIVERED', 'CANCELLED', 'FAILED'].includes(delivery.state) && (
+                        <button
+                          type="button"
+                          disabled={updating}
+                          onClick={cancelDelivery}
+                          className="rounded-lg border border-red-200 bg-white px-4 py-2 text-xs font-semibold text-red-600 disabled:opacity-50"
+                        >
+                          Cancel delivery
+                        </button>
+                      )}
+                  </div>
+
+                  {deliveryEvents.length > 0 && (
+                    <ul className="mt-4 space-y-1 border-t border-border pt-3 text-xs text-muted-foreground">
+                      {deliveryEvents.map((ev, i) => (
+                        <li key={i}>
+                          {new Date(ev.createdAt).toLocaleString()} —{' '}
+                          {DELIVERY_STATE_LABEL[ev.state] ?? ev.state}
+                          {ev.providerStatus ? ` (${ev.providerStatus})` : ''}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Card>
+              )}
+
               {order.status === 'READY' && (
                 <Card className="mb-6">
                   <p className="mb-4 text-sm font-semibold text-foreground">Update status</p>
@@ -321,7 +464,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     </p>
                   )}
                   <div className="flex flex-wrap gap-3">
-                    {delivery?.provider === 'uber_direct' ? (
+                    {COURIER_TYPES.has(delivery?.providerType ?? '') ? (
                       <span className="rounded-lg bg-secondary px-4 py-2 text-sm font-medium text-muted-foreground">
                         Waiting for courier confirmation
                       </span>
