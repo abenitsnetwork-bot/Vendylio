@@ -36,14 +36,22 @@ const rows: Row[] = [];
 const add = (provider: string, operation: string, result: Result, notes = '') =>
   rows.push({ provider, operation, result, notes });
 
-/** A known-serviceable US test route (Uber's own docs use this SF pair). */
-const TEST_PICKUP = '425 Market St, San Francisco, CA 94105';
+/**
+ * A known-serviceable US test route. Uber's docs use this SF pair; DoorDash
+ * sandbox geocodes it fine. Override with SANDBOX_TEST_* if a provider's
+ * sandbox is fussier about addresses.
+ * Phone numbers use the 650 area code (DoorDash's own doc examples) — a fake
+ * area code like 555 gets a `validation_error`.
+ */
+const TEST_PICKUP = process.env.SANDBOX_TEST_PICKUP || '425 Market St, San Francisco, CA 94105';
 const TEST_DROPOFF_BLOB = {
-  street: '201 3rd St',
-  city: 'San Francisco',
-  state: 'CA',
-  zip: '94103',
+  street: process.env.SANDBOX_TEST_DROPOFF_STREET || '201 3rd St',
+  city: process.env.SANDBOX_TEST_DROPOFF_CITY || 'San Francisco',
+  state: process.env.SANDBOX_TEST_DROPOFF_STATE || 'CA',
+  zip: process.env.SANDBOX_TEST_DROPOFF_ZIP || '94103',
 };
+const TEST_PICKUP_PHONE = process.env.SANDBOX_TEST_PICKUP_PHONE || '+16505555555';
+const TEST_DROPOFF_PHONE = process.env.SANDBOX_TEST_DROPOFF_PHONE || '+16505555556';
 
 function short(err: unknown): string {
   const m = err instanceof Error ? err.message : String(err);
@@ -91,9 +99,9 @@ async function checkCourier(
   try {
     const q = await provider.quote({
       pickupAddress: TEST_PICKUP,
-      pickupPhone: '+15555550100',
+      pickupPhone: TEST_PICKUP_PHONE,
       dropoffAddress: TEST_DROPOFF_BLOB,
-      dropoffPhone: '+15555550111',
+      dropoffPhone: TEST_DROPOFF_PHONE,
       subtotalCents: 2500,
       currency: 'USD',
     });
@@ -133,9 +141,9 @@ async function checkCourier(
       storeId: 'sandbox-check',
       storeName: 'Vendylio Sandbox Check',
       pickupAddress: TEST_PICKUP,
-      pickupPhone: '+15555550100',
+      pickupPhone: TEST_PICKUP_PHONE,
       customerName: 'Sandbox Tester',
-      customerPhone: '+15555550111',
+      customerPhone: TEST_DROPOFF_PHONE,
       dropoffAddress: TEST_DROPOFF_BLOB,
       subtotalCents: 2500,
       currency: 'USD',

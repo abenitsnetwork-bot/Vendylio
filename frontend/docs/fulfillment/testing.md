@@ -55,14 +55,23 @@ flag. Full walkthrough incl. the webhook loop: `sandbox-runbook.md`.
 | Uber | Auth / Quote / Create / Status / Cancel / Webhook / Signature | PASS/BLOCKED/FAIL | |
 | DoorDash | Auth / Quote / Create / Status / Cancel / Webhook / Signature | PASS/BLOCKED/FAIL | |
 
-### Recorded result — 2026-08-31
+### Recorded result — 2026-08-31 / 2026-09-01
 
 | Provider | Operation | Result | Evidence |
 |----------|-----------|--------|----------|
 | Uber Direct | Auth | **PASS** | real 177-char OAuth token from `login.uber.com` |
-| Uber Direct | Quote / Create / Status / Cancel / Webhook | **BLOCKED** | Uber account disabled — `400 invalid_params`, `param_details: "This account has been disabled … directbilling-group@uber.com"` |
-| DoorDash | all | **BLOCKED_BY_CREDENTIALS** | no `DOORDASH_*` configured |
+| Uber Direct | Quote / Create / Status / Cancel / Webhook | **BLOCKED** | app has no Client-Credentials scopes ("contact your Uber business development representative"); account also flagged disabled (`directbilling-group@uber.com`). Uber Direct is **sales-gated, not self-serve.** |
+| DoorDash | Auth | **PASS** | self-signed JWT accepted by `openapi.doordash.com/drive/v2` |
+| DoorDash | Quote | **PASS** | live quote, `fee: 975` (USD) for the SF test pair |
+| DoorDash | Create | **PASS** | `POST /deliveries` → `delivery_status: created` → normalized `REQUESTED` |
+| DoorDash | Status | **PASS** | `GET /deliveries/{id}` → `created` → `REQUESTED` |
+| DoorDash | Cancel | **PASS** | `PUT /deliveries/{id}/cancel` → `200 cancelled` (sandbox blocks cancel for ~60 s after create; the adapter surfaces "try again in 1 minute" gracefully, no crash) |
+| DoorDash | Webhook / Signature | **PENDING** | needs a public tunnel + dashboard webhook registration (runbook step 5) |
 | Both | offline adapter / webhook-signature / JWT / security audit | **PASS** | full mocked suite + code audit |
+
+DoorDash Drive account is "Pending activation" (production) but the sandbox is
+live on the same host + credentials — the full quote → create → status → cancel
+cycle is validated against the real API.
 
 "Mock automated tests: PASS" and "Uber sandbox: BLOCKED" are both honest,
 distinct results — a `PASS` here means a real sandbox call succeeded, nothing

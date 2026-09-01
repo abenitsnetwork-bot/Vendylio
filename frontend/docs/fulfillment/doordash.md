@@ -73,15 +73,23 @@ The merchant "Test connection" button (`POST /api/stores/fulfillment/test-connec
 Phase 5) does a `GET` for a random nonexistent delivery id — a `404` proves the
 JWT authenticated and **never dispatches a driver**.
 
-## Sandbox validation status — 2026-08-31
+## Sandbox validation status — 2026-09-01
 
-**BLOCKED_BY_CREDENTIALS.** No `DOORDASH_*` credentials are configured, so no
-operation (auth, quote, create, status, cancel, webhook, signature) has been
-exercised against the real DoorDash sandbox. The offline audit is green: JWT
-signer (`doordash-jwt.ts` — HS256, `dd-ver: DD-JWT-V1`, base64-decoded key),
-adapter timeouts (`AbortController`, 8 s), `duplicate_delivery_id` → GET+hydrate,
-webhook HMAC/Basic verifier, and the mocked adapter suite
-(`providers/doordash.test.ts`, `doordash-jwt.test.ts`). To validate for real:
-add a Drive sandbox project + business + store, set the env vars, and run
-`RUN_PROVIDER_SANDBOX_TESTS=1 pnpm --filter frontend provider:sandbox-check`
-(see `sandbox-runbook.md`).
+Validated against the **real** DoorDash Drive sandbox
+(`openapi.doordash.com/drive/v2`, account "Pending activation" = sandbox mode)
+with `provider:sandbox-check`:
+
+| Op | Result | Detail |
+|---|---|---|
+| Auth | **PASS** | self-signed HS256 JWT accepted |
+| Quote | **PASS** | `POST /quotes` → `fee: 975` USD, SF test pair |
+| Create | **PASS** | `POST /deliveries` → `created` → `REQUESTED` |
+| Status | **PASS** | `GET /deliveries/{id}` → `created` → `REQUESTED` |
+| Cancel | **PASS** | `PUT /deliveries/{id}/cancel` → `200 cancelled` (sandbox refuses cancel for ~60 s post-create; adapter returns the "try again" reason without crashing) |
+| Webhook / Signature | **PENDING** | needs a tunnel + dashboard webhook (runbook step 5) + the DoorDash **Delivery Simulator** to advance statuses |
+
+The JWT signer, `AbortController` timeouts, `duplicate_delivery_id` → GET+hydrate,
+and the HMAC/Basic webhook verifier were already green in the mocked suite
+(`providers/doordash.test.ts`, `doordash-jwt.test.ts`). Phone numbers must use a
+real US area code — a `555` area code gets `validation_error` (the harness
+defaults to `+1650…`).

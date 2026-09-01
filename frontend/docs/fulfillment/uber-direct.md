@@ -72,12 +72,14 @@ credentials:
 | Op | Result | Detail |
 |---|---|---|
 | Auth (`getAccessToken`) | **PASS** | real 177-char bearer token from `login.uber.com` |
-| Quote / Create / Status / Cancel | **BLOCKED** | Uber account disabled — `400 invalid_params`, `param_details: "This account has been disabled. Please reach out to directbilling-group@uber.com to resolve"` |
-| Webhook loop | **BLOCKED** | needs an enabled account + a tunnel |
+| Quote / Create / Status / Cancel / Webhook | **BLOCKED** | the developer app has **no Client-Credentials scopes** — the dashboard's Access Token page says *"Your application currently does not have access to Client Credentials scopes. Please contact your Uber business development representative."* The account is also flagged disabled (`directbilling-group@uber.com`). |
 
-The adapter's request shapes therefore remain **unverified against a live,
-enabled account**. The SDK's `getDelivery` / `listDeliveries` / `cancelDelivery`
-helpers do exist in v0.1.8 — the adapter calls the endpoints with
-`fetchWithTimeout` directly for a hard deadline. Once Uber enables the account,
-re-run the harness with `RUN_PROVIDER_SANDBOX_CREATE=1` and follow
-`sandbox-runbook.md`.
+**Uber Direct is sales-gated, not self-serve.** `eats.deliveries` /
+`direct.organizations` scopes are granted only after Uber onboards the business
+(form at <https://www.uber.com/us/en/deliver/direct/>). Until then no
+quote/create/webhook path can run. The adapter's request shapes remain
+**unverified against a live enabled account**. The SDK's `getDelivery` /
+`listDeliveries` / `cancelDelivery` helpers exist in v0.1.8 — the adapter calls
+the endpoints with `fetchWithTimeout` directly for a hard deadline. Once the
+scopes are granted, re-run the harness with `RUN_PROVIDER_SANDBOX_CREATE=1` and
+follow `sandbox-runbook.md`.
