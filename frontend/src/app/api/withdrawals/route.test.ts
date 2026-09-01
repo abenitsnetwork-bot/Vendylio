@@ -339,6 +339,8 @@ describe('GET /api/withdrawals (RED — Wave 1 will turn these green)', () => {
     const body = await res.json();
     expect(body.items[0].id).toBe('w-2');
     expect(body.items[1].id).toBe('w-1');
+    // PAY-01 — the withdrawable balance rides along on the first page.
+    expect(body.availableCents).toBe(5000);
   });
 
   it('GET cursor — paginates with limit', async () => {

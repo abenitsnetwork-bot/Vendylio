@@ -283,6 +283,22 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const nextCursor =
       hasMore && last ? encodeCursor({ createdAt: last.requestedAt, id: last.id }) : null;
 
-    return NextResponse.json({ items, nextCursor }, { headers: { 'x-request-id': ctx.requestId } });
+    // PAY-01 — the real withdrawable balance (net-of-commission stripe_platform
+    // sales minus reserved/completed withdrawals). Only meaningful on the first
+    // page; the billing UI shows it above the history. Best-effort — a balance
+    // read failure must not break the list.
+    let availableCents: number | null = null;
+    if (!cursor) {
+      try {
+        availableCents = await createDefaultBalanceComputer(prisma)(auth.user.sub);
+      } catch {
+        availableCents = null;
+      }
+    }
+
+    return NextResponse.json(
+      { items, nextCursor, availableCents },
+      { headers: { 'x-request-id': ctx.requestId } },
+    );
   });
 }

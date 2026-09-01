@@ -31,6 +31,7 @@ beforeEach(() => {
 const BASE_ORDER: OrderForPaidEffects = {
   id: 'order-1',
   storeId: 'store-1',
+  provider: 'stripe_platform',
   amount: 3600,
   currency: 'USD',
   lineItems: [{ productId: 'prod-a', name: 'Shea Butter', priceCents: 1800, quantity: 2 }],
@@ -71,6 +72,35 @@ describe('applyOrderPaidEffects', () => {
     });
     expect(prismaMock.orderStatusEvent.create).toHaveBeenCalledWith({
       data: { orderId: 'order-1', status: 'PAID', actorType: 'SYSTEM' },
+    });
+  });
+
+  it('PAY-01 — records zero commission for a Cash App / Zelle order', async () => {
+    prismaMock.store.findUnique.mockResolvedValueOnce({
+      plan: 'FREE',
+      organization: { ownerId: 'seller-1' },
+    } as never);
+    prismaMock.product.findUnique.mockResolvedValueOnce({ quantity: 10 } as never);
+    prismaMock.platformSettings.findUnique.mockResolvedValueOnce({
+      id: 'default',
+      commissionRateBp: 600,
+      commissionRateBpPro: null,
+      updatedAt: new Date(),
+    } as never);
+
+    await applyOrderPaidEffects(
+      prismaMock,
+      { ...BASE_ORDER, provider: 'cashapp_manual' },
+      { paymentMethod: 'cashapp' },
+    );
+
+    expect(prismaMock.order.update).toHaveBeenCalledWith({
+      where: { id: 'order-1' },
+      data: expect.objectContaining({
+        status: 'PAID',
+        commissionAmount: 0,
+        netAmount: 3600,
+      }),
     });
   });
 

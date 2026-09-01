@@ -27,9 +27,21 @@ interface OrderLineItem {
   variantLabel?: string;
 }
 
+/**
+ * PAY-01 — payment providers the platform never actually receives money
+ * through: the buyer pays the merchant directly (Cash App / Zelle). No
+ * marketplace commission is collectable on these, so `applyOrderPaidEffects`
+ * records `commissionAmount = 0` / `netAmount = amount` rather than a phantom
+ * cut that inflates analytics and never gets settled. Card orders
+ * (`stripe_connect` / `stripe_platform`) are unaffected.
+ */
+const NO_COMMISSION_PROVIDERS = new Set(['cashapp_manual', 'zelle_manual']);
+
 export interface OrderForPaidEffects {
   id: string;
   storeId: string;
+  /** Payment provider set at checkout — 'stripe_connect' | 'stripe_platform' | 'cashapp_manual' | 'zelle_manual'. */
+  provider: string;
   amount: number;
   currency: string;
   lineItems: Prisma.JsonValue;
@@ -73,7 +85,11 @@ export async function applyOrderPaidEffects(
 
   const { baseRateBp, proRateBp } = await getPlatformCommissionRates(tx);
   const rateBp = resolveCommissionRateBp({ plan: store?.plan ?? 'FREE', baseRateBp, proRateBp });
-  const { commission, net } = computeCommission(order.amount, rateBp);
+  // PAY-01 — Cash App / Zelle: the platform never touches the money, so no
+  // commission is collectable. Record 0 rather than a phantom cut.
+  const { commission, net } = NO_COMMISSION_PROVIDERS.has(order.provider)
+    ? { commission: 0, net: order.amount }
+    : computeCommission(order.amount, rateBp);
   const paymentMethod = opts.paymentMethod ?? null;
 
   await tx.order.update({

@@ -20,6 +20,11 @@ interface WithdrawalItem {
   completedAt: string | null;
 }
 
+interface StripeStatus {
+  stripeOnboardingStatus: 'NOT_STARTED' | 'PENDING' | 'ACTIVE' | 'RESTRICTED';
+  connected: boolean;
+}
+
 function formatUsd(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
@@ -34,14 +39,19 @@ export default function BillingPayoutsPage() {
   const user = useUser();
   const { logout } = useAuth();
   const [items, setItems] = useState<WithdrawalItem[] | null>(null);
+  const [availableCents, setAvailableCents] = useState<number | null>(null);
+  const [stripe, setStripe] = useState<StripeStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [plan, setPlan] = useState<string | null>(null);
   const [upgrading, setUpgrading] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
 
   const loadWithdrawals = useCallback(() => {
-    api<{ items: WithdrawalItem[] }>('/api/withdrawals')
-      .then((res) => setItems(res.items))
+    api<{ items: WithdrawalItem[]; availableCents: number | null }>('/api/withdrawals')
+      .then((res) => {
+        setItems(res.items);
+        setAvailableCents(res.availableCents);
+      })
       .catch((err) => {
         setError(err instanceof ApiError ? err.message : 'Could not load withdrawal history.');
       });
@@ -60,6 +70,11 @@ export default function BillingPayoutsPage() {
     if (!user) return;
     loadWithdrawals();
     loadPlan();
+    api<StripeStatus>('/api/stores/stripe/status')
+      .then(setStripe)
+      .catch(() => {
+        /* non-critical — the card just hides */
+      });
   }, [user, loadWithdrawals, loadPlan]);
 
   async function onUpgrade() {
@@ -116,14 +131,65 @@ export default function BillingPayoutsPage() {
             </p>
           </div>
 
+          {/* PAY-01 — how the money actually flows, in plain language. */}
+          <Card className="mb-8 p-6">
+            <h2 className="mb-3 font-headings text-base font-bold text-foreground">
+              How you get paid
+            </h2>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li className="flex gap-2">
+                <Icon i="credit-card" size={16} className="mt-0.5 flex-shrink-0 text-primary" />
+                <span>
+                  <strong className="text-foreground">Card payments</strong>{' '}
+                  {stripe?.stripeOnboardingStatus === 'ACTIVE' ? (
+                    <>
+                      go straight to your connected Stripe account and are paid out to your bank on
+                      Stripe&apos;s standard schedule. Vendylio&apos;s commission is deducted
+                      automatically at the time of sale.
+                    </>
+                  ) : (
+                    <>
+                      are held by Vendylio until you request a withdrawal below. Connect Stripe in{' '}
+                      <Link href="/onboarding/payments" className="font-medium text-primary">
+                        payment settings
+                      </Link>{' '}
+                      to get paid automatically instead.
+                    </>
+                  )}
+                </span>
+              </li>
+              <li className="flex gap-2">
+                <Icon i="smartphone" size={16} className="mt-0.5 flex-shrink-0 text-primary" />
+                <span>
+                  <strong className="text-foreground">Cash App &amp; Zelle payments</strong> go
+                  directly to you. Vendylio never touches that money and takes{' '}
+                  <strong className="text-foreground">no commission</strong> on it — you confirm the
+                  payment yourself on the order.
+                </span>
+              </li>
+              <li className="flex gap-2">
+                <Icon i="clock" size={16} className="mt-0.5 flex-shrink-0 text-primary" />
+                <span>
+                  Manual withdrawals (the balance below) are reviewed and paid out by the Vendylio
+                  team. There are no withdrawal fees.
+                </span>
+              </li>
+            </ul>
+          </Card>
+
           <div className="mb-12 grid grid-cols-1 gap-6 sm:grid-cols-3">
             <Card>
               <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
                 Available to Withdraw
               </p>
-              <p className="font-headings text-3xl font-bold text-foreground">$0.00</p>
+              <p className="font-headings text-3xl font-bold text-foreground">
+                {availableCents === null ? '—' : formatUsd(availableCents)}
+              </p>
               <p className="mt-2 text-xs text-muted-foreground">
-                Balance tracking isn&apos;t linked to store sales yet in this build.
+                Card sales held by Vendylio, net of commission
+                {stripe?.stripeOnboardingStatus === 'ACTIVE'
+                  ? ' (from before you connected Stripe).'
+                  : '.'}
               </p>
             </Card>
             <Card>
