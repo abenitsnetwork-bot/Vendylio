@@ -56,9 +56,18 @@ vi.mock('@/lib/server/withdrawals/balance', () => ({
 // commission off the balance. Default: no store → the wrapper is a no-op and
 // every pre-Phase-1b assertion still holds. The "commission netting" block
 // below overrides these per-test.
-const resolveOwnStoreMock = vi.fn(async () => null as { id: string } | null);
+const resolveOwnStoreMock = vi.fn(
+  async () => null as { id: string; organizationId?: string } | null,
+);
 vi.mock('@/lib/server/org', () => ({
   resolveOwnStore: (...a: unknown[]) => resolveOwnStoreMock(...(a as [])),
+}));
+
+// Phase 4a — withdrawals are OWNER-only; the guard is mocked to "is owner"
+// for the existing tests (a dedicated test below covers the teammate 403).
+const requireStoreOwnerMock = vi.fn(async () => null as unknown);
+vi.mock('@/lib/server/team/owner-guard', () => ({
+  requireStoreOwner: (...a: unknown[]) => requireStoreOwnerMock(...(a as [])),
 }));
 
 const owedCommissionMock = vi.fn(async () => 0);
@@ -141,6 +150,8 @@ afterEach(() => {
   txCommissionCharge.updateMany.mockClear();
   resolveOwnStoreMock.mockReset();
   resolveOwnStoreMock.mockResolvedValue(null);
+  requireStoreOwnerMock.mockReset();
+  requireStoreOwnerMock.mockResolvedValue(null);
   owedCommissionMock.mockReset();
   owedCommissionMock.mockResolvedValue(0);
   planSettlementMock.mockReset();
@@ -482,6 +493,30 @@ describe('POST /api/withdrawals — commission settlement (Phase 1b)', () => {
     expect(res.status).toBe(201);
     expect(planSettlementMock).not.toHaveBeenCalled();
     expect(txCommissionCharge.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────
+// Phase 4a — withdrawals are OWNER-only
+// ────────────────────────────────────────────────────────────────────────
+describe('POST /api/withdrawals — OWNER-only (Phase 4a)', () => {
+  it('403 OWNER_ONLY when a non-owner teammate requests a withdrawal', async () => {
+    resolveOwnStoreMock.mockResolvedValue({ id: 'store-1', organizationId: 'org-1' } as never);
+    requireStoreOwnerMock.mockResolvedValue(
+      NextResponse.json({ error: 'OWNER_ONLY', code: 'OWNER_ONLY' }, { status: 403 }) as never,
+    );
+    const { POST } = await import('./route');
+    const res = await POST(
+      makePostReq({
+        amount: 5000,
+        currency: 'USD',
+        destination: { method: 'ZELLE', contact: 'me@e.com' },
+        pin: '1234',
+      }) as never,
+    );
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('OWNER_ONLY');
+    expect(txWithdrawal.create).not.toHaveBeenCalled();
   });
 });
 

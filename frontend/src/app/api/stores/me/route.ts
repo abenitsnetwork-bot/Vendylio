@@ -4,8 +4,10 @@
 // Phase 8: the "today"/"this month" window is anchored to the store's own
 // timezone (Store.timezone) instead of UTC — a US merchant's day shouldn't
 // roll over at 7 PM. Also returns the store's live open/pause state and the
-// pending-order count for the dashboard + nav badge. `visits` stays at 0 —
-// there's no analytics pipeline in this build, so we don't fake it.
+// pending-order count for the dashboard + nav badge. Phase 4a: `visits` is a
+// real 30-day storefront-view sum (StorefrontDayStat) — the headline number
+// for every plan; the detailed breakdown lives on the Pro-only
+// /dashboard/analytics page (GET /api/analytics).
 export const runtime = 'nodejs';
 
 import 'server-only';
@@ -17,6 +19,7 @@ import { resolveOwnStore } from '@/lib/server/org';
 import { countLowStock } from '@/lib/server/inventory/low-stock';
 import { getStoreOpenState } from '@/lib/server/store/availability';
 import { startOfStoreDay, startOfStoreMonth } from '@/lib/server/store/timezoneWindow';
+import { recentVisitCount } from '@/lib/server/analytics/aggregate';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
 // Sales stats must count every order that was actually paid, not just ones
@@ -57,7 +60,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     const now = new Date();
     const tz = store.timezone || 'UTC';
-    const [todayAgg, monthAgg, lowStock, pendingCount] = await Promise.all([
+    const [todayAgg, monthAgg, lowStock, pendingCount, visits] = await Promise.all([
       prisma.order.aggregate({
         where: {
           storeId: store.id,
@@ -80,6 +83,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       prisma.order.count({
         where: { storeId: store.id, status: { in: PENDING_ACTION_STATUSES } },
       }),
+      recentVisitCount(prisma, { storeId: store.id, tz }),
     ]);
 
     const openState = getStoreOpenState({ timezone: tz, hours: store.hours }, now);
@@ -103,7 +107,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           monthSalesCents: monthAgg._sum.amount ?? 0,
           monthOrdersCount: monthAgg._count,
           pendingOrdersCount: pendingCount,
-          visits: 0,
+          visits,
           lowStockCount: lowStock.lowStockCount,
           outOfStockCount: lowStock.outOfStockCount,
         },

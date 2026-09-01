@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server';
 
 vi.mock('@/lib/server/middleware', () => ({ requireAuth: vi.fn() }));
 vi.mock('@/lib/server/org', () => ({ resolveOwnStore: vi.fn() }));
+vi.mock('@/lib/server/team/owner-guard', () => ({ requireStoreOwner: vi.fn(async () => null) }));
 vi.mock('@/lib/server/billing/stripe-billing', () => ({
   createPortalSession: vi.fn(async () => ({ url: 'https://portal.stripe/x' })),
   BillingUnconfiguredError: class BillingUnconfiguredError extends Error {},

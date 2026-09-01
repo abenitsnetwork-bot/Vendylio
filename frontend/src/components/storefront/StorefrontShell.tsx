@@ -6,6 +6,7 @@ import type { PublicStore } from '@/lib/server/storefront';
 import { CartProvider, useCart } from '@/contexts/CartContext';
 import { Icon } from '@/components/ui/Icon';
 import { CartDrawer } from '@/components/storefront/CartDrawer';
+import { TrackView } from '@/components/storefront/TrackView';
 import { StorefrontUtilityBar } from '@/components/storefront/StorefrontUtilityBar';
 import { ModernTemplate } from '@/components/storefront/templates/ModernTemplate';
 import { MinimalTemplate } from '@/components/storefront/templates/MinimalTemplate';
@@ -91,6 +92,7 @@ export function StorefrontShell({ store }: { store: PublicStore }) {
   return (
     <CartProvider storeSlug={store.slug}>
       <div className="min-h-screen bg-background font-body">
+        <TrackView slug={store.slug} kind="STORE" enabled={store.published} />
         {!store.published && <PreviewBanner />}
         <AnnouncementStrip text={store.announcement} />
         <StoreStatusBanner store={store} />

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 vi.mock('@/lib/server/middleware', () => ({ requireAuth: vi.fn() }));
 vi.mock('@/lib/server/org', () => ({ resolveOwnStore: vi.fn() }));
+vi.mock('@/lib/server/team/owner-guard', () => ({ requireStoreOwner: vi.fn(async () => null) }));
 vi.mock('@/lib/server/billing/stripe-billing', () => ({
   isBillingConfigured: vi.fn(() => true),
   getOrCreateBillingCustomer: vi.fn(async () => 'cus_1'),

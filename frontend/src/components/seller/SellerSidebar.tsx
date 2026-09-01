@@ -19,10 +19,12 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard/products', label: 'Products', icon: 'package' },
   { href: '/dashboard/inventory', label: 'Inventory', icon: 'clipboard' },
   { href: '/dashboard/customers', label: 'Customers', icon: 'users' },
+  { href: '/dashboard/analytics', label: 'Analytics', icon: 'bar-chart-3' },
   { href: '/dashboard/reviews', label: 'Reviews', icon: 'star' },
   { href: '/dashboard/discounts', label: 'Promo codes', icon: 'bookmark' },
   { href: '/dashboard/delivery', label: 'Delivery', icon: 'truck' },
   { href: '/dashboard/billing', label: 'Billing & Payouts', icon: 'credit-card' },
+  { href: '/dashboard/team', label: 'Team', icon: 'user' },
   { href: '/dashboard/settings', label: 'Settings', icon: 'settings' },
   { href: '/dashboard/resources', label: 'Help & Resources', icon: 'life-buoy' },
 ];

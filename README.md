@@ -75,6 +75,8 @@ Les route handlers sous [`frontend/src/app/api/`](frontend/src/app/api/) **sont*
 - **`/api/orders`** (checkout invité, server-authoritative), `/api/orders/[id]` (transitions vendeur), `/api/orders/[id]/refund`, `/api/orders/track/[token]` (lecture invité), `/api/cart/validate`
 - **`/api/stores/[slug]/delivery-quote`** — devis livraison multi-provider au checkout
 - **`/api/discounts*`** — codes promo (FREE_DELIVERY en v1)
+- **`/api/track`** — beacon analytics storefront (public, sans CSRF, agrégats journaliers) ; **`/api/analytics`** — série + conversion + top produits (Pro, 402 sinon)
+- **`/api/team*`** — membres d'équipe : `GET /api/team`, `invites` (créer/révoquer/accepter, Pro), `members/[id]` (rôle/retrait, OWNER) ; retraits + billing restent OWNER-only
 - **`/api/notifications*`** — cloche in-app + préférences `{email, inApp}` par type d'événement
 - **`/api/webhooks/{stripe,stripe-connect,stripe-billing,doordash,uber-direct}`** — HMAC raw-body + idempotence + outbox (factory `createWebhookHandler`, PROTÉGÉE ; chaque endpoint a son propre signing secret)
 - **`/api/cron/*`** — 10 handlers, tous `Authorization: Bearer ${CRON_SECRET}` (voir table ci-dessous)

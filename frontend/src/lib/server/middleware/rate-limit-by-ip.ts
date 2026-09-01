@@ -114,3 +114,14 @@ export const trackingIpLimiter = createIpLimiter({
   code: 'TOO_MANY_REQUESTS',
   message: 'Too many requests. Wait a minute and try again.',
 });
+
+// Phase 4a — the storefront analytics beacon (`POST /api/track`). Fires once
+// per storefront / product page view; the cap is well above a real visitor's
+// browsing cadence and just bounds a script hammering the counter endpoint.
+export const storefrontViewIpLimiter = createIpLimiter({
+  bucket: 'pub:view',
+  windowMs: 60_000,
+  max: Number(process.env.VIEW_IP_RATE_LIMIT_MAX ?? 60),
+  code: 'TOO_MANY_REQUESTS',
+  message: 'Too many requests. Wait a minute and try again.',
+});

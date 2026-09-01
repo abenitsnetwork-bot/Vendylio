@@ -7,6 +7,7 @@ import { viewerOwnsSlug } from '@/lib/server/storePreview';
 import { getPublicProduct, type PublicProductDetail } from '@/lib/server/storefront';
 import { CartProvider } from '@/contexts/CartContext';
 import { ProductDetailView } from '@/components/storefront/ProductDetailView';
+import { TrackView } from '@/components/storefront/TrackView';
 import { JsonLd } from '@/components/JsonLd';
 import { productMetadata, productJsonLd } from '@/lib/seo';
 
@@ -48,6 +49,12 @@ export default async function ProductDetailPage({ params }: Params) {
 
   return (
     <CartProvider storeSlug={result.store.slug}>
+      <TrackView
+        slug={result.store.slug}
+        kind="PRODUCT"
+        productId={result.product.id}
+        enabled={result.store.published}
+      />
       {result.store.published && <JsonLd data={productJsonLd(result.store, result.product)} />}
       <ProductDetailView store={result.store} product={result.product} />
     </CartProvider>

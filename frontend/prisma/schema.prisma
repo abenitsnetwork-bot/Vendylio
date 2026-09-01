@@ -156,11 +156,38 @@ model Organization {
   ownerId   String
   owner     User                 @relation("OrgOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   members   OrganizationMember[]
+  invites   TeamInvite[]
   store     Store?
   createdAt DateTime             @default(now())
   updatedAt DateTime             @updatedAt
 
   @@index([ownerId])
+}
+
+// Phase 4a — team invitations. A store owner (or an ADMIN member) invites a
+// teammate by email; the invitee accepts a tokened link, which creates their
+// OrganizationMember row. `resolveOwnStore` already resolves the store for
+// ANY member, so once the row exists the teammate has dashboard access
+// (minus the OWNER-only routes: withdrawals + billing). One pending invite
+// per (org, email); the token is the only credential and acceptance requires
+// the signed-in user's email to match the invite. Gated behind Pro
+// (`planFeatures().teamMembers`) at creation only — a downgrade never evicts
+// an existing member.
+model TeamInvite {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email           String // lowercased
+  role            String       @default("MEMBER") // ADMIN | MEMBER (never OWNER)
+  token           String       @unique // 32 random bytes, base64url
+  invitedByUserId String
+  status          String       @default("PENDING") // PENDING | ACCEPTED | REVOKED
+  expiresAt       DateTime
+  createdAt       DateTime     @default(now())
+  acceptedAt      DateTime?
+
+  @@index([organizationId])
+  @@index([email])
 }
 
 // Role precedence: OWNER > ADMIN > MEMBER. The owner is also a member row
@@ -779,6 +806,8 @@ model Store {
   discounts         Discount[]
   quotes            Quote[]
   commissionCharges CommissionCharge[]
+  storefrontDayStats StorefrontDayStat[]
+  productViewDayStats ProductViewDayStat[]
 }
 
 // Phase D — seller-managed promo codes. V1 ships one mechanism:
@@ -874,6 +903,7 @@ model Product {
 
   variants       ProductVariant[]
   stockMovements StockMovement[]
+  viewDayStats   ProductViewDayStat[]
 
   @@index([storeId, createdAt])
   @@index([storeId, categoryId])
@@ -984,4 +1014,38 @@ model PlatformSettings {
   // configured — PRO stores fall back to commissionRateBp like everyone else.
   commissionRateBpPro Int?
   updatedAt           DateTime @updatedAt
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Phase 4a — storefront analytics. DAILY AGGREGATES, not raw hit rows:
+// `POST /api/track` (a client beacon on the public storefront + product
+// pages) upserts these counters, so the tables stay tiny (≈365 rows/store/
+// year) and need no purge cron. The day is bucketed in the store's own
+// timezone (Store.timezone), consistent with the rest of the dashboard
+// (Phase 8). "visitors" counts hits that arrived WITHOUT the first-party
+// `vnd_vid` cookie — an approximate unique-visitor-per-day number. The
+// detailed `/dashboard/analytics` page reads these and is Pro-gated
+// (`planFeatures().advancedAnalytics`); the headline `stats.visits` in
+// `GET /api/stores/me` is a 30-day sum shown to every plan.
+model StorefrontDayStat {
+  storeId      String
+  store        Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  day          DateTime @db.Date
+  storeViews   Int      @default(0)
+  productViews Int      @default(0)
+  visitors     Int      @default(0)
+
+  @@id([storeId, day])
+}
+
+model ProductViewDayStat {
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  day       DateTime @db.Date
+  views     Int      @default(0)
+
+  @@id([productId, day])
+  @@index([storeId, day])
 }

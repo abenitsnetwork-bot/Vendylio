@@ -44,6 +44,7 @@ import { Prisma } from '@prisma/client';
 
 import { verifyCsrf } from '@/lib/server/auth';
 import { requireAuth } from '@/lib/server/middleware';
+import { requireStoreOwner } from '@/lib/server/team/owner-guard';
 import { prisma } from '@/lib/server/prisma';
 
 import { lockUserTx } from '@/lib/server/withdrawals/lock';
@@ -140,6 +141,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // debit (net + settled commission) so the base balance formula stays
     // correct; the merchant receives `amount - commissionSettledCents`.
     const ownStore = await resolveOwnStore(auth.user.sub);
+
+    // Phase 4a — withdrawals are OWNER-only. A store can have teammates
+    // (OrganizationMember rows) but only the owner — the Stripe/payout
+    // identity — moves money out.
+    if (ownStore) {
+      const ownerGate = await requireStoreOwner(
+        ownStore,
+        ctx.requestId,
+        'Only the store owner can request withdrawals.',
+      );
+      if (ownerGate) return ownerGate;
+    }
 
     // Phase 2 — a BANK payout needs the seller's Connect account fully live
     // (stripeOnboardingStatus ACTIVE ⇒ charges + payouts enabled, per the
@@ -330,6 +343,18 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const auth = await requireAuth();
     if (auth instanceof NextResponse) return auth;
 
+    // Phase 4a — OWNER-only, same as POST (a teammate MEMBER/ADMIN has no
+    // payout view).
+    const ownStore = await resolveOwnStore(auth.user.sub);
+    if (ownStore) {
+      const ownerGate = await requireStoreOwner(
+        ownStore,
+        ctx.requestId,
+        'Only the store owner can view payouts.',
+      );
+      if (ownerGate) return ownerGate;
+    }
+
     const url = req.nextUrl;
     const limit = clampLimit(url.searchParams.get('limit'));
     const cursor = decodeCursor(url.searchParams.get('cursor'));
@@ -384,8 +409,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     if (!cursor) {
       try {
         const base = await createDefaultBalanceComputer(prisma)(auth.user.sub);
-        const store = await resolveOwnStore(auth.user.sub);
-        commissionOwedCents = store ? await owedCommissionCents(prisma, store.id) : 0;
+        commissionOwedCents = ownStore ? await owedCommissionCents(prisma, ownStore.id) : 0;
         availableCents = base - commissionOwedCents;
       } catch {
         availableCents = null;

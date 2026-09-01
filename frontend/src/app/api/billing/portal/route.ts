@@ -7,6 +7,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { verifyCsrf } from '@/lib/server/auth';
 import { requireAuth } from '@/lib/server/middleware';
 import { resolveOwnStore } from '@/lib/server/org';
+import { requireStoreOwner } from '@/lib/server/team/owner-guard';
 import { createPortalSession, BillingUnconfiguredError } from '@/lib/server/billing/stripe-billing';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
@@ -26,6 +27,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         { status: 404, headers: { 'x-request-id': ctx.requestId } },
       );
     }
+
+    const ownerGate = await requireStoreOwner(
+      store,
+      ctx.requestId,
+      'Only the store owner can manage billing.',
+    );
+    if (ownerGate) return ownerGate;
 
     if (!store.stripeCustomerId) {
       return NextResponse.json(
