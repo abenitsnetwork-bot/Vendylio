@@ -38,7 +38,10 @@ const STATE_BADGE: Record<ConfigState, { label: string; cls: string }> = {
   ENABLED: { label: 'Connected', cls: 'bg-green-100 text-green-700' },
   CONFIGURED: { label: 'Ready', cls: 'bg-secondary text-muted-foreground' },
   DISABLED: { label: 'Off', cls: 'bg-secondary text-muted-foreground' },
-  UNAVAILABLE: { label: 'Needs setup', cls: 'bg-amber-100 text-amber-800' },
+  // UNAVAILABLE = the provider's PLATFORM credentials aren't set (Vendylio-side,
+  // not the merchant's problem to fix). "Unavailable" is more honest than a
+  // "needs setup" that implies merchant action.
+  UNAVAILABLE: { label: 'Unavailable', cls: 'bg-amber-100 text-amber-800' },
 };
 
 function OrderRow({

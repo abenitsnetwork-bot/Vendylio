@@ -53,6 +53,7 @@ interface TrackedOrder {
     slug: string;
     phone: string | null;
     pickupAddress: string | null;
+    pickupInstructions: string | null;
     cashAppCashtag: string | null;
     zelleContact: string | null;
   };
@@ -217,11 +218,21 @@ export function OrderStatusTracker({ token }: { token: string }) {
       </div>
 
       {isPickup &&
-        order.store.pickupAddress &&
-        ['READY', 'DELIVERED'].includes(order.status.key) && (
-          <p className="mt-3 rounded-lg bg-secondary px-3 py-2 text-xs text-foreground">
-            Pickup location: {order.store.pickupAddress}
-          </p>
+        !order.closed &&
+        (order.store.pickupAddress || order.store.pickupInstructions) && (
+          <div className="mt-3 space-y-1 rounded-lg bg-secondary px-3 py-2 text-xs text-foreground">
+            {order.store.pickupAddress && (
+              <p>
+                <span className="font-semibold">Pickup location:</span> {order.store.pickupAddress}
+              </p>
+            )}
+            {order.store.pickupInstructions && (
+              <p>
+                <span className="font-semibold">Instructions:</span>{' '}
+                {order.store.pickupInstructions}
+              </p>
+            )}
+          </div>
         )}
 
       {order.isManualPaymentPending &&

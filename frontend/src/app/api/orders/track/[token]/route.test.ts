@@ -36,6 +36,9 @@ function orderRow(over: Record<string, unknown> = {}) {
       slug: 'constys-kitchen',
       phone: '555-0100',
       pickupAddress: null,
+      fulfillmentConfig: {},
+      deliveryProvider: 'self_manual',
+      deliveryFeeCents: 0,
       cashAppCashtag: null,
       zelleContact: null,
     },
@@ -128,6 +131,9 @@ describe('GET /api/orders/track/[token]', () => {
           slug: 'adaeze',
           phone: null,
           pickupAddress: null,
+          fulfillmentConfig: {},
+          deliveryProvider: 'self_manual',
+          deliveryFeeCents: 0,
           cashAppCashtag: 'AdaezeShop',
           zelleContact: null,
         },
@@ -139,6 +145,31 @@ describe('GET /api/orders/track/[token]', () => {
     const body = await res.json();
     expect(body.order.isManualPaymentPending).toBe(true);
     expect(body.order.store.cashAppCashtag).toBe('AdaezeShop');
+  });
+
+  it('PICKUP-01 — returns the pickup address + instructions for a pickup order', async () => {
+    prismaMock.order.findUnique.mockResolvedValue(
+      orderRow({
+        fulfillmentMethod: 'PICKUP',
+        store: {
+          name: "Consty's Kitchen",
+          slug: 'constys-kitchen',
+          phone: '555-0100',
+          pickupAddress: '12 Rue de la Paix, Dakar',
+          fulfillmentConfig: { pickup: { enabled: true, instructions: 'Ring the side bell' } },
+          deliveryProvider: 'self_manual',
+          deliveryFeeCents: 0,
+          cashAppCashtag: null,
+          zelleContact: null,
+        },
+      }) as never,
+    );
+    prismaMock.review.findUnique.mockResolvedValue(null);
+
+    const res = await GET(makeReq(), ctx);
+    const body = await res.json();
+    expect(body.order.store.pickupAddress).toBe('12 Rue de la Paix, Dakar');
+    expect(body.order.store.pickupInstructions).toBe('Ring the side bell');
   });
 
   it('reports hasReview from the Review row', async () => {

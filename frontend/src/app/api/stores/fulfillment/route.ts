@@ -145,7 +145,9 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
       .filter(([, s]) => s === 'UNAVAILABLE')
       .map(([provider]) => ({
         provider,
-        message: `${provider} is enabled but its platform credentials aren't set — it won't appear at checkout yet.`,
+        // The credentials are PLATFORM-level (Vendylio's), not the merchant's —
+        // don't imply there's a setting they can flip. See CLAUDE.md fulfillment.
+        message: `${provider} isn't available on Vendylio yet, so customers won't see it at checkout. Your other delivery methods are unaffected — contact support if you need this one.`,
       }));
 
     return NextResponse.json(

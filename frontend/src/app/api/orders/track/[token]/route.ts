@@ -26,6 +26,7 @@ import {
   type FulfillmentMethod,
 } from '@/lib/server/orders/customerView';
 import { PROVIDER_FRIENDLY_NAME, type ProviderType } from '@/lib/server/fulfillment/types';
+import { readFulfillmentConfig } from '@/lib/server/fulfillment/config';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
 interface RouteCtx {
@@ -56,6 +57,11 @@ const TRACK_SELECT = {
       slug: true,
       phone: true,
       pickupAddress: true,
+      // PICKUP-01 — the merchant's pickup instructions live in fulfillmentConfig;
+      // the buyer needs them ("side door", "ask for online orders", hours…).
+      fulfillmentConfig: true,
+      deliveryProvider: true,
+      deliveryFeeCents: true,
       cashAppCashtag: true,
       zelleContact: true,
     },
@@ -182,6 +188,14 @@ export async function GET(req: NextRequest, ctx: RouteCtx): Promise<NextResponse
         slug: order.store.slug,
         phone: order.store.phone,
         pickupAddress: order.store.pickupAddress,
+        pickupInstructions:
+          fulfillmentMethod === 'PICKUP'
+            ? readFulfillmentConfig({
+                fulfillmentConfig: order.store.fulfillmentConfig,
+                deliveryProvider: order.store.deliveryProvider,
+                deliveryFeeCents: order.store.deliveryFeeCents,
+              }).pickup.instructions
+            : null,
         cashAppCashtag: order.store.cashAppCashtag,
         zelleContact: order.store.zelleContact,
       },
