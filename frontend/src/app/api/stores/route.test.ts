@@ -13,15 +13,22 @@ vi.mock('@/lib/server/org', () => ({
 vi.mock('@/lib/server/delivery/uber-direct', () => ({
   checkPickupAddressDeliverable: vi.fn(),
 }));
+vi.mock('@/lib/server/billing/stripe-billing', () => ({
+  isBillingConfigured: vi.fn(() => false),
+  hasBillablePaymentMethod: vi.fn(async () => false),
+}));
 
 import { requireAuth } from '@/lib/server/middleware';
 import { resolveOwnStore } from '@/lib/server/org';
 import { checkPickupAddressDeliverable } from '@/lib/server/delivery/uber-direct';
+import { isBillingConfigured, hasBillablePaymentMethod } from '@/lib/server/billing/stripe-billing';
 import { POST, PATCH } from './route';
 
 const mockRequireAuth = vi.mocked(requireAuth);
 const mockResolveOwnStore = vi.mocked(resolveOwnStore);
 const mockCheckPickupAddressDeliverable = vi.mocked(checkPickupAddressDeliverable);
+const mockIsBillingConfigured = vi.mocked(isBillingConfigured);
+const mockHasBillablePaymentMethod = vi.mocked(hasBillablePaymentMethod);
 const authedCtx = { user: { sub: 'user-1', email: 'me@example.com' } };
 
 function makeReq(
@@ -400,6 +407,58 @@ describe('PATCH /api/stores', () => {
     expect(prismaMock.store.update.mock.calls[0]?.[0]?.data).toMatchObject({
       zelleContact: 'adaeze@example.com',
     });
+  });
+
+  // Phase 1b — enabling Cash App / Zelle needs a card on file (Vendylio bills
+  // the marketplace commission for those orders when there's no balance to
+  // withhold it from).
+  it('402 PAYMENT_METHOD_REQUIRED when enabling Cash App with no card + billing configured', async () => {
+    mockResolveOwnStore.mockResolvedValue({
+      id: 'store-1',
+      organizationId: 'org-1',
+      cashAppCashtag: null,
+      stripeCustomerId: null,
+    } as never);
+    mockIsBillingConfigured.mockReturnValueOnce(true);
+    mockHasBillablePaymentMethod.mockResolvedValueOnce(false);
+
+    const res = await PATCH(makeReq('PATCH', { cashAppCashtag: '$AdaezeShop' }));
+    expect(res.status).toBe(402);
+    expect((await res.json()).error).toBe('PAYMENT_METHOD_REQUIRED');
+    expect(prismaMock.store.update).not.toHaveBeenCalled();
+  });
+
+  it('allows enabling Cash App once a card is on file', async () => {
+    mockResolveOwnStore.mockResolvedValue({
+      id: 'store-1',
+      organizationId: 'org-1',
+      cashAppCashtag: null,
+      stripeCustomerId: 'cus_1',
+    } as never);
+    mockIsBillingConfigured.mockReturnValueOnce(true);
+    mockHasBillablePaymentMethod.mockResolvedValueOnce(true);
+    prismaMock.store.update.mockResolvedValueOnce({
+      id: 'store-1',
+      cashAppCashtag: 'AdaezeShop',
+    } as never);
+
+    const res = await PATCH(makeReq('PATCH', { cashAppCashtag: '$AdaezeShop' }));
+    expect(res.status).toBe(200);
+  });
+
+  it('never blocks DISABLING Cash App (null) even without a card', async () => {
+    mockResolveOwnStore.mockResolvedValue({
+      id: 'store-1',
+      organizationId: 'org-1',
+      cashAppCashtag: 'AdaezeShop',
+      stripeCustomerId: null,
+    } as never);
+    mockIsBillingConfigured.mockReturnValueOnce(true);
+    prismaMock.store.update.mockResolvedValueOnce({ id: 'store-1', cashAppCashtag: null } as never);
+
+    const res = await PATCH(makeReq('PATCH', { cashAppCashtag: null }));
+    expect(res.status).toBe(200);
+    expect(mockHasBillablePaymentMethod).not.toHaveBeenCalled();
   });
 
   it('400s on a negative deliveryFeeCents', async () => {

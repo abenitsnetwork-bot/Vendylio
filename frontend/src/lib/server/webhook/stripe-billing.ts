@@ -10,9 +10,13 @@
 // "subscription lifecycle" bucket, so — exactly like webhook/stripe-connect.ts
 // does for account.updated — we repurpose:
 //   subscription.created / .updated  → 'paid'   (→ route onPaid)
+//   invoice.paid                     → 'paid'   (→ route onPaid — Phase 1b
+//                                                commission-invoice settlement)
+//   checkout.session.completed       → 'paid'   (→ route onPaid — Phase 1b
+//                                                card-setup default PM)
 //   subscription.deleted             → 'failed' (→ route onFailed)
 //   invoice.payment_failed           → 'failed' (→ route onFailed)
-// The route branches on event.type for the two shapes that land in 'failed'.
+// The route branches on event.type for the shapes that land in each bucket.
 import 'server-only';
 import Stripe from 'stripe';
 import type { WebhookProvider, ParsedIds } from './handler';
@@ -20,7 +24,12 @@ import { STRIPE_API_VERSION } from '../payments/stripe';
 
 let _provider: WebhookProvider<Stripe.Event> | null = null;
 
-const PAID_EVENTS = new Set(['customer.subscription.created', 'customer.subscription.updated']);
+const PAID_EVENTS = new Set([
+  'customer.subscription.created',
+  'customer.subscription.updated',
+  'invoice.paid',
+  'checkout.session.completed',
+]);
 const FAILED_EVENTS = new Set(['customer.subscription.deleted', 'invoice.payment_failed']);
 
 /** Lazy-init — env reads happen at first call so `vi.stubEnv` works in tests. */

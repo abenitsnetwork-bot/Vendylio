@@ -7,6 +7,7 @@ const webhookLogCreate = vi.fn();
 const webhookLogUpdate = vi.fn();
 const storeFindUnique = vi.fn();
 const storeUpdate = vi.fn();
+const commissionChargeUpdateMany = vi.fn(async () => ({ count: 0 }));
 
 const $transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>, _opts?: unknown) =>
   fn({
@@ -16,10 +17,16 @@ const $transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>, _opts?:
       update: webhookLogUpdate,
     },
     store: { findUnique: storeFindUnique, update: storeUpdate },
+    commissionCharge: { updateMany: commissionChargeUpdateMany },
   }),
 );
 
 vi.mock('@/lib/server/prisma', () => ({ prisma: { $transaction } }));
+
+const promoteSetupIntentCard = vi.fn(async () => true);
+vi.mock('@/lib/server/billing/stripe-billing', () => ({
+  promoteSetupIntentCard: (...a: unknown[]) => promoteSetupIntentCard(...(a as [])),
+}));
 
 function lastUpdateData(): Record<string, unknown> {
   const call = storeUpdate.mock.calls.at(-1);
@@ -70,6 +77,8 @@ beforeEach(async () => {
   webhookLogUpdate.mockReset();
   storeFindUnique.mockReset();
   storeUpdate.mockReset();
+  commissionChargeUpdateMany.mockReset().mockResolvedValue({ count: 0 });
+  promoteSetupIntentCard.mockReset().mockResolvedValue(true);
 });
 
 afterEach(() => {
@@ -182,6 +191,59 @@ describe('POST /api/webhooks/stripe-billing', () => {
     const res = await POST(req);
     expect(res.status).toBe(200);
     expect(storeUpdate).not.toHaveBeenCalled();
+  });
+
+  it('invoice.paid → settles INVOICED CommissionCharge rows carrying the invoice id (Phase 1b)', async () => {
+    commissionChargeUpdateMany.mockResolvedValueOnce({ count: 3 });
+    const { POST } = await import('./route');
+    const { req } = billingEvent({
+      type: 'invoice.paid',
+      object: { id: 'in_commission_1', object: 'invoice', customer: 'cus_1' },
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(commissionChargeUpdateMany).toHaveBeenCalledWith({
+      where: { stripeInvoiceId: 'in_commission_1', status: 'INVOICED' },
+      data: expect.objectContaining({ status: 'SETTLED' }),
+    });
+  });
+
+  it('invoice.paid for a subscription-renewal invoice is a harmless no-op (0 rows)', async () => {
+    commissionChargeUpdateMany.mockResolvedValueOnce({ count: 0 });
+    const { POST } = await import('./route');
+    const { req } = billingEvent({
+      type: 'invoice.paid',
+      object: { id: 'in_sub_renewal', object: 'invoice', customer: 'cus_1' },
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(storeUpdate).not.toHaveBeenCalled();
+  });
+
+  it('checkout.session.completed (setup mode) → promotes the collected card', async () => {
+    const { POST } = await import('./route');
+    const { req } = billingEvent({
+      type: 'checkout.session.completed',
+      object: {
+        id: 'cs_1',
+        object: 'checkout.session',
+        mode: 'setup',
+        setup_intent: 'seti_1',
+      },
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(promoteSetupIntentCard).toHaveBeenCalledWith('seti_1');
+  });
+
+  it('checkout.session.completed (subscription mode) does NOT promote a card', async () => {
+    const { POST } = await import('./route');
+    const { req } = billingEvent({
+      type: 'checkout.session.completed',
+      object: { id: 'cs_2', object: 'checkout.session', mode: 'subscription' },
+    });
+    await POST(req);
+    expect(promoteSetupIntentCard).not.toHaveBeenCalled();
   });
 
   it('exports runtime=nodejs and dynamic=force-dynamic', async () => {

@@ -28,14 +28,16 @@ interface OrderLineItem {
 }
 
 /**
- * PAY-01 — payment providers the platform never actually receives money
- * through: the buyer pays the merchant directly (Cash App / Zelle). No
- * marketplace commission is collectable on these, so `applyOrderPaidEffects`
- * records `commissionAmount = 0` / `netAmount = amount` rather than a phantom
- * cut that inflates analytics and never gets settled. Card orders
- * (`stripe_connect` / `stripe_platform`) are unaffected.
+ * Payment providers where the buyer pays the merchant directly (Cash App /
+ * Zelle) — the platform never touches that money.
+ *
+ * PAY-01 originally recorded `commissionAmount = 0` here because there was no
+ * way to collect. Phase 1b adds the collection path: the real commission is
+ * now computed like any card order AND a `CommissionCharge` (status OWED) is
+ * written in this same tx — a receivable withheld from the merchant's next
+ * withdrawal (or Stripe-invoiced if they have no withdrawable balance).
  */
-const NO_COMMISSION_PROVIDERS = new Set(['cashapp_manual', 'zelle_manual']);
+const MANUAL_MONEY_PROVIDERS = new Set(['cashapp_manual', 'zelle_manual']);
 
 export interface OrderForPaidEffects {
   id: string;
@@ -85,11 +87,12 @@ export async function applyOrderPaidEffects(
 
   const { baseRateBp, proRateBp } = await getPlatformCommissionRates(tx);
   const rateBp = resolveCommissionRateBp({ plan: store?.plan ?? 'FREE', baseRateBp, proRateBp });
-  // PAY-01 — Cash App / Zelle: the platform never touches the money, so no
-  // commission is collectable. Record 0 rather than a phantom cut.
-  const { commission, net } = NO_COMMISSION_PROVIDERS.has(order.provider)
-    ? { commission: 0, net: order.amount }
-    : computeCommission(order.amount, rateBp);
+  // Phase 1b — commission is computed the same for every provider now. For
+  // Cash App / Zelle the money went straight to the merchant, so the cut is a
+  // receivable (the CommissionCharge written below), not something already in
+  // Vendylio's hands.
+  const { commission, net } = computeCommission(order.amount, rateBp);
+  const isManualMoney = MANUAL_MONEY_PROVIDERS.has(order.provider);
   const paymentMethod = opts.paymentMethod ?? null;
 
   await tx.order.update({
@@ -102,6 +105,24 @@ export async function applyOrderPaidEffects(
       ...(paymentMethod !== null ? { paymentMethod } : {}),
     },
   });
+
+  // Phase 1b — record the platform's receivable for a manual-money order.
+  // @@unique([orderId, kind]) makes this idempotent under a Serializable
+  // retry. Skipped entirely when there's no commission to collect (0% rate).
+  if (isManualMoney && commission > 0) {
+    await tx.commissionCharge.upsert({
+      where: { orderId_kind: { orderId: order.id, kind: 'SALE' } },
+      create: {
+        storeId: order.storeId,
+        orderId: order.id,
+        amountCents: commission,
+        currency: order.currency,
+        status: 'OWED',
+        kind: 'SALE',
+      },
+      update: {},
+    });
+  }
 
   // Phase 4 — audit trail. The seller's later PREPARING→...→DELIVERED
   // clicks (api/orders/[id]/route.ts) each write their own SYSTEM/SELLER

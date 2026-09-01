@@ -75,7 +75,10 @@ describe('applyOrderPaidEffects', () => {
     });
   });
 
-  it('PAY-01 — records zero commission for a Cash App / Zelle order', async () => {
+  // Phase 1b reversed PAY-01: a Cash App / Zelle order now accrues the real
+  // marketplace commission as an OWED CommissionCharge (withheld from the
+  // merchant's next withdrawal), instead of recording a phantom 0.
+  it('Phase 1b — accrues an OWED CommissionCharge for a Cash App / Zelle order', async () => {
     prismaMock.store.findUnique.mockResolvedValueOnce({
       plan: 'FREE',
       organization: { ownerId: 'seller-1' },
@@ -90,18 +93,64 @@ describe('applyOrderPaidEffects', () => {
 
     await applyOrderPaidEffects(
       prismaMock,
-      { ...BASE_ORDER, provider: 'cashapp_manual' },
-      { paymentMethod: 'cashapp' },
+      { ...BASE_ORDER, provider: 'zelle_manual' },
+      { paymentMethod: 'zelle' },
     );
 
     expect(prismaMock.order.update).toHaveBeenCalledWith({
       where: { id: 'order-1' },
       data: expect.objectContaining({
         status: 'PAID',
-        commissionAmount: 0,
-        netAmount: 3600,
+        commissionAmount: 216, // floor(3600 * 600 / 10000)
+        netAmount: 3384,
       }),
     });
+
+    expect(prismaMock.commissionCharge.upsert).toHaveBeenCalledWith({
+      where: { orderId_kind: { orderId: 'order-1', kind: 'SALE' } },
+      create: {
+        storeId: 'store-1',
+        orderId: 'order-1',
+        amountCents: 216,
+        currency: 'USD',
+        status: 'OWED',
+        kind: 'SALE',
+      },
+      update: {},
+    });
+  });
+
+  it('Phase 1b — a card order never writes a CommissionCharge (commission auto-settled)', async () => {
+    prismaMock.store.findUnique.mockResolvedValueOnce({
+      plan: 'FREE',
+      organization: { ownerId: 'seller-1' },
+    } as never);
+    prismaMock.product.findUnique.mockResolvedValueOnce({ quantity: 10 } as never);
+    prismaMock.platformSettings.findUnique.mockResolvedValueOnce({
+      id: 'default',
+      commissionRateBp: 600,
+      commissionRateBpPro: null,
+      updatedAt: new Date(),
+    } as never);
+
+    await applyOrderPaidEffects(prismaMock, BASE_ORDER, { paymentMethod: 'card' });
+    expect(prismaMock.commissionCharge.upsert).not.toHaveBeenCalled();
+  });
+
+  it('Phase 1b — no CommissionCharge when the commission rate is 0%', async () => {
+    prismaMock.store.findUnique.mockResolvedValueOnce({
+      plan: 'FREE',
+      organization: { ownerId: 'seller-1' },
+    } as never);
+    prismaMock.product.findUnique.mockResolvedValueOnce({ quantity: 10 } as never);
+    // platformSettings.findUnique → null (beforeEach default) = 0% commission
+
+    await applyOrderPaidEffects(
+      prismaMock,
+      { ...BASE_ORDER, provider: 'cashapp_manual' },
+      { paymentMethod: 'cashapp' },
+    );
+    expect(prismaMock.commissionCharge.upsert).not.toHaveBeenCalled();
   });
 
   it('records a SALE stock movement for a lineItem with no variantId', async () => {

@@ -23,6 +23,7 @@ import { makeRequestContext, withRequestContext } from '@/lib/server/observabili
 import { STORE_TEMPLATE_VALUES } from '@/lib/storeTemplates';
 import { MAX_HERO_IMAGES as HERO_MAX } from '@/lib/storeHero';
 import { getLegalDocument } from '@/lib/server/legal';
+import { isBillingConfigured, hasBillablePaymentMethod } from '@/lib/server/billing/stripe-billing';
 
 const Body = z.object({
   name: z.string().trim().min(2).max(80),
@@ -251,6 +252,30 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
     // `undefined` value under exactOptionalPropertyTypes even on optional
     // fields, so only pass the keys the caller actually sent.
     const data = Object.fromEntries(Object.entries(parsed.data).filter(([, v]) => v !== undefined));
+
+    // Phase 1b — enabling a manual payment method (Cash App / Zelle) requires a
+    // card on file with Vendylio's billing customer. That P2P money goes
+    // straight to the merchant, so the marketplace commission it's owed can
+    // only be collected by withholding it from a withdrawal OR — for a
+    // merchant with no withdrawable balance — a Stripe invoice, which needs a
+    // card. Only gates the ENABLING transition (falsy → truthy); disabling and
+    // unrelated edits are never blocked, and the gate is inert when billing
+    // isn't configured (self-host / dev).
+    const enablingCashApp = Boolean(data.cashAppCashtag) && !existing.cashAppCashtag;
+    const enablingZelle = Boolean(data.zelleContact) && !existing.zelleContact;
+    if ((enablingCashApp || enablingZelle) && isBillingConfigured()) {
+      const hasCard = await hasBillablePaymentMethod(existing.stripeCustomerId);
+      if (!hasCard) {
+        return NextResponse.json(
+          {
+            error: 'PAYMENT_METHOD_REQUIRED',
+            message:
+              'Add a card before enabling Cash App or Zelle — Vendylio uses it to collect the marketplace commission on those orders.',
+          },
+          { status: 402, headers: { 'x-request-id': ctx.requestId } },
+        );
+      }
+    }
 
     const store = await prisma.store.update({
       where: { id: existing.id },

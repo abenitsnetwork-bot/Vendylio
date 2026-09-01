@@ -17,6 +17,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/admin/stores', label: 'Stores', icon: 'store' },
   { href: '/admin/orders', label: 'Orders', icon: 'shopping-bag' },
   { href: '/admin/withdrawals', label: 'Withdrawals', icon: 'credit-card' },
+  { href: '/admin/commission', label: 'Commission', icon: 'dollar-sign' },
   { href: '/admin/audit-log', label: 'Audit Log', icon: 'clipboard' },
 ];
 

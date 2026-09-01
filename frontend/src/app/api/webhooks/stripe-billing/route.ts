@@ -4,7 +4,8 @@
  * Configure as a SEPARATE endpoint in the Stripe dashboard with its own
  * signing secret (STRIPE_BILLING_WEBHOOK_SECRET), subscribed to:
  *   customer.subscription.created / updated / deleted
- *   invoice.payment_failed
+ *   invoice.paid / invoice.payment_failed
+ *   checkout.session.completed        (Phase 1b — card setup for commission)
  *
  * Thin shim over the battle-tested factory (lib/server/webhook/handler.ts —
  * PROTECTED): raw-body HMAC, Serializable tx, WebhookLog dedup, processedAt
@@ -26,6 +27,8 @@ import {
   markSubscriptionPastDue,
   type SubscriptionInput,
 } from '@/lib/server/billing/sync-subscription';
+import { settleInvoicedCommission } from '@/lib/server/billing/commission-settlement';
+import { promoteSetupIntentCard } from '@/lib/server/billing/stripe-billing';
 import { prisma } from '@/lib/server/prisma';
 import { createLogger } from '@/lib/server/logger';
 
@@ -55,17 +58,56 @@ export const POST = createWebhookHandler<Stripe.Event>({
   prisma,
   provider: stripeBillingWebhookProvider,
 
-  // customer.subscription.created / updated
+  // customer.subscription.created / updated | invoice.paid |
+  // checkout.session.completed
   async onPaid(event, tx) {
-    if (!event.type.startsWith('customer.subscription.')) return {};
-    const sub = event.data.object as Stripe.Subscription;
-    const result = await syncSubscriptionFromStripe(tx, toSubscriptionInput(sub));
-    if (!result) {
-      log.warn('stripe-billing webhook: no store matched subscription', {
-        subscriptionId: sub.id,
-        eventType: event.type,
-      });
+    if (event.type.startsWith('customer.subscription.')) {
+      const sub = event.data.object as Stripe.Subscription;
+      const result = await syncSubscriptionFromStripe(tx, toSubscriptionInput(sub));
+      if (!result) {
+        log.warn('stripe-billing webhook: no store matched subscription', {
+          subscriptionId: sub.id,
+          eventType: event.type,
+        });
+      }
+      return {};
     }
+
+    // Phase 1b — a commission-settlement invoice was paid. Flip the INVOICED
+    // CommissionCharge rows it covers to SETTLED. A no-op for subscription
+    // renewal invoices (no rows carry their id).
+    if (event.type === 'invoice.paid') {
+      const invoice = event.data.object as Stripe.Invoice;
+      if (invoice.id) {
+        const settled = await settleInvoicedCommission(tx, invoice.id);
+        if (settled > 0) {
+          log.info('stripe-billing webhook: commission invoice settled', {
+            invoiceId: invoice.id,
+            chargesSettled: settled,
+          });
+        }
+      }
+      return {};
+    }
+
+    // Phase 1b — a `mode: 'setup'` Checkout completed: promote the collected
+    // card to the customer's invoice default (outside the tx — a Stripe API
+    // call, idempotent, never blocks the webhook ack).
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object as Stripe.Checkout.Session;
+      if (session.mode === 'setup' && typeof session.setup_intent === 'string') {
+        try {
+          await promoteSetupIntentCard(session.setup_intent);
+        } catch (err) {
+          log.warn('stripe-billing webhook: could not promote setup-intent card', {
+            sessionId: session.id,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+      return {};
+    }
+
     return {};
   },
 

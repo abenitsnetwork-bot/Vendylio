@@ -52,6 +52,7 @@ Groupes optionnels (set les vars pour activer ; absent = inerte) :
 |---|---|---|
 | Paiements (Stripe) | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_CONNECT_*` | `POST /api/orders` en carte renvoie 503 `PAYMENT_PROVIDER_UNCONFIGURED` ; Cash App / Zelle restent disponibles |
 | Abonnement Pro (Stripe Billing) | `STRIPE_PRO_PRICE_ID`, `STRIPE_BILLING_WEBHOOK_SECRET` | `POST /api/billing/checkout` renvoie 503 `BILLING_NOT_CONFIGURED` ; le dashboard masque « Upgrade to Pro », toutes les boutiques restent en Free |
+| Commission Cash App/Zelle (Phase 1b) | `COMMISSION_MIN_INVOICE_CENTS` (défaut 1000) | Sans Stripe Billing : la commission est seulement prélevée au retrait (jamais facturée) et `PATCH /api/stores` n'exige pas de carte pour activer Cash App/Zelle |
 | Livraison courier | `DOORDASH_*`, `UBER_DIRECT_*` (platform-level, jamais par boutique) | Le provider se présente comme indisponible ; `PICKUP` + `MERCHANT` restent disponibles |
 | Storage (Cloudinary) | `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_UPLOAD_PRESET?` | `/api/upload` renvoie 503 ; les URLs sont des `secure_url` Cloudinary publiques (OK pour photos produit / logos) |
 | Email (Resend) | `RESEND_API_KEY`, `EMAIL_FROM` | Les lignes en queue email s'accumulent, drainées au cron dès que la clé arrive |
@@ -95,6 +96,7 @@ Les route handlers sous [`frontend/src/app/api/`](frontend/src/app/api/) **sont*
 | `/api/cron/email-job-purge` | quotidien |
 | `/api/cron/low-stock-sweep` | quotidien — filet de sécurité alertes stock bas |
 | `/api/cron/plan-downgrade-sweep` | quotidien 03:00 — retire un Pro offert expiré / un abonnement past-due lapsé |
+| `/api/cron/commission-settlement-sweep` | quotidien 04:00 — facture via Stripe la commission Cash App/Zelle due par un marchand sans solde à prélever |
 
 Requiert un plan **Vercel Pro** (le Hobby ne fait que du quotidien, trop lent pour le TTL de 15 min des codes de vérification).
 

@@ -39,6 +39,38 @@ export async function applyOrderRefundedEffects(
     data: { orderId: order.id, status: 'REFUNDED', actorType: 'SELLER' },
   });
 
+  // Phase 1b — unwind the platform's Cash App / Zelle commission receivable.
+  // OWED and never collected → WAIVE it (the merchant refunds the buyer from
+  // their own pocket, Vendylio drops its claim). Already SETTLED/INVOICED →
+  // add a matching NEGATIVE row (kind REFUND_CREDIT) that credits the
+  // merchant's next withdrawal / invoice. @@unique([orderId, kind]) makes the
+  // credit idempotent if the refund path runs twice.
+  const saleCharge = await tx.commissionCharge.findUnique({
+    where: { orderId_kind: { orderId: order.id, kind: 'SALE' } },
+    select: { id: true, amountCents: true, status: true },
+  });
+  if (saleCharge) {
+    if (saleCharge.status === 'OWED') {
+      await tx.commissionCharge.update({
+        where: { id: saleCharge.id },
+        data: { status: 'WAIVED', settledAt: new Date() },
+      });
+    } else if (saleCharge.status === 'SETTLED' || saleCharge.status === 'INVOICED') {
+      await tx.commissionCharge.upsert({
+        where: { orderId_kind: { orderId: order.id, kind: 'REFUND_CREDIT' } },
+        create: {
+          storeId: order.storeId,
+          orderId: order.id,
+          amountCents: -saleCharge.amountCents,
+          currency: order.currency,
+          status: 'OWED',
+          kind: 'REFUND_CREDIT',
+        },
+        update: {},
+      });
+    }
+  }
+
   // Restock — the mirror image of markPaid's decrement, and like it goes
   // through applyStockChange so a REFUND_RESTOCK row lands in the ledger.
   // No floor needed here: adding back can't go negative.

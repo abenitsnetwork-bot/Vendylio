@@ -51,6 +51,25 @@ vi.mock('@/lib/server/withdrawals/balance', () => ({
   createDefaultBalanceComputer: vi.fn(() => async () => 5000),
 }));
 
+// Phase 1b — the route resolves the caller's store to net Cash App / Zelle
+// commission off the balance. Default: no store → the wrapper is a no-op and
+// every pre-Phase-1b assertion still holds. The "commission netting" block
+// below overrides these per-test.
+const resolveOwnStoreMock = vi.fn(async () => null as { id: string } | null);
+vi.mock('@/lib/server/org', () => ({
+  resolveOwnStore: (...a: unknown[]) => resolveOwnStoreMock(...(a as [])),
+}));
+
+const owedCommissionMock = vi.fn(async () => 0);
+const planSettlementMock = vi.fn(async () => ({
+  settledCents: 0,
+  chargeIds: [] as string[],
+}));
+vi.mock('@/lib/server/commission/owed', () => ({
+  owedCommissionCents: (...a: unknown[]) => owedCommissionMock(...(a as [])),
+  planCommissionSettlement: (...a: unknown[]) => planSettlementMock(...(a as [])),
+}));
+
 const createNotif = vi.fn();
 vi.mock('@/lib/server/notifications', () => ({
   createNotification: createNotif,
@@ -81,9 +100,11 @@ const txWithdrawal = {
   })),
   findMany: vi.fn(),
 };
+const txCommissionCharge = { updateMany: vi.fn(async () => ({ count: 0 })) };
 const txClient = {
   user: txUser,
   withdrawal: txWithdrawal,
+  commissionCharge: txCommissionCharge,
   notification: { create: vi.fn() },
 };
 
@@ -116,6 +137,13 @@ afterEach(() => {
   findManyTop.mockReset();
   txUser.findUnique.mockClear();
   txWithdrawal.create.mockClear();
+  txCommissionCharge.updateMany.mockClear();
+  resolveOwnStoreMock.mockReset();
+  resolveOwnStoreMock.mockResolvedValue(null);
+  owedCommissionMock.mockReset();
+  owedCommissionMock.mockResolvedValue(0);
+  planSettlementMock.mockReset();
+  planSettlementMock.mockResolvedValue({ settledCents: 0, chargeIds: [] });
 });
 
 interface PostBody {
@@ -380,5 +408,69 @@ describe('GET /api/withdrawals (RED — Wave 1 will turn these green)', () => {
     // never sees user B's rows. Inspect the where shape passed to Prisma.
     const args = findManyTop.mock.calls[0]?.[0] as { where?: { userId?: string } } | undefined;
     expect(args?.where?.userId).toBe('user-1');
+  });
+
+  it('GET — availableCents is net of OWED Cash App / Zelle commission', async () => {
+    findManyTop.mockResolvedValueOnce([]);
+    resolveOwnStoreMock.mockResolvedValue({ id: 'store-1' });
+    owedCommissionMock.mockResolvedValue(1200);
+    const { GET } = await import('./route');
+    const res = await GET(makeGetReq() as never);
+    const body = await res.json();
+    expect(body.commissionOwedCents).toBe(1200);
+    expect(body.availableCents).toBe(3800); // 5000 base − 1200 owed
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────
+// Phase 1b — Cash App / Zelle commission withheld from the payout
+// ────────────────────────────────────────────────────────────────────────
+describe('POST /api/withdrawals — commission settlement (Phase 1b)', () => {
+  it('merchant requests the NET amount, row stores the GROSS debit', async () => {
+    validateMock.mockResolvedValueOnce({ ok: true });
+    resolveOwnStoreMock.mockResolvedValue({ id: 'store-1' });
+    planSettlementMock.mockResolvedValue({ settledCents: 300, chargeIds: ['cc-1', 'cc-2'] });
+    txWithdrawal.create.mockResolvedValueOnce({
+      id: 'w-9',
+      userId: 'user-1',
+      status: 'PENDING',
+      amount: 1300, // 1000 net + 300 commission
+      currency: 'USD',
+      requestedAt: new Date('2026-09-01T12:00:00Z'),
+    });
+
+    const { POST } = await import('./route');
+    const res = await POST(makePostReq(validBody) as never);
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.netAmount).toBe(1000);
+    expect(body.grossAmount).toBe(1300);
+    expect(body.commissionSettledCents).toBe(300);
+
+    // Withdrawal row debits the gross; traceability column carries the cut.
+    const createArg = (txWithdrawal.create.mock.calls as unknown[][])[0]?.[0] as {
+      data: { amount: number; commissionSettledCents: number };
+    };
+    expect(createArg.data.amount).toBe(1300);
+    expect(createArg.data.commissionSettledCents).toBe(300);
+
+    // The settled charges flip OWED → SETTLED, stamped with this withdrawal.
+    const updArg = (txCommissionCharge.updateMany.mock.calls as unknown[][])[0]?.[0] as {
+      where: { id: { in: string[] } };
+      data: { status: string; settledByWithdrawalId: string };
+    };
+    expect(updArg.where.id.in).toEqual(['cc-1', 'cc-2']);
+    expect(updArg.data.status).toBe('SETTLED');
+    expect(updArg.data.settledByWithdrawalId).toBe('w-9');
+  });
+
+  it('no store → no settlement, gross === net', async () => {
+    validateMock.mockResolvedValueOnce({ ok: true });
+    resolveOwnStoreMock.mockResolvedValue(null);
+    const { POST } = await import('./route');
+    const res = await POST(makePostReq(validBody) as never);
+    expect(res.status).toBe(201);
+    expect(planSettlementMock).not.toHaveBeenCalled();
+    expect(txCommissionCharge.updateMany).not.toHaveBeenCalled();
   });
 });

@@ -103,4 +103,54 @@ describe('applyOrderRefundedEffects', () => {
     await applyOrderRefundedEffects(prismaMock, { ...BASE_ORDER, customerEmail: null });
     expect(prismaMock.outboxEvent.create).not.toHaveBeenCalled();
   });
+
+  // ── Phase 1b — Cash App / Zelle commission receivable unwind ──────────
+  it('WAIVES a still-OWED CommissionCharge on refund', async () => {
+    prismaMock.product.findUnique.mockResolvedValueOnce({ id: 'prod-a' } as never);
+    prismaMock.commissionCharge.findUnique.mockResolvedValueOnce({
+      id: 'cc-1',
+      amountCents: 216,
+      status: 'OWED',
+    } as never);
+
+    await applyOrderRefundedEffects(prismaMock, BASE_ORDER);
+
+    expect(prismaMock.commissionCharge.update).toHaveBeenCalledWith({
+      where: { id: 'cc-1' },
+      data: expect.objectContaining({ status: 'WAIVED' }),
+    });
+    expect(prismaMock.commissionCharge.upsert).not.toHaveBeenCalled();
+  });
+
+  it('writes a negative REFUND_CREDIT when the commission was already SETTLED', async () => {
+    prismaMock.product.findUnique.mockResolvedValueOnce({ id: 'prod-a' } as never);
+    prismaMock.commissionCharge.findUnique.mockResolvedValueOnce({
+      id: 'cc-1',
+      amountCents: 216,
+      status: 'SETTLED',
+    } as never);
+
+    await applyOrderRefundedEffects(prismaMock, BASE_ORDER);
+
+    expect(prismaMock.commissionCharge.upsert).toHaveBeenCalledWith({
+      where: { orderId_kind: { orderId: 'order-1', kind: 'REFUND_CREDIT' } },
+      create: expect.objectContaining({
+        storeId: 'store-1',
+        orderId: 'order-1',
+        amountCents: -216,
+        status: 'OWED',
+        kind: 'REFUND_CREDIT',
+      }),
+      update: {},
+    });
+    expect(prismaMock.commissionCharge.update).not.toHaveBeenCalled();
+  });
+
+  it('does nothing to commission when the order has no CommissionCharge (card order)', async () => {
+    prismaMock.product.findUnique.mockResolvedValueOnce({ id: 'prod-a' } as never);
+    // commissionCharge.findUnique → undefined (mockDeep default)
+    await applyOrderRefundedEffects(prismaMock, BASE_ORDER);
+    expect(prismaMock.commissionCharge.update).not.toHaveBeenCalled();
+    expect(prismaMock.commissionCharge.upsert).not.toHaveBeenCalled();
+  });
 });

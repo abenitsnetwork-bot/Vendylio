@@ -13,6 +13,9 @@ import { WithdrawalRequestForm } from '@/components/seller/WithdrawalRequestForm
 interface WithdrawalItem {
   id: string;
   amount: number;
+  // Phase 1b — Cash App / Zelle commission withheld from this payout. The
+  // merchant received `amount - commissionSettledCents`.
+  commissionSettledCents?: number;
   currency: string;
   status: string;
   destination: { method?: string; cashtag?: string; contact?: string };
@@ -82,6 +85,7 @@ export default function BillingPayoutsPage() {
   const { logout } = useAuth();
   const [items, setItems] = useState<WithdrawalItem[] | null>(null);
   const [availableCents, setAvailableCents] = useState<number | null>(null);
+  const [commissionOwedCents, setCommissionOwedCents] = useState(0);
   const [stripe, setStripe] = useState<StripeStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [billing, setBilling] = useState<BillingStatus | null>(null);
@@ -89,10 +93,15 @@ export default function BillingPayoutsPage() {
   const [planError, setPlanError] = useState<string | null>(null);
 
   const loadWithdrawals = useCallback(() => {
-    api<{ items: WithdrawalItem[]; availableCents: number | null }>('/api/withdrawals')
+    api<{
+      items: WithdrawalItem[];
+      availableCents: number | null;
+      commissionOwedCents?: number;
+    }>('/api/withdrawals')
       .then((res) => {
         setItems(res.items);
         setAvailableCents(res.availableCents);
+        setCommissionOwedCents(res.commissionOwedCents ?? 0);
       })
       .catch((err) => {
         setError(err instanceof ApiError ? err.message : 'Could not load withdrawal history.');
@@ -219,9 +228,10 @@ export default function BillingPayoutsPage() {
                 <Icon i="smartphone" size={16} className="mt-0.5 flex-shrink-0 text-primary" />
                 <span>
                   <strong className="text-foreground">Cash App &amp; Zelle payments</strong> go
-                  directly to you. Vendylio never touches that money and takes{' '}
-                  <strong className="text-foreground">no commission</strong> on it — you confirm the
-                  payment yourself on the order.
+                  directly to you — you confirm receipt yourself on the order. Vendylio&apos;s
+                  marketplace commission on those orders is then{' '}
+                  <strong className="text-foreground">withheld from your next withdrawal</strong>{' '}
+                  (or, if you have no balance to withhold from, billed to the card on file).
                 </span>
               </li>
               <li className="flex gap-2">
@@ -254,6 +264,18 @@ export default function BillingPayoutsPage() {
               <p className="font-headings text-3xl font-bold text-foreground">
                 {formatUsd(pendingCents)}
               </p>
+              {commissionOwedCents > 0 && (
+                <p className="mt-2 text-xs text-amber-700">
+                  {formatUsd(commissionOwedCents)} Vendylio commission due — settled from your next
+                  withdrawal.
+                </p>
+              )}
+              {commissionOwedCents < 0 && (
+                <p className="mt-2 text-xs text-green-700">
+                  {formatUsd(-commissionOwedCents)} commission credit — applied to your next
+                  withdrawal.
+                </p>
+              )}
             </Card>
             <Card>
               <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
@@ -323,7 +345,10 @@ export default function BillingPayoutsPage() {
               <h2 className="mb-6 border-b border-border pb-6 font-headings text-lg font-bold text-foreground">
                 Request a Withdrawal
               </h2>
-              <WithdrawalRequestForm onRequested={loadWithdrawals} />
+              <WithdrawalRequestForm
+                onRequested={loadWithdrawals}
+                commissionOwedCents={commissionOwedCents}
+              />
             </Card>
 
             <Card className="p-8">
@@ -369,7 +394,17 @@ export default function BillingPayoutsPage() {
                         {new Date(w.requestedAt).toLocaleString()}
                       </p>
                     </div>
-                    <p className="text-base font-bold text-foreground">{formatUsd(w.amount)}</p>
+                    <div className="text-right">
+                      <p className="text-base font-bold text-foreground">
+                        {formatUsd(w.amount - (w.commissionSettledCents ?? 0))}
+                      </p>
+                      {(w.commissionSettledCents ?? 0) !== 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          {formatUsd(w.amount)} gross − {formatUsd(w.commissionSettledCents ?? 0)}{' '}
+                          commission
+                        </p>
+                      )}
+                    </div>
                     <span
                       className={`ml-4 inline-block rounded px-3 py-1 text-xs font-semibold ${
                         w.status === 'COMPLETED'

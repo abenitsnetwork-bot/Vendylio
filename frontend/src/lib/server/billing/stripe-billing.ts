@@ -115,6 +115,125 @@ export async function createPortalSession(opts: { customerId: string }): Promise
   return { url: session.url };
 }
 
+// ── Phase 1b — a card on file so Vendylio can invoice Cash App / Zelle
+// commission a merchant with no withdrawable balance would otherwise never
+// pay. Same billing customer as the Pro subscription. ──────────────────────
+
+/**
+ * Hosted Checkout in `setup` mode — collects a reusable card and attaches it
+ * to the billing customer (Stripe Checkout attaches it automatically on
+ * completion; the webhook also marks it the customer's default). Used to
+ * satisfy the "payment method required" gate before enabling Cash App / Zelle.
+ */
+export async function createCardSetupSession(opts: {
+  customerId: string;
+  storeId: string;
+}): Promise<{ url: string }> {
+  const stripe = getClient();
+  const base = appUrl();
+  const session = await stripe.checkout.sessions.create({
+    mode: 'setup',
+    customer: opts.customerId,
+    currency: 'usd',
+    client_reference_id: opts.storeId,
+    setup_intent_data: { metadata: { storeId: opts.storeId, purpose: 'commission_card' } },
+    success_url: `${base}/dashboard/settings?tab=payments&card=added`,
+    cancel_url: `${base}/dashboard/settings?tab=payments`,
+  });
+  if (!session.url) throw new Error('Stripe did not return a Checkout URL');
+  return { url: session.url };
+}
+
+/** The first saved card on the customer, or null. */
+export async function getDefaultCardPaymentMethodId(customerId: string): Promise<string | null> {
+  const stripe = getClient();
+  const customer = (await stripe.customers.retrieve(customerId)) as Stripe.Customer;
+  const fromDefault =
+    typeof customer.invoice_settings?.default_payment_method === 'string'
+      ? customer.invoice_settings.default_payment_method
+      : (customer.invoice_settings?.default_payment_method?.id ?? null);
+  if (fromDefault) return fromDefault;
+  const list = await stripe.paymentMethods.list({ customer: customerId, type: 'card', limit: 1 });
+  return list.data[0]?.id ?? null;
+}
+
+/** True when the merchant has a usable card on file for `charge_automatically`. */
+export async function hasBillablePaymentMethod(customerId: string | null): Promise<boolean> {
+  if (!customerId) return false;
+  return (await getDefaultCardPaymentMethodId(customerId)) !== null;
+}
+
+/** Promote a payment method to the customer's invoice default (idempotent). */
+export async function setDefaultPaymentMethod(
+  customerId: string,
+  paymentMethodId: string,
+): Promise<void> {
+  const stripe = getClient();
+  await stripe.customers.update(customerId, {
+    invoice_settings: { default_payment_method: paymentMethodId },
+  });
+}
+
+/**
+ * After a `mode: 'setup'` Checkout completes, make the collected card the
+ * customer's invoice default so the commission-settlement sweep can charge it.
+ * Stripe Checkout already attached the PM to the customer; this only sets the
+ * default. Best-effort — returns false when the shapes aren't what we expect.
+ */
+export async function promoteSetupIntentCard(setupIntentId: string): Promise<boolean> {
+  const stripe = getClient();
+  const si = await stripe.setupIntents.retrieve(setupIntentId);
+  const customerId = typeof si.customer === 'string' ? si.customer : (si.customer?.id ?? null);
+  const pmId =
+    typeof si.payment_method === 'string' ? si.payment_method : (si.payment_method?.id ?? null);
+  if (!customerId || !pmId) return false;
+  await setDefaultPaymentMethod(customerId, pmId);
+  return true;
+}
+
+export interface CommissionInvoiceLine {
+  amountCents: number;
+  description: string;
+}
+
+/**
+ * Create + finalize a `charge_automatically` invoice for the merchant's
+ * outstanding Cash App / Zelle commission. Stripe attempts payment right away;
+ * `invoice.paid` (→ webhook) flips the CommissionCharge rows to SETTLED.
+ * Returns the invoice id to stamp onto those rows.
+ */
+export async function createCommissionInvoice(opts: {
+  customerId: string;
+  storeId: string;
+  lines: CommissionInvoiceLine[];
+}): Promise<{ invoiceId: string }> {
+  const stripe = getClient();
+  const pmId = await getDefaultCardPaymentMethodId(opts.customerId);
+  if (!pmId) throw new Error('No card on file for commission invoice');
+
+  const invoice = await stripe.invoices.create({
+    customer: opts.customerId,
+    collection_method: 'charge_automatically',
+    auto_advance: true,
+    default_payment_method: pmId,
+    description: 'Vendylio marketplace commission (Cash App / Zelle orders)',
+    metadata: { kind: 'commission_settlement', storeId: opts.storeId },
+  });
+
+  for (const line of opts.lines) {
+    await stripe.invoiceItems.create({
+      customer: opts.customerId,
+      invoice: invoice.id,
+      currency: 'usd',
+      amount: line.amountCents,
+      description: line.description,
+    });
+  }
+
+  const finalized = await stripe.invoices.finalizeInvoice(invoice.id);
+  return { invoiceId: finalized.id };
+}
+
 /** Test-only — clear the cached client so `vi.stubEnv` can reconfigure. */
 export function __resetBillingClient(): void {
   _client = null;

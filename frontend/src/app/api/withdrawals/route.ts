@@ -51,6 +51,8 @@ import { createDefaultBalanceComputer } from '@/lib/server/withdrawals/balance';
 import { loadGuardConfigFromEnv, validateWithdrawalRequest } from '@/lib/server/withdrawals/guards';
 import { verifyPin } from '@/lib/server/auth/pin';
 import { createNotification } from '@/lib/server/notifications';
+import { resolveOwnStore } from '@/lib/server/org';
+import { owedCommissionCents, planCommissionSettlement } from '@/lib/server/commission/owed';
 
 import { clampLimit, decodeCursor, encodeCursor } from '@/lib/server/pagination/paginate';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
@@ -118,7 +120,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     //    `WITHDRAWAL_BALANCE_CHECK=0` flips `balanceCheckEnabled` off (T-04-04-05
     //    accepted, documented in `.env.example`).
     const config = loadGuardConfigFromEnv(process.env);
-    const computeBalance = createDefaultBalanceComputer(prisma);
+
+    // Phase 1b — the merchant requests the NET amount they'll receive. Their
+    // spendable balance is the base withdrawable balance MINUS Cash App / Zelle
+    // commission they still owe the platform (OWED CommissionCharge rows). We
+    // wrap `createDefaultBalanceComputer` here rather than editing the
+    // battle-tested `balance.ts`. `Withdrawal.amount` is stored as the GROSS
+    // debit (net + settled commission) so the base balance formula stays
+    // correct; the merchant receives `amount - commissionSettledCents`.
+    const ownStore = await resolveOwnStore(auth.user.sub);
+    const baseComputeBalance = createDefaultBalanceComputer(prisma);
+    const computeBalance = async (
+      userId: string,
+      txClient?: Parameters<typeof baseComputeBalance>[1],
+    ): Promise<number> => {
+      const base = await baseComputeBalance(userId, txClient);
+      if (!ownStore) return base;
+      const owed = await owedCommissionCents(txClient ?? prisma, ownStore.id);
+      return base - owed;
+    };
 
     try {
       const result = await prisma.$transaction(
@@ -154,10 +174,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             };
           }
 
+          // Phase 1b — settle the Cash App / Zelle commission the merchant
+          // owes by withholding it from this payout. `amount` is the net they
+          // receive; the row's `amount` records the gross debit so the base
+          // balance formula stays honest.
+          const settlement = ownStore
+            ? await planCommissionSettlement(tx, ownStore.id, amount)
+            : { settledCents: 0, chargeIds: [] };
+          const grossAmount = amount + settlement.settledCents;
+
           const w = await tx.withdrawal.create({
             data: {
               userId: auth.user.sub,
-              amount,
+              amount: grossAmount,
+              commissionSettledCents: settlement.settledCents,
               currency,
               status: 'PENDING',
               destination: destination as Prisma.InputJsonValue,
@@ -172,7 +202,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             },
           });
 
-          return { ok: true as const, withdrawal: w };
+          if (settlement.chargeIds.length > 0) {
+            await tx.commissionCharge.updateMany({
+              where: { id: { in: settlement.chargeIds } },
+              data: {
+                status: 'SETTLED',
+                settledByWithdrawalId: w.id,
+                settledAt: new Date(),
+              },
+            });
+          }
+
+          return { ok: true as const, withdrawal: w, netAmount: amount };
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
@@ -209,7 +250,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       }
 
       return NextResponse.json(
-        { withdrawalId: result.withdrawal.id, status: result.withdrawal.status },
+        {
+          withdrawalId: result.withdrawal.id,
+          status: result.withdrawal.status,
+          netAmount: result.netAmount,
+          grossAmount: result.withdrawal.amount,
+          commissionSettledCents: result.withdrawal.amount - result.netAmount,
+        },
         { status: 201, headers: { 'x-request-id': ctx.requestId } },
       );
     } catch (err) {
@@ -267,6 +314,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       select: {
         id: true,
         amount: true,
+        commissionSettledCents: true,
         currency: true,
         status: true,
         destination: true,
@@ -283,21 +331,26 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const nextCursor =
       hasMore && last ? encodeCursor({ createdAt: last.requestedAt, id: last.id }) : null;
 
-    // PAY-01 — the real withdrawable balance (net-of-commission stripe_platform
-    // sales minus reserved/completed withdrawals). Only meaningful on the first
-    // page; the billing UI shows it above the history. Best-effort — a balance
-    // read failure must not break the list.
+    // The net withdrawable balance: base (stripe_platform sales net of
+    // commission, minus reserved/completed withdrawals) MINUS the Cash App /
+    // Zelle commission still OWED (Phase 1b). `commissionOwedCents` is broken
+    // out so the billing UI can explain the gap (negative = a refund credit
+    // the merchant is owed). Only meaningful on the first page; best-effort.
     let availableCents: number | null = null;
+    let commissionOwedCents = 0;
     if (!cursor) {
       try {
-        availableCents = await createDefaultBalanceComputer(prisma)(auth.user.sub);
+        const base = await createDefaultBalanceComputer(prisma)(auth.user.sub);
+        const store = await resolveOwnStore(auth.user.sub);
+        commissionOwedCents = store ? await owedCommissionCents(prisma, store.id) : 0;
+        availableCents = base - commissionOwedCents;
       } catch {
         availableCents = null;
       }
     }
 
     return NextResponse.json(
-      { items, nextCursor, availableCents },
+      { items, nextCursor, availableCents, commissionOwedCents },
       { headers: { 'x-request-id': ctx.requestId } },
     );
   });

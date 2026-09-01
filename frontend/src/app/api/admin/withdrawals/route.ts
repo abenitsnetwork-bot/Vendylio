@@ -34,6 +34,9 @@ const WITHDRAWAL_SELECT = {
   id: true,
   userId: true,
   amount: true,
+  // Phase 1b — Cash App / Zelle commission withheld from this payout. The
+  // operator pays the merchant `amount - commissionSettledCents`.
+  commissionSettledCents: true,
   currency: true,
   status: true,
   destination: true,

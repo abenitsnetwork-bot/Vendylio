@@ -413,14 +413,56 @@ model Order {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  statusEvents OrderStatusEvent[]
-  delivery     Delivery?
-  review       Review?
+  statusEvents      OrderStatusEvent[]
+  delivery          Delivery?
+  review            Review?
+  commissionCharges CommissionCharge[]
 
   @@index([storeId, createdAt])
   @@index([userId, createdAt])
   @@index([status, expiresAt])
   @@index([provider, providerChargeId])
+}
+
+// Phase 1b — marketplace commission the platform is OWED on a Cash App / Zelle
+// order. Card orders never get a row (their commission is already collected —
+// application_fee on Connect, withheld from the platform balance on
+// stripe_platform); this ledger exists only because manual-method money went
+// peer-to-peer straight to the merchant, so the cut is a RECEIVABLE.
+//
+// Written in the same Serializable tx as the PAID transition (markPaid.ts) with
+// @@unique([orderId, kind]) as the idempotency gate. Collected either by
+// withholding it from the merchant's next withdrawal (status OWED → SETTLED,
+// `settledByWithdrawalId` set) or — for a merchant with no withdrawable balance
+// — by a Stripe invoice on their billing customer (OWED → INVOICED → SETTLED).
+// A refund before collection WAIVES the charge; a refund after collection adds
+// a second NEGATIVE row (kind REFUND_CREDIT) that credits the merchant's next
+// withdrawal / invoice.
+model CommissionCharge {
+  id                    String    @id @default(cuid())
+  storeId               String
+  store                 Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  orderId               String
+  order                 Order     @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  // Cents. Positive = merchant owes the platform. Negative = a credit back to
+  // the merchant (REFUND_CREDIT).
+  amountCents           Int
+  currency              String    @default("USD")
+  // OWED → SETTLED (withheld from a withdrawal) | INVOICED (billed via Stripe,
+  // awaiting invoice.paid) | WAIVED (refunded before collection).
+  status                String    @default("OWED")
+  kind                  String    @default("SALE") // SALE | REFUND_CREDIT
+  settledByWithdrawalId String?
+  // One Stripe invoice settles MANY charges (all of a store's OWED rows), so
+  // this is a plain index, not @unique. The webhook flips every INVOICED row
+  // carrying the id from `invoice.paid` to SETTLED.
+  stripeInvoiceId       String?
+  createdAt             DateTime  @default(now())
+  settledAt             DateTime?
+
+  @@unique([orderId, kind])
+  @@index([storeId, status])
+  @@index([stripeInvoiceId])
 }
 
 // Phase 4 — lightweight audit trail for the order lifecycle. One row per
@@ -728,14 +770,15 @@ model Store {
   createdAt                    DateTime     @default(now())
   updatedAt                    DateTime     @updatedAt
 
-  products       Product[]
-  orders         Order[]
-  customers      Customer[]
-  reviews        Review[]
-  categories     Category[]
-  stockMovements StockMovement[]
-  discounts      Discount[]
-  quotes         Quote[]
+  products          Product[]
+  orders            Order[]
+  customers         Customer[]
+  reviews           Review[]
+  categories        Category[]
+  stockMovements    StockMovement[]
+  discounts         Discount[]
+  quotes            Quote[]
+  commissionCharges CommissionCharge[]
 }
 
 // Phase D — seller-managed promo codes. V1 ships one mechanism:
@@ -904,6 +947,13 @@ model Withdrawal {
   requestedAt DateTime  @default(now())
   processedAt DateTime?
   completedAt DateTime?
+
+  // Phase 1b — how much of this withdrawal's value was withheld to settle
+  // Cash App / Zelle marketplace commission the merchant owed (CommissionCharge
+  // rows flipped OWED → SETTLED in the same tx). Display-only:
+  // `amount` is still what the merchant asked for; they receive
+  // `amount - commissionSettledCents` and the platform keeps the rest.
+  commissionSettledCents Int @default(0)
 
   @@index([userId, requestedAt])
   @@index([status, requestedAt])

@@ -18,7 +18,21 @@ const ERROR_MESSAGES: Record<string, string> = {
   VALIDATION_FAILED: 'Please check the fields and try again.',
 };
 
-export function WithdrawalRequestForm({ onRequested }: { onRequested: () => void }) {
+interface WithdrawalResult {
+  netAmount: number;
+  grossAmount: number;
+  commissionSettledCents: number;
+}
+
+export function WithdrawalRequestForm({
+  onRequested,
+  commissionOwedCents = 0,
+}: {
+  onRequested: () => void;
+  /** Phase 1b — outstanding Cash App / Zelle commission, shown as a heads-up
+   *  that it's settled from this payout. Positive = merchant owes. */
+  commissionOwedCents?: number;
+}) {
   const [method, setMethod] = useState<Method>('CASH_APP');
   const [identifier, setIdentifier] = useState('');
   const [amount, setAmount] = useState('');
@@ -29,21 +43,24 @@ export function WithdrawalRequestForm({ onRequested }: { onRequested: () => void
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [result, setResult] = useState<WithdrawalResult | null>(null);
 
   async function submitWithdrawal(withPin: string) {
     const amountCents = Math.round(Number(amount) * 100);
     const destination =
       method === 'CASH_APP' ? { method, cashtag: identifier } : { method, contact: identifier };
-    await api('/api/withdrawals', {
+    const res = await api<WithdrawalResult>('/api/withdrawals', {
       method: 'POST',
       body: { amount: amountCents, currency: 'USD', destination, pin: withPin },
     });
+    setResult(res);
   }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setSuccess(false);
+    setResult(null);
 
     const amountCents = Math.round(Number(amount) * 100);
     if (!Number.isFinite(amountCents) || amountCents <= 0) {
@@ -188,6 +205,14 @@ export function WithdrawalRequestForm({ onRequested }: { onRequested: () => void
         />
       </Field>
 
+      {commissionOwedCents > 0 && (
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          You enter the amount you want to receive. Up to{' '}
+          <strong>${(commissionOwedCents / 100).toFixed(2)}</strong> of Vendylio commission owed on
+          your Cash App / Zelle orders is settled from this payout on top of that.
+        </p>
+      )}
+
       <Field label="Withdrawal PIN" htmlFor="pin">
         <input
           id="pin"
@@ -204,7 +229,18 @@ export function WithdrawalRequestForm({ onRequested }: { onRequested: () => void
           {error}
         </p>
       )}
-      {success && <p className="text-sm text-green-600">Withdrawal requested.</p>}
+      {success && (
+        <div className="text-sm text-green-600">
+          <p>Withdrawal requested.</p>
+          {result && result.commissionSettledCents !== 0 && (
+            <p className="text-xs text-muted-foreground">
+              You&apos;ll receive ${(result.netAmount / 100).toFixed(2)}. $
+              {(result.commissionSettledCents / 100).toFixed(2)} of Vendylio commission was settled
+              from this payout.
+            </p>
+          )}
+        </div>
+      )}
 
       <Button type="submit" disabled={submitting} className="w-full">
         {submitting ? 'Requesting…' : 'Request Withdrawal'}
