@@ -1114,6 +1114,16 @@ export async function createFulfillment(
               formatOrderNumber(delivery.order.orderNumber),
             ),
           );
+          // DEL-02 — the buyer sees "confirmed / ready" and nothing moving.
+          // `recordTransition`'s terminal effects skip a customer email for a
+          // SYSTEM/CRON-initiated FAILED (see enqueueDeliveryTerminalEffects),
+          // so send the neutral "there's a delay, the store is on it" email
+          // here. Copy carries no ETA. Out-of-band via the outbox — never
+          // touches order/delivery state.
+          await enqueueOutbox(tx, {
+            kind: 'email.order_status',
+            payload: { orderId: delivery.orderId, kind: 'DELIVERY_ISSUE' },
+          });
         } else {
           // stay PENDING; the cron retries with the bumped attemptCount.
           await tx.delivery.update({

@@ -31,6 +31,10 @@ interface DeliveryInfo {
   estimatedDropoffAt: string | null;
   failureReason: string | null;
   attemptCount: number;
+  /** DEL-01 — fee the customer paid (snapshot of Order.deliveryFeeCents). */
+  feeCents: number | null;
+  /** DEL-01 — the courier quote this delivery was dispatched on. */
+  quotedFeeCents: number | null;
 }
 
 interface DeliveryEvent {
@@ -354,6 +358,30 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     <dd className="text-foreground">
                       {DELIVERY_STATE_LABEL[delivery.state] ?? delivery.state}
                     </dd>
+                    <dt className="text-muted-foreground">Delivery fee (customer paid)</dt>
+                    <dd className="text-foreground">{formatUsd(order.deliveryFeeCents)}</dd>
+                    {delivery.quotedFeeCents != null &&
+                      delivery.quotedFeeCents !== order.deliveryFeeCents && (
+                        <>
+                          <dt className="text-muted-foreground">Courier quote at dispatch</dt>
+                          <dd className="text-foreground">
+                            {formatUsd(delivery.quotedFeeCents)}{' '}
+                            <span
+                              className={
+                                delivery.quotedFeeCents > order.deliveryFeeCents
+                                  ? 'text-amber-700'
+                                  : 'text-green-700'
+                              }
+                            >
+                              ({delivery.quotedFeeCents > order.deliveryFeeCents ? '+' : '−'}
+                              {formatUsd(
+                                Math.abs(delivery.quotedFeeCents - order.deliveryFeeCents),
+                              )}{' '}
+                              vs. paid)
+                            </span>
+                          </dd>
+                        </>
+                      )}
                     {delivery.estimatedDropoffAt && (
                       <>
                         <dt className="text-muted-foreground">Est. dropoff</dt>

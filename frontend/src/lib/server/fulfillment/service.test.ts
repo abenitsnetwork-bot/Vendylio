@@ -589,6 +589,13 @@ describe('createFulfillment', () => {
       expect.anything(),
       expect.objectContaining({ type: 'FULFILLMENT_FAILED' }),
     );
+    // DEL-02 — the buyer also gets a neutral "there's a delay" email.
+    const kinds = prismaMock.outboxEvent.create.mock.calls.map(
+      (c) => (c[0] as { data: { kind: string; payload: { kind?: string } } }).data,
+    );
+    expect(
+      kinds.some((d) => d.kind === 'email.order_status' && d.payload.kind === 'DELIVERY_ISSUE'),
+    ).toBe(true);
   });
 
   it('courier: already dispatched → reconciles via getDelivery, never re-creates', async () => {
