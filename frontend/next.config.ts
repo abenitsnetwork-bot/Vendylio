@@ -2,7 +2,7 @@ import type { NextConfig } from 'next';
 import { withSentryConfig } from '@sentry/nextjs';
 
 // Static security headers applied to every response.
-// Set via next.config.ts (not middleware.ts) so Vercel's edge can serve them
+// Set via next.config.ts (not proxy.ts) so Vercel's edge can serve them
 // from the CDN cache without invoking a function — zero per-request latency.
 //
 // UX-01 (Prompt #15) — CSP rollout, phase 1: REPORT-ONLY. This header never
@@ -13,7 +13,7 @@ import { withSentryConfig } from '@sentry/nextjs';
 // ingest). Google Fonts are self-hosted by next/font — no font host needed.
 //
 // Phase 2 (follow-up, after observing reports): switch `script-src` to a
-// per-request nonce (needs middleware.ts), drop `'unsafe-inline'` there, and
+// per-request nonce (needs proxy.ts), drop `'unsafe-inline'` there, and
 // promote this to the enforcing `Content-Security-Policy` header.
 const cspReportOnly = [
   "default-src 'self'",

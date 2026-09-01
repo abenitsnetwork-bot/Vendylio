@@ -2,7 +2,7 @@
 //
 // Browser-friendly silent refresh: bounces the user through a 302 → mints
 // fresh access+refresh+csrf cookies (same flow as POST /api/auth/refresh) →
-// 302s to the validated `next` path. Used by `frontend/middleware.ts` when a
+// 302s to the validated `next` path. Used by `frontend/src/proxy.ts` when a
 // protected page is requested with a missing/expired access cookie but a
 // still-valid refresh cookie.
 //

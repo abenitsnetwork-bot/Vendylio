@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { NextRequest } from 'next/server';
-// middleware.ts lives at src/ (Next 16 requires it inside src/ when app/ is
-// under src/ — a root-level middleware.ts is silently ignored).
-import { middleware } from './middleware';
+// proxy.ts lives at src/ (Next 16 requires the Proxy file inside src/ when
+// app/ is under src/ — a root-level file is silently ignored).
+import { proxy } from './proxy';
 
 // Default host is one of our own (localhost) so the custom-domain rewrite is
 // inert for these; the custom-domain tests pass an explicit foreign host.
@@ -27,22 +27,22 @@ const rewriteTarget = (res: Response) => res.headers.get('x-middleware-rewrite')
 
 describe('/admin edge pre-filter', () => {
   it('404s an anonymous request to /admin (no shell served)', () => {
-    const res = middleware(request('/admin'));
+    const res = proxy(request('/admin'));
     expect(res.status).toBe(404);
     expect(isNext(res)).toBe(false);
   });
 
   it('404s an anonymous request to a deep /admin/* path', () => {
-    expect(middleware(request('/admin/users/abc123')).status).toBe(404);
+    expect(proxy(request('/admin/users/abc123')).status).toBe(404);
   });
 
   it('lets a request with an access cookie through to the server gate', () => {
-    const res = middleware(request('/admin', { [ACCESS]: 'jwt' }));
+    const res = proxy(request('/admin', { [ACCESS]: 'jwt' }));
     expect(isNext(res)).toBe(true);
   });
 
   it('bounces a refresh-only session through silent refresh', () => {
-    const res = middleware(request('/admin/orders', { [REFRESH]: 'rjwt' }));
+    const res = proxy(request('/admin/orders', { [REFRESH]: 'rjwt' }));
     expect(res.status).toBe(303);
     const location = res.headers.get('location') ?? '';
     expect(location).toContain('/api/auth/refresh-and-return');
@@ -50,40 +50,40 @@ describe('/admin edge pre-filter', () => {
   });
 
   it('does not treat /administrators as an admin path', () => {
-    expect(isNext(middleware(request('/administrators')))).toBe(true);
+    expect(isNext(proxy(request('/administrators')))).toBe(true);
   });
 });
 
 describe('non-admin paths are unaffected', () => {
   it('passes through when AUTH_PROTECTED_PREFIXES is unset', () => {
-    expect(isNext(middleware(request('/dashboard')))).toBe(true);
-    expect(isNext(middleware(request('/')))).toBe(true);
+    expect(isNext(proxy(request('/dashboard')))).toBe(true);
+    expect(isNext(proxy(request('/')))).toBe(true);
   });
 });
 
 describe('custom domain rewrite (Phase 4b)', () => {
   it('rewrites the root of a foreign host to /s/<host>', () => {
-    const res = middleware(request('/', {}, 'shop.brand.com'));
+    const res = proxy(request('/', {}, 'shop.brand.com'));
     expect(rewriteTarget(res)).toContain('/s/shop.brand.com');
   });
 
   it('rewrites storefront sub-paths, preserving the path', () => {
-    expect(rewriteTarget(middleware(request('/products/abc', {}, 'shop.brand.com')))).toContain(
+    expect(rewriteTarget(proxy(request('/products/abc', {}, 'shop.brand.com')))).toContain(
       '/s/shop.brand.com/products/abc',
     );
-    expect(rewriteTarget(middleware(request('/checkout', {}, 'shop.brand.com')))).toContain(
+    expect(rewriteTarget(proxy(request('/checkout', {}, 'shop.brand.com')))).toContain(
       '/s/shop.brand.com/checkout',
     );
   });
 
   it('does not rewrite (or expose) /dashboard on a foreign host', () => {
-    const res = middleware(request('/dashboard', {}, 'shop.brand.com'));
+    const res = proxy(request('/dashboard', {}, 'shop.brand.com'));
     expect(rewriteTarget(res)).toBeNull();
     expect(isNext(res)).toBe(true);
   });
 
   it('leaves our own hosts alone', () => {
-    expect(rewriteTarget(middleware(request('/', {}, 'localhost:3000')))).toBeNull();
-    expect(rewriteTarget(middleware(request('/', {}, 'app.vercel.app')))).toBeNull();
+    expect(rewriteTarget(proxy(request('/', {}, 'localhost:3000')))).toBeNull();
+    expect(rewriteTarget(proxy(request('/', {}, 'app.vercel.app')))).toBeNull();
   });
 });
