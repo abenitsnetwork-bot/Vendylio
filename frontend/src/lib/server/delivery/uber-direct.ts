@@ -130,7 +130,19 @@ function formatDropoffAddress(addr: Record<string, unknown> | null): string | nu
 }
 
 function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+  if (!(err instanceof Error)) return String(err);
+  // The `uber-direct` SDK's FetchError carries the actionable detail in
+  // `.metadata.param_details` (e.g. "This account has been disabled…"), NOT in
+  // `.message` ("The parameters of your request were invalid."). Fold it in so
+  // callers and `classifyDeliveryError` can act on it.
+  const meta = (err as { metadata?: unknown }).metadata;
+  const detail =
+    meta &&
+    typeof meta === 'object' &&
+    typeof (meta as Record<string, unknown>).param_details === 'string'
+      ? ((meta as Record<string, unknown>).param_details as string)
+      : null;
+  return detail && !err.message.includes(detail) ? `${err.message} — ${detail}` : err.message;
 }
 
 interface UberDeliveryQuoteResponse {
@@ -228,9 +240,12 @@ export interface UberDeliverySnapshot {
 }
 
 /**
- * Prompt #12 — raw GET of a delivery, used by the fulfillment-tick poll cron
- * (the installed SDK exposes no get/cancel helper). Returns null on any
- * failure so the poll simply skips this row.
+ * Prompt #12 — raw GET of a delivery, used by the fulfillment-tick poll cron.
+ * The `uber-direct` SDK v0.1.8 DOES expose `getDelivery` / `listDeliveries` /
+ * `cancelDelivery` on `createDeliveriesClient`, but we call the endpoint with
+ * `fetchWithTimeout` directly for a hard deadline (the SDK's `fetchData` has no
+ * abort) and to avoid its broken published types. Returns null on any failure
+ * so the poll simply skips this row.
  */
 export async function getUberDelivery(
   providerDeliveryId: string,

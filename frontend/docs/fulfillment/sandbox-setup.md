@@ -1,5 +1,13 @@
 # Sandbox setup
 
+For the full validation walkthrough (tunnel, webhook replay, DB checks,
+reconciliation) see **`sandbox-runbook.md`**. Quick check once credentials are
+in `.env.local`:
+
+```
+RUN_PROVIDER_SANDBOX_TESTS=1 pnpm --filter frontend provider:sandbox-check
+```
+
 ## Uber Direct
 
 1. Create an Uber Direct app at <https://developer.uber.com/dashboard>.
@@ -9,6 +17,13 @@
    driver.
 4. Add a webhook in the dashboard → `https://<tunnel>/api/webhooks/uber-direct`,
    copy its signing key into `UBER_DIRECT_WEBHOOK_SIGNING_KEY`.
+
+> **Account activation gotcha:** a brand-new Uber Direct account authenticates
+> fine (`getAccessToken` succeeds) but returns `400 invalid_params` —
+> `param_details: "This account has been disabled. Please reach out to
+> directbilling-group@uber.com to resolve"` — on every quote/create until Uber
+> enables billing. `test-connection` will still show green (it only probes
+> OAuth). Sort this with Uber before expecting quotes.
 
 ## DoorDash Drive
 

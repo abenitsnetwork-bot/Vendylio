@@ -59,3 +59,11 @@ silent to the buyer (the seller is already handling it).
 Uber Direct and DoorDash both provide dashboard "test webhook" / simulator
 tools. Fire a `delivered` event twice and confirm exactly one
 `notification.delivery_completed` + one `email.order_status` are enqueued.
+
+Full walkthrough (tunnel, dashboard webhook config, replay + tamper checks,
+reconciliation via the poll cron) is in **`sandbox-runbook.md`** step 5. As of
+2026-08-31 the live webhook loop is **BLOCKED** for both providers — Uber's
+sandbox account is disabled, DoorDash has no credentials — so signature
+verification is currently covered only by the unit tests
+(`src/lib/server/webhook/{uber-direct,doordash}` + the route tests), which use
+representative keys and byte-identical HMAC schemes.

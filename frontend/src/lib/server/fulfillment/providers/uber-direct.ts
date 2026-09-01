@@ -4,10 +4,11 @@
  * integration). This file only adapts shapes; the SDK calls, auth token
  * cache and typed errors stay in the delivery/ module.
  *
- * Phase 1 wires `quote` + `createDelivery` + `normalizeStatus` +
- * `testConnection`. `getDelivery` / `cancelDelivery` are stubbed here and
- * filled in Phase 3 (poll cron + cancel route) once the SDK's
- * get/cancel endpoints are ground-truthed.
+ * `quote` + `createDelivery` + `normalizeStatus` + `testConnection` +
+ * `getDelivery` + `cancelDelivery` are all wired (poll cron + cancel route).
+ * The underlying `delivery/uber-direct.ts` calls the Uber endpoints with
+ * `fetchWithTimeout` rather than the SDK's get/cancel helpers (which exist in
+ * v0.1.8 but have no request-abort) — see that file's header.
  */
 import 'server-only';
 import {

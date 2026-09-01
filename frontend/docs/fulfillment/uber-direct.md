@@ -61,4 +61,23 @@ from the `fulfillment-tick` poll cron. Correlation: `payload.delivery_id` →
 ## Test connection
 
 `uberDirectAuthProbe()` fetches an OAuth token and stops. It never calls the deliveries
-endpoint, so it cannot dispatch a driver.
+endpoint, so it cannot dispatch a driver. **Caveat:** a green probe only proves OAuth
+works — it does not prove the Uber account is provisioned for deliveries (see below).
+
+## Sandbox validation status — 2026-08-31
+
+Checked with `pnpm --filter frontend provider:sandbox-check` against real sandbox
+credentials:
+
+| Op | Result | Detail |
+|---|---|---|
+| Auth (`getAccessToken`) | **PASS** | real 177-char bearer token from `login.uber.com` |
+| Quote / Create / Status / Cancel | **BLOCKED** | Uber account disabled — `400 invalid_params`, `param_details: "This account has been disabled. Please reach out to directbilling-group@uber.com to resolve"` |
+| Webhook loop | **BLOCKED** | needs an enabled account + a tunnel |
+
+The adapter's request shapes therefore remain **unverified against a live,
+enabled account**. The SDK's `getDelivery` / `listDeliveries` / `cancelDelivery`
+helpers do exist in v0.1.8 — the adapter calls the endpoints with
+`fetchWithTimeout` directly for a hard deadline. Once Uber enables the account,
+re-run the harness with `RUN_PROVIDER_SANDBOX_CREATE=1` and follow
+`sandbox-runbook.md`.

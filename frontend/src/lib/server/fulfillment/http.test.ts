@@ -71,6 +71,13 @@ describe('classifyDeliveryError', () => {
     [new Error('rate limit exceeded'), 'DELIVERY_RATE_LIMITED'],
     [new Error('401 Unauthorized'), 'DELIVERY_AUTH_FAILED'],
     [new Error('invalid api key'), 'DELIVERY_AUTH_FAILED'],
+    // real Uber Direct 400 body (metadata.param_details), folded into the message
+    [
+      new Error(
+        'The parameters of your request were invalid. — This account has been disabled. Please reach out to directbilling-group@uber.com to resolve',
+      ),
+      'DELIVERY_AUTH_FAILED',
+    ],
     [new Error('The specified location is not in a deliverable area'), 'DELIVERY_INVALID_ADDRESS'],
     [new Error('no courier available'), 'DELIVERY_NO_COURIER'],
     [new Error('no dasher could be assigned'), 'DELIVERY_NO_COURIER'],

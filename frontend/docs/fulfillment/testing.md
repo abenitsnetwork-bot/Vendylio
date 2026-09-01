@@ -34,6 +34,40 @@ pnpm --filter frontend exec vitest run src/app/api/stores/fulfillment
 | Merchant settings + IDOR + test-connection | `stores/fulfillment/route.test.ts`, `.../test-connection/route.test.ts` |
 | Cancel route (IDOR, 409 refusal) | `orders/[id]/delivery/cancel/route.test.ts` |
 
+## Real sandbox validation (Prompt #13.5)
+
+The automated suite above is **100% mocked**. To check the adapters against the
+real courier sandboxes, use the isolated harness (never runs in CI):
+
+```
+RUN_PROVIDER_SANDBOX_TESTS=1 pnpm --filter frontend provider:sandbox-check
+```
+
+It drives the shipped adapters (`getDeliveryProvider(...)`) — `testConnection()`
++ `quote()`, and with `RUN_PROVIDER_SANDBOX_CREATE=1` also create → status →
+cancel. Aborts on `NODE_ENV=production` and without the per-courier `*_SANDBOX`
+flag. Full walkthrough incl. the webhook loop: `sandbox-runbook.md`.
+
+### Result matrix template (spec §42)
+
+| Provider | Operation | Result | Notes |
+|----------|-----------|--------|-------|
+| Uber | Auth / Quote / Create / Status / Cancel / Webhook / Signature | PASS/BLOCKED/FAIL | |
+| DoorDash | Auth / Quote / Create / Status / Cancel / Webhook / Signature | PASS/BLOCKED/FAIL | |
+
+### Recorded result — 2026-08-31
+
+| Provider | Operation | Result | Evidence |
+|----------|-----------|--------|----------|
+| Uber Direct | Auth | **PASS** | real 177-char OAuth token from `login.uber.com` |
+| Uber Direct | Quote / Create / Status / Cancel / Webhook | **BLOCKED** | Uber account disabled — `400 invalid_params`, `param_details: "This account has been disabled … directbilling-group@uber.com"` |
+| DoorDash | all | **BLOCKED_BY_CREDENTIALS** | no `DOORDASH_*` configured |
+| Both | offline adapter / webhook-signature / JWT / security audit | **PASS** | full mocked suite + code audit |
+
+"Mock automated tests: PASS" and "Uber sandbox: BLOCKED" are both honest,
+distinct results — a `PASS` here means a real sandbox call succeeded, nothing
+less.
+
 ## Manual UAT (against a running `pnpm dev`)
 
 See the "Verification" section of the plan

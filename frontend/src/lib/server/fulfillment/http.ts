@@ -109,7 +109,16 @@ export function classifyDeliveryError(err: unknown): { code: DeliveryErrorCode; 
     code = 'DELIVERY_TIMEOUT';
   } else if (/\b429\b|rate.?limit|too many requests/.test(raw)) {
     code = 'DELIVERY_RATE_LIMITED';
-  } else if (/\b401\b|\b403\b|unauthor|forbidden|invalid.*(token|credential|api key)/.test(raw)) {
+  } else if (
+    /\b401\b|\b403\b|unauthor|forbidden|invalid.*(token|credential|api key)|account (has been )?disabled|account.*(suspended|not enabled)|directbilling/.test(
+      raw,
+    )
+  ) {
+    // A disabled / unprovisioned provider account is a config problem, not a
+    // transient outage — surfacing it as AUTH_FAILED stops the merchant
+    // retrying a permanent failure. (Verified against the real Uber Direct
+    // 400 body: metadata.param_details "This account has been disabled.
+    // Please reach out to directbilling-group@uber.com to resolve".)
     code = 'DELIVERY_AUTH_FAILED';
   } else if (/deliverable area|invalid address|address.*(invalid|not found)|geocod/.test(raw)) {
     code = 'DELIVERY_INVALID_ADDRESS';

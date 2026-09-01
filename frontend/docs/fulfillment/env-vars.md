@@ -38,3 +38,15 @@ credentials set is simply hidden at checkout (no error). See section 9 of
 
 `fulfillment-tick` runs every 2 minutes (`frontend/vercel.json`), gated by
 `Authorization: Bearer ${CRON_SECRET}` like every other cron.
+
+## Real-sandbox validation harness (never in CI)
+
+| Var | Purpose |
+|---|---|
+| `RUN_PROVIDER_SANDBOX_TESTS` | `1` = allow `pnpm --filter frontend provider:sandbox-check` to make **real** calls to the courier sandbox APIs. Anything else → the harness exits without touching the network. |
+| `RUN_PROVIDER_SANDBOX_CREATE` | `1` = the harness also creates → polls → cancels one sandbox delivery per configured courier. Leave unset for auth+quote only. |
+
+The harness aborts on `NODE_ENV=production`, and per courier aborts unless that
+courier's `*_SANDBOX` flag (`UBER_DIRECT_SANDBOX_TEST_MODE=1` /
+`DOORDASH_SANDBOX=1`) is set — those flags are the prod-safety switch. See
+`sandbox-runbook.md`.

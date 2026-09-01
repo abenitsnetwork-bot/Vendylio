@@ -72,3 +72,16 @@ If neither is set the webhook returns 401 for every request.
 The merchant "Test connection" button (`POST /api/stores/fulfillment/test-connection`,
 Phase 5) does a `GET` for a random nonexistent delivery id — a `404` proves the
 JWT authenticated and **never dispatches a driver**.
+
+## Sandbox validation status — 2026-08-31
+
+**BLOCKED_BY_CREDENTIALS.** No `DOORDASH_*` credentials are configured, so no
+operation (auth, quote, create, status, cancel, webhook, signature) has been
+exercised against the real DoorDash sandbox. The offline audit is green: JWT
+signer (`doordash-jwt.ts` — HS256, `dd-ver: DD-JWT-V1`, base64-decoded key),
+adapter timeouts (`AbortController`, 8 s), `duplicate_delivery_id` → GET+hydrate,
+webhook HMAC/Basic verifier, and the mocked adapter suite
+(`providers/doordash.test.ts`, `doordash-jwt.test.ts`). To validate for real:
+add a Drive sandbox project + business + store, set the env vars, and run
+`RUN_PROVIDER_SANDBOX_TESTS=1 pnpm --filter frontend provider:sandbox-check`
+(see `sandbox-runbook.md`).

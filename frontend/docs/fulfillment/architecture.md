@@ -108,6 +108,13 @@ page. Never an auto-cancel, never an auto-refund.
 | provider-level | stable `externalDeliveryId` (`vend_<id>`); DoorDash `duplicate_delivery_id` → GET + hydrate |
 | webhook / poll replay | `DeliveryEvent @@unique([deliveryId, providerEventId])` (poll keyed `poll:<rawStatus>`) |
 
+> Uber has no create-conflict signal, so an Uber `createDelivery` HTTP call that
+> half-succeeds then errors could double-dispatch. The advisory lock +
+> `dispatchedAt` guard + `Serializable` stop the common case; a full fix
+> (`listDeliveries` filtered by `external_id` before create — the SDK helper
+> exists in v0.1.8) is **deferred** only because there's no live enabled Uber
+> account to test it against (Prompt #13.5).
+
 ## Routes
 
 | Route | Purpose |
