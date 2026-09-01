@@ -5,6 +5,7 @@ import { api, ApiError } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Field, inputClass } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
+import { LegalDocsSection } from '@/components/admin/LegalDocsSection';
 
 interface CommissionSettings {
   commissionRateBp: number;
@@ -75,8 +76,8 @@ export default function AdminSettingsPage() {
         Settings
       </h1>
       <p className="mb-6 text-sm text-muted-foreground">
-        Platform-wide configuration. Changes take effect on the next order — nothing needs to
-        redeploy.
+        Platform-wide configuration and the public legal pages. Changes take effect immediately —
+        nothing needs to redeploy.
       </p>
 
       {!settings && !error && <p className="text-sm text-muted-foreground">Loading…</p>}
@@ -146,6 +147,8 @@ export default function AdminSettingsPage() {
           </form>
         </Card>
       )}
+
+      <LegalDocsSection />
     </div>
   );
 }

@@ -103,6 +103,21 @@ model SiteImage {
   updatedAt DateTime @updatedAt
 }
 
+// Editable legal pages — Terms of Service, Privacy Policy, Refund Policy.
+// SUPERADMIN-authored from Settings → Legal pages, platform-wide (not
+// per-store). `slug` is a fixed allow-list in lib/legal/defaults.ts
+// (`LEGAL_SLUGS`); a row simply doesn't exist until someone edits that
+// document, and the public page / onboarding modal falls back to the
+// bundled default text in that module. `body` is Markdown (a small safe
+// subset — see lib/legal/parseLegalMarkdown.ts), never raw HTML.
+model LegalDocument {
+  slug      String   @id
+  body      String
+  version   String
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
 // Platform testimonials ("what our sellers say" on the homepage) — distinct
 // from the per-order `Review` model (Phase 8): a Review is a buyer's rating
 // of a specific product/order inside one store, a Testimonial is a seller's
@@ -688,8 +703,9 @@ model Store {
   // creation. The onboarding "business" step gates "Create store" behind a
   // checkbox + a Terms modal, and the route rejects a create without
   // `termsAccepted: true`. `termsVersion` records WHICH version was accepted
-  // (see TERMS_VERSION in components/legal/TermsContent.tsx) so a future
-  // version bump can ask for re-acceptance. Null on stores that predate this.
+  // (the live value from getLegalDocument('terms'), default in
+  // lib/legal/defaults.ts) so a future version bump can ask for
+  // re-acceptance. Null on stores that predate this.
   termsAcceptedAt          DateTime?
   termsVersion             String?
   createdAt                DateTime     @default(now())

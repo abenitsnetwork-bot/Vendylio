@@ -22,7 +22,7 @@ import { checkPickupAddressDeliverable } from '@/lib/server/delivery/uber-direct
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 import { STORE_TEMPLATE_VALUES } from '@/lib/storeTemplates';
 import { MAX_HERO_IMAGES as HERO_MAX } from '@/lib/storeHero';
-import { TERMS_VERSION } from '@/lib/legal/terms';
+import { getLegalDocument } from '@/lib/server/legal';
 
 const Body = z.object({
   name: z.string().trim().min(2).max(80),
@@ -43,9 +43,9 @@ const Body = z.object({
   // Terms of Service acceptance — the onboarding business step gates the
   // "Create store" button behind a checkbox + a Terms modal. `z.literal(true)`
   // so a missing / false value is a hard reject (mapped to TERMS_NOT_ACCEPTED
-  // below). `termsVersion` snapshots which text they saw.
+  // below). The version stamped onto the store is read server-side from the
+  // live Terms document (getLegalDocument) — never trusted from the client.
   termsAccepted: z.literal(true),
-  termsVersion: z.string().trim().max(40).optional(),
 });
 
 // PATCH allows re-editing name/description/city/state/logoUrl but never the
@@ -175,7 +175,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const { name, description, city, state, logoUrl, phone, slug, termsVersion } = parsed.data;
+    const { name, description, city, state, logoUrl, phone, slug } = parsed.data;
+    const currentTerms = await getLegalDocument('terms');
     let store: Awaited<ReturnType<typeof prisma.store.create>> | null = null;
     await ensureUniqueSlug(slugify(slug || name) || 'store', async (candidate) => {
       store = await prisma.$transaction(async (tx) => {
@@ -196,7 +197,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             ...(logoUrl ? { logoUrl } : {}),
             ...(phone ? { phone } : {}),
             termsAcceptedAt: new Date(),
-            termsVersion: termsVersion ?? TERMS_VERSION,
+            termsVersion: currentTerms.version,
           },
         });
         // Seed the starter category set so a new store isn't a blank slate.

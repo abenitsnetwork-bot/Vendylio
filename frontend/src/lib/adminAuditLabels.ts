@@ -179,6 +179,16 @@ export const ACTION_META: Record<string, ActionMeta> = {
         meta.newCommissionRateBp,
       )}`,
   },
+  'legal.update': {
+    label: 'Legal page edited',
+    icon: 'file-text',
+    tone: 'warning',
+    group: 'Platform settings',
+    phrase: ({ meta }) =>
+      `edited the ${meta.slug ? String(meta.slug) : 'legal'} page${
+        meta.version ? ` (v${String(meta.version)})` : ''
+      }`,
+  },
 };
 
 function money(amount: unknown, currency: unknown): string {
@@ -207,6 +217,8 @@ const META_KEY_LABELS: Record<string, string> = {
   newCommissionRateBp: 'New rate',
   previousCommissionRateBpPro: 'Previous Pro rate',
   newCommissionRateBpPro: 'New Pro rate',
+  version: 'Version',
+  bytes: 'Size (characters)',
   detail: 'Detail',
   location: 'Location',
   quote: 'Quote',
@@ -224,6 +236,7 @@ const REDUNDANT_KEYS: Record<string, Set<string>> = {
   'testimonial.delete': new Set(['name']),
   'store.delete': new Set(['name']),
   'site_image.update': new Set(['key']),
+  'legal.update': new Set(['slug', 'version']),
 };
 
 function titleCase(key: string): string {

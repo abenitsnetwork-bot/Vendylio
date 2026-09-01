@@ -7,7 +7,6 @@ import { Field, inputClass } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { previewSlug } from '@/lib/slugPreview';
 import { TermsModal } from '@/components/legal/TermsModal';
-import { TERMS_VERSION } from '@/lib/legal/terms';
 import { useOnboarding } from '../layout';
 
 const AI_ERROR_MESSAGES: Record<string, string> = {
@@ -91,7 +90,6 @@ export default function BusinessStepPage() {
             ...(phone ? { phone } : {}),
             ...(slugTouched && slug ? { slug } : {}),
             termsAccepted: true,
-            termsVersion: TERMS_VERSION,
           },
         });
       }

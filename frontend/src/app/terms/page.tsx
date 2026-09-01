@@ -1,10 +1,16 @@
 import { LegalPageLayout } from '@/components/legal/LegalPageLayout';
-import { TermsContent, TERMS_LAST_UPDATED } from '@/components/legal/TermsContent';
+import { LegalMarkdown } from '@/components/legal/LegalMarkdown';
+import { getLegalDocument } from '@/lib/server/legal';
 
-export default function TermsPage() {
+// DB-backed: a SUPERADMIN edits this text at Settings → Legal pages
+// (falls back to the bundled default until they do).
+export const dynamic = 'force-dynamic';
+
+export default async function TermsPage() {
+  const doc = await getLegalDocument('terms');
   return (
-    <LegalPageLayout title="Terms of Service" lastUpdated={TERMS_LAST_UPDATED}>
-      <TermsContent />
+    <LegalPageLayout title={doc.title} lastUpdated={doc.lastUpdated}>
+      <LegalMarkdown source={doc.body} />
     </LegalPageLayout>
   );
 }
