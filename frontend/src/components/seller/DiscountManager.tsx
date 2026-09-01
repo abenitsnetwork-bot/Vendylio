@@ -7,6 +7,7 @@ import { Icon } from '@/components/ui/Icon';
 import { Button } from '@/components/ui/Button';
 import { Field, inputClass } from '@/components/ui/Field';
 import { discountStatus, DISCOUNT_STATUS_LABEL, type DiscountStatus } from '@/lib/discountStatus';
+import { usePlan } from '@/lib/usePlan';
 
 export interface Discount {
   id: string;
@@ -207,6 +208,7 @@ function DiscountForm({
 }
 
 export function DiscountManager() {
+  const { isPro } = usePlan();
   const [discounts, setDiscounts] = useState<Discount[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -258,7 +260,7 @@ export function DiscountManager() {
         </p>
       )}
 
-      {!creating && editingId === null && (
+      {!creating && editingId === null && isPro && (
         <button
           type="button"
           onClick={() => setCreating(true)}
@@ -266,6 +268,19 @@ export function DiscountManager() {
         >
           + New promo code
         </button>
+      )}
+
+      {!creating && editingId === null && !isPro && (
+        <div className="rounded-lg border border-border bg-secondary/40 p-4 text-sm">
+          <p className="font-semibold text-foreground">Promo codes are a Pro feature</p>
+          <p className="mt-1 text-muted-foreground">
+            Offer free delivery with a code your customers enter at checkout.{' '}
+            <a href="/dashboard/billing" className="font-medium text-primary">
+              Upgrade to Pro
+            </a>
+            .
+          </p>
+        </div>
       )}
 
       {creating && (

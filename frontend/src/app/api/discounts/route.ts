@@ -14,6 +14,7 @@ import { z } from 'zod';
 
 import { verifyCsrf } from '@/lib/server/auth';
 import { requireAuth } from '@/lib/server/middleware';
+import { requirePro } from '@/lib/server/middleware/require-pro';
 import { prisma } from '@/lib/server/prisma';
 import { resolveOwnStore } from '@/lib/server/org';
 import { normalizeDiscountCode } from '@/lib/server/discounts/evaluate';
@@ -93,6 +94,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const store = await resolveOwnStore(auth.user.sub);
     if (!store) return noStore(ctx.requestId);
+
+    // Phase 3 — promo codes are a Pro feature. Existing codes on a store that
+    // later downgrades keep working at checkout (the evaluator doesn't gate on
+    // plan); only creating new ones is blocked.
+    const gated = requirePro(store, 'promoCodes');
+    if (gated) return gated;
 
     const parsed = DiscountCreateBody.safeParse(await req.json().catch(() => null));
     if (!parsed.success) {

@@ -30,7 +30,11 @@ function makeReq(method: 'GET' | 'POST', body?: unknown, csrf: 'match' | 'missin
 beforeEach(() => {
   vi.clearAllMocks();
   mockRequireAuth.mockResolvedValue(authedCtx);
-  mockResolveOwnStore.mockResolvedValue({ id: 'store-1', organizationId: 'org-1' } as never);
+  mockResolveOwnStore.mockResolvedValue({
+    id: 'store-1',
+    organizationId: 'org-1',
+    plan: 'PRO',
+  } as never);
   prismaMock.discount.findMany.mockResolvedValue([]);
 });
 
@@ -114,5 +118,20 @@ describe('POST /api/discounts', () => {
     const res = await POST(makeReq('POST', { code: 'FREESHIP' }));
     expect(res.status).toBe(409);
     expect((await res.json()).error).toBe('CODE_TAKEN');
+  });
+
+  // Phase 3 — promo codes are Pro-only.
+  it('402 PLAN_UPGRADE_REQUIRED for a FREE store', async () => {
+    mockResolveOwnStore.mockResolvedValueOnce({
+      id: 'store-1',
+      organizationId: 'org-1',
+      plan: 'FREE',
+    } as never);
+    const res = await POST(makeReq('POST', { code: 'FREESHIP' }));
+    expect(res.status).toBe(402);
+    const body = await res.json();
+    expect(body.error).toBe('PLAN_UPGRADE_REQUIRED');
+    expect(body.feature).toBe('promoCodes');
+    expect(prismaMock.discount.create).not.toHaveBeenCalled();
   });
 });

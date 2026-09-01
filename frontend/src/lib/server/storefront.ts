@@ -3,6 +3,7 @@ import { prisma } from '@/lib/server/prisma';
 import { isStoreTemplate, type StoreTemplate } from '@/lib/storeTemplates';
 import { getStoreOpenState } from '@/lib/server/store/availability';
 import { parseHeroImages, type StoreHero } from '@/lib/storeHero';
+import { planFeatures } from '@/lib/server/plan/features';
 
 export interface PublicProductVariant {
   id: string;
@@ -87,6 +88,9 @@ export interface PublicStore {
   reviews: PublicReview[];
   averageRating: number | null;
   reviewCount: number;
+  /** Phase 3 — false when the store is on Pro (whiteLabel): the shell hides
+   *  the "Powered by Vendylio" footer badge. */
+  showPoweredBy: boolean;
 }
 
 /** Subset of PublicStore needed to render the header/top bar on a page that
@@ -119,6 +123,7 @@ export async function getPublicStore(
       slug: true,
       name: true,
       published: true,
+      plan: true,
       description: true,
       city: true,
       state: true,
@@ -201,6 +206,7 @@ export async function getPublicStore(
     heroImages,
     heroHeadline,
     heroSubhead,
+    plan,
     ...publicFields
   } = store;
   return {
@@ -217,6 +223,7 @@ export async function getPublicStore(
     reviews,
     averageRating,
     reviewCount,
+    showPoweredBy: !planFeatures(plan).whiteLabel,
   };
 }
 

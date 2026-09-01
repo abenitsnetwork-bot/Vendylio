@@ -15,6 +15,13 @@ vi.mock('@/lib/server/ai/generate-description', () => {
     generateDescription: vi.fn(),
   };
 });
+vi.mock('@/lib/server/org', () => ({ resolveOwnStore: vi.fn(async () => ({ plan: 'FREE' })) }));
+const peekAiQuota = vi.fn(async () => ({ ok: true, used: 0, limit: 5 }));
+const consumeAiQuota = vi.fn(async () => {});
+vi.mock('@/lib/server/ai/monthly-quota', () => ({
+  peekAiQuota: (...a: unknown[]) => peekAiQuota(...(a as [])),
+  consumeAiQuota: (...a: unknown[]) => consumeAiQuota(...(a as [])),
+}));
 
 import { requireAuth } from '@/lib/server/middleware';
 import { enforceAiRateLimit } from '@/lib/server/ai/rate-limit';
@@ -44,6 +51,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockRequireAuth.mockResolvedValue(authedCtx);
   mockRateLimit.mockResolvedValue(null);
+  peekAiQuota.mockResolvedValue({ ok: true, used: 0, limit: 5 });
 });
 
 describe('POST /api/ai/generate-description', () => {
@@ -132,6 +140,29 @@ describe('POST /api/ai/generate-description', () => {
     expect(res.status).toBe(502);
     const body = await res.json();
     expect(body.error).toBe('AI_GENERATION_FAILED');
+  });
+
+  // Phase 3 — monthly quota.
+  it('402 AI_QUOTA_EXCEEDED when the FREE monthly quota is spent', async () => {
+    peekAiQuota.mockResolvedValueOnce({ ok: false, used: 5, limit: 5 });
+    const res = await POST(makePost({ kind: 'product', name: 'Shea Butter' }));
+    expect(res.status).toBe(402);
+    const body = await res.json();
+    expect(body.error).toBe('AI_QUOTA_EXCEEDED');
+    expect(mockGenerate).not.toHaveBeenCalled();
+    expect(consumeAiQuota).not.toHaveBeenCalled();
+  });
+
+  it('consumes one quota unit only after a successful generation', async () => {
+    mockGenerate.mockResolvedValueOnce('desc');
+    await POST(makePost({ kind: 'product', name: 'Shea Butter' }));
+    expect(consumeAiQuota).toHaveBeenCalledTimes(1);
+  });
+
+  it('does NOT consume quota when generation fails', async () => {
+    mockGenerate.mockRejectedValueOnce(new Error('boom'));
+    await POST(makePost({ kind: 'product', name: 'Shea Butter' }));
+    expect(consumeAiQuota).not.toHaveBeenCalled();
   });
 });
 

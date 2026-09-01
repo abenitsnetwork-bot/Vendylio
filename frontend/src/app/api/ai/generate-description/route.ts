@@ -11,6 +11,9 @@ import { z } from 'zod';
 
 import { verifyCsrf } from '@/lib/server/auth';
 import { requireAuth } from '@/lib/server/middleware';
+import { resolveOwnStore } from '@/lib/server/org';
+import { planFeatures } from '@/lib/server/plan/features';
+import { peekAiQuota, consumeAiQuota } from '@/lib/server/ai/monthly-quota';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 import { AiNotConfiguredError, generateDescription } from '@/lib/server/ai/generate-description';
 import { enforceAiRateLimit } from '@/lib/server/ai/rate-limit';
@@ -53,8 +56,27 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
+    // Phase 3 — monthly quota (Free: 5/mo, Pro: unlimited). Peek before the
+    // billed call; consume only on success.
+    const store = await resolveOwnStore(auth.user.sub);
+    const quotaLimit = planFeatures(store?.plan).aiMonthlyQuota;
+    const quota = await peekAiQuota(auth.user.sub, quotaLimit);
+    if (!quota.ok) {
+      return NextResponse.json(
+        {
+          error: 'AI_QUOTA_EXCEEDED',
+          feature: 'aiMonthlyQuota',
+          used: quota.used,
+          limit: quota.limit,
+          message: `You've used all ${quota.limit} AI generations this month. Upgrade to Pro for unlimited.`,
+        },
+        { status: 402, headers: { 'x-request-id': ctx.requestId } },
+      );
+    }
+
     try {
       const description = await generateDescription(parsed.data);
+      await consumeAiQuota(auth.user.sub, quotaLimit);
       return NextResponse.json({ description }, { headers: { 'x-request-id': ctx.requestId } });
     } catch (err) {
       if (err instanceof AiNotConfiguredError) {

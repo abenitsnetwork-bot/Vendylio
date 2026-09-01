@@ -303,7 +303,11 @@ describe('PATCH /api/stores', () => {
   });
 
   it('updates the Phase 9 hero fields (images + global promo message)', async () => {
-    mockResolveOwnStore.mockResolvedValue({ id: 'store-1', organizationId: 'org-1' } as never);
+    mockResolveOwnStore.mockResolvedValue({
+      id: 'store-1',
+      organizationId: 'org-1',
+      plan: 'PRO',
+    } as never);
     prismaMock.store.update.mockResolvedValue({ id: 'store-1' } as never);
 
     const res = await PATCH(
@@ -319,6 +323,32 @@ describe('PATCH /api/stores', () => {
       heroHeadline: 'Fresh groceries, fast',
       heroSubhead: 'Same-day pickup or delivery',
     });
+  });
+
+  // Phase 3 — hero image cap by plan (Free 1, Pro 3).
+  it('402 PLAN_UPGRADE_REQUIRED when a FREE store sends 2 hero images', async () => {
+    mockResolveOwnStore.mockResolvedValue({
+      id: 'store-1',
+      organizationId: 'org-1',
+      plan: 'FREE',
+    } as never);
+    const res = await PATCH(
+      makeReq('PATCH', { heroImages: ['https://cdn/a.jpg', 'https://cdn/b.jpg'] }),
+    );
+    expect(res.status).toBe(402);
+    expect((await res.json()).feature).toBe('heroImageLimit');
+    expect(prismaMock.store.update).not.toHaveBeenCalled();
+  });
+
+  it('lets a FREE store set exactly 1 hero image', async () => {
+    mockResolveOwnStore.mockResolvedValue({
+      id: 'store-1',
+      organizationId: 'org-1',
+      plan: 'FREE',
+    } as never);
+    prismaMock.store.update.mockResolvedValue({ id: 'store-1' } as never);
+    const res = await PATCH(makeReq('PATCH', { heroImages: ['https://cdn/a.jpg'] }));
+    expect(res.status).toBe(200);
   });
 
   it('updates the storefront announcement, and clears it with null', async () => {

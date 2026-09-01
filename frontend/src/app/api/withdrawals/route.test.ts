@@ -35,15 +35,16 @@ vi.mock('@/lib/server/withdrawals/lock', () => ({
 }));
 
 const validateMock = vi.fn();
+const loadGuardConfigMock = vi.fn(() => ({
+  minAmount: 1000,
+  maxAmount: null,
+  dailyLimit: null as number | null,
+  cooldownHours: 0,
+  requirePin: true,
+  balanceCheckEnabled: true,
+}));
 vi.mock('@/lib/server/withdrawals/guards', () => ({
-  loadGuardConfigFromEnv: vi.fn(() => ({
-    minAmount: 1000,
-    maxAmount: null,
-    dailyLimit: null,
-    cooldownHours: 0,
-    requirePin: true,
-    balanceCheckEnabled: true,
-  })),
+  loadGuardConfigFromEnv: (...a: unknown[]) => loadGuardConfigMock(...(a as [])),
   validateWithdrawalRequest: validateMock,
 }));
 
@@ -144,6 +145,15 @@ afterEach(() => {
   owedCommissionMock.mockResolvedValue(0);
   planSettlementMock.mockReset();
   planSettlementMock.mockResolvedValue({ settledCents: 0, chargeIds: [] });
+  loadGuardConfigMock.mockReset();
+  loadGuardConfigMock.mockReturnValue({
+    minAmount: 1000,
+    maxAmount: null,
+    dailyLimit: null,
+    cooldownHours: 0,
+    requirePin: true,
+    balanceCheckEnabled: true,
+  });
 });
 
 interface PostBody {
@@ -523,5 +533,57 @@ describe('POST /api/withdrawals — BANK destination (Phase 2)', () => {
       data: { provider: string };
     };
     expect(createArg.data.provider).toBe('manual');
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────
+// Phase 3 — plan-aware withdrawal limits
+// ────────────────────────────────────────────────────────────────────────
+describe('POST /api/withdrawals — plan-aware limits (Phase 3)', () => {
+  function guardConfigFromLastCall(): { cooldownHours?: number; dailyLimit?: number | null } {
+    const call = (validateMock.mock.calls as unknown[][]).at(-1);
+    return (call?.[0] as { config: { cooldownHours?: number; dailyLimit?: number | null } }).config;
+  }
+
+  it('FREE store: guard config is the raw env config (cooldown + daily limit kept)', async () => {
+    loadGuardConfigMock.mockReturnValueOnce({
+      minAmount: 1000,
+      maxAmount: null,
+      dailyLimit: 20_000,
+      cooldownHours: 24,
+      requirePin: true,
+      balanceCheckEnabled: true,
+    });
+    validateMock.mockResolvedValueOnce({ ok: true });
+    resolveOwnStoreMock.mockResolvedValue({ id: 'store-1', plan: 'FREE' } as never);
+    const { POST } = await import('./route');
+    await POST(makePostReq(validBody) as never);
+    expect(guardConfigFromLastCall().cooldownHours).toBe(24);
+    expect(guardConfigFromLastCall().dailyLimit).toBe(20_000);
+  });
+
+  it('PRO store: cooldown → 0 and daily limit ×5', async () => {
+    loadGuardConfigMock.mockReturnValueOnce({
+      minAmount: 1000,
+      maxAmount: null,
+      dailyLimit: 20_000,
+      cooldownHours: 24,
+      requirePin: true,
+      balanceCheckEnabled: true,
+    });
+    validateMock.mockResolvedValueOnce({ ok: true });
+    resolveOwnStoreMock.mockResolvedValue({ id: 'store-1', plan: 'PRO' } as never);
+    const { POST } = await import('./route');
+    await POST(makePostReq(validBody) as never);
+    expect(guardConfigFromLastCall().cooldownHours).toBe(0);
+    expect(guardConfigFromLastCall().dailyLimit).toBe(100_000);
+  });
+
+  it('PRO store with no env daily limit: stays null (no cap)', async () => {
+    validateMock.mockResolvedValueOnce({ ok: true });
+    resolveOwnStoreMock.mockResolvedValue({ id: 'store-1', plan: 'PRO' } as never);
+    const { POST } = await import('./route');
+    await POST(makePostReq(validBody) as never);
+    expect(guardConfigFromLastCall().dailyLimit).toBeNull();
   });
 });

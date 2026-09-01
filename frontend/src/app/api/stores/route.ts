@@ -24,6 +24,7 @@ import { STORE_TEMPLATE_VALUES } from '@/lib/storeTemplates';
 import { MAX_HERO_IMAGES as HERO_MAX } from '@/lib/storeHero';
 import { getLegalDocument } from '@/lib/server/legal';
 import { isBillingConfigured, hasBillablePaymentMethod } from '@/lib/server/billing/stripe-billing';
+import { planFeatures } from '@/lib/server/plan/features';
 
 const Body = z.object({
   name: z.string().trim().min(2).max(80),
@@ -261,6 +262,22 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
     // card. Only gates the ENABLING transition (falsy → truthy); disabling and
     // unrelated edits are never blocked, and the gate is inert when billing
     // isn't configured (self-host / dev).
+    // Phase 3 — storefront hero image cap (Free: 1, Pro: 3). The zod schema
+    // already bounds the array at MAX_HERO_IMAGES; this narrows it by plan.
+    if (Array.isArray(data.heroImages)) {
+      const cap = planFeatures(existing.plan).heroImageLimit;
+      if (data.heroImages.length > cap) {
+        return NextResponse.json(
+          {
+            error: 'PLAN_UPGRADE_REQUIRED',
+            feature: 'heroImageLimit',
+            message: `Your plan allows ${cap} hero image${cap === 1 ? '' : 's'}. Upgrade to Pro for up to ${HERO_MAX}.`,
+          },
+          { status: 402, headers: { 'x-request-id': ctx.requestId } },
+        );
+      }
+    }
+
     const enablingCashApp = Boolean(data.cashAppCashtag) && !existing.cashAppCashtag;
     const enablingZelle = Boolean(data.zelleContact) && !existing.zelleContact;
     if ((enablingCashApp || enablingZelle) && isBillingConfigured()) {

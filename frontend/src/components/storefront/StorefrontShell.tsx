@@ -102,15 +102,17 @@ export function StorefrontShell({ store }: { store: PublicStore }) {
           pickupAddress={store.pickupAddress}
         />
         <Template store={store} onOpenCart={() => setCartOpen(true)} />
-        <footer className="border-t border-border px-4 py-6 text-center lg:px-14">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <img src="/icon.png" alt="" className="h-4 w-4" />
-            Powered by Vendylio
-          </Link>
-        </footer>
+        {store.showPoweredBy && (
+          <footer className="border-t border-border px-4 py-6 text-center lg:px-14">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <img src="/icon.png" alt="" className="h-4 w-4" />
+              Powered by Vendylio
+            </Link>
+          </footer>
+        )}
         <CartButton onClick={() => setCartOpen(true)} />
         {cartOpen && (
           <CartDrawer

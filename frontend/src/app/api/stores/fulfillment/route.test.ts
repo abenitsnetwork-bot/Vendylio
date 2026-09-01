@@ -14,6 +14,7 @@ const mockResolveOwnStore = vi.mocked(resolveOwnStore);
 
 const STORE = {
   id: 'store-1',
+  plan: 'PRO',
   fulfillmentConfig: {},
   deliveryProvider: 'self_manual',
   deliveryFeeCents: 500,
@@ -85,6 +86,21 @@ describe('PATCH /api/stores/fulfillment', () => {
   it('400s on a malformed body', async () => {
     const res = await PATCH(req('PATCH', { merchant: { feeCents: -1 } }));
     expect(res.status).toBe(400);
+  });
+
+  // Phase 3 — enabling a courier is Pro-only; toggling pickup/merchant is not.
+  it('402 PLAN_UPGRADE_REQUIRED when a FREE store enables a courier', async () => {
+    mockResolveOwnStore.mockResolvedValueOnce({ ...STORE, plan: 'FREE' } as never);
+    const res = await PATCH(req('PATCH', { uberDirect: { enabled: true } }));
+    expect(res.status).toBe(402);
+    expect((await res.json()).feature).toBe('courierDelivery');
+    expect(prismaMock.store.update).not.toHaveBeenCalled();
+  });
+
+  it('lets a FREE store still toggle pickup / merchant', async () => {
+    mockResolveOwnStore.mockResolvedValueOnce({ ...STORE, plan: 'FREE' } as never);
+    const res = await PATCH(req('PATCH', { merchant: { feeCents: 400 } }));
+    expect(res.status).toBe(200);
   });
 
   it("only ever touches the caller's own store (no storeId from the body)", async () => {

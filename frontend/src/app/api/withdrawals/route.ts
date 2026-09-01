@@ -53,9 +53,12 @@ import { verifyPin } from '@/lib/server/auth/pin';
 import { createNotification } from '@/lib/server/notifications';
 import { resolveOwnStore } from '@/lib/server/org';
 import { owedCommissionCents, planCommissionSettlement } from '@/lib/server/commission/owed';
-
+import { planFeatures } from '@/lib/server/plan/features';
 import { clampLimit, decodeCursor, encodeCursor } from '@/lib/server/pagination/paginate';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
+
+/** Phase 3 — Pro stores get this multiple of the Free daily withdrawal ceiling. */
+const PRO_DAILY_LIMIT_MULTIPLIER = 5;
 
 // ───────────────────────────────────────────────────────────────────────
 // Request body schema (D-WD-METHOD-01 + CLAUDE.md "integer smallest unit")
@@ -127,7 +130,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // 4. Read env at call-time (Pitfall 5 — supports `vi.stubEnv` in tests).
     //    `WITHDRAWAL_BALANCE_CHECK=0` flips `balanceCheckEnabled` off (T-04-04-05
     //    accepted, documented in `.env.example`).
-    const config = loadGuardConfigFromEnv(process.env);
+    const envConfig = loadGuardConfigFromEnv(process.env);
 
     // Phase 1b — the merchant requests the NET amount they'll receive. Their
     // spendable balance is the base withdrawable balance MINUS Cash App / Zelle
@@ -152,6 +155,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
     const provider = destination.method === 'BANK' ? 'stripe_transfer' : 'manual';
+
+    // Phase 3 — plan-aware limits. Pro drops the cooldown and lifts the daily
+    // ceiling; done by adjusting the config object here rather than editing the
+    // battle-tested `guards.ts`. `validateWithdrawalRequest` reads whatever
+    // `config` it's handed.
+    const config =
+      ownStore && planFeatures(ownStore.plan).higherWithdrawalLimits
+        ? {
+            ...envConfig,
+            cooldownHours: 0,
+            dailyLimit:
+              envConfig.dailyLimit == null
+                ? null
+                : envConfig.dailyLimit * PRO_DAILY_LIMIT_MULTIPLIER,
+          }
+        : envConfig;
 
     const baseComputeBalance = createDefaultBalanceComputer(prisma);
     const computeBalance = async (
