@@ -2,6 +2,7 @@
 
 import { SellerSidebar } from '@/components/seller/SellerSidebar';
 import { ForcePasswordChange } from '@/components/auth/ForcePasswordChange';
+import { UpgradeModalHost } from '@/components/seller/UpgradeModalHost';
 
 // Phase 9 — persistent nav shell for the day-to-day seller pages (Dashboard,
 // Orders, Products, Customers, Reviews, Delivery, Settings, Billing,
@@ -17,6 +18,7 @@ export default function DashboardShellLayout({ children }: { children: React.Rea
   return (
     <div className="min-h-screen bg-background">
       <ForcePasswordChange />
+      <UpgradeModalHost />
       <SellerSidebar />
       <div className="pb-16 lg:pb-0 lg:pl-56">{children}</div>
     </div>

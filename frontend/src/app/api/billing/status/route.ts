@@ -8,7 +8,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { requireAuth } from '@/lib/server/middleware';
 import { resolveOwnStore } from '@/lib/server/org';
 import { normalizePlan, planFeatures } from '@/lib/server/plan/features';
-import { isBillingConfigured } from '@/lib/server/billing/stripe-billing';
+import { isBillingConfigured, annualBillingAvailable } from '@/lib/server/billing/stripe-billing';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
@@ -35,8 +35,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           ? store.subscriptionCurrentPeriodEnd.toISOString()
           : null,
         compExpiresAt: store.planCompExpiresAt ? store.planCompExpiresAt.toISOString() : null,
+        interval: store.subscriptionInterval ?? null,
         hasBillingCustomer: Boolean(store.stripeCustomerId),
         billingConfigured: isBillingConfigured(),
+        annualAvailable: annualBillingAvailable(),
         features: planFeatures(plan),
       },
       { headers: { 'x-request-id': ctx.requestId } },

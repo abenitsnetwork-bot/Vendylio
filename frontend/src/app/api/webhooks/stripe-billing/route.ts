@@ -51,6 +51,7 @@ function toSubscriptionInput(sub: Stripe.Subscription): SubscriptionInput {
     status: sub.status,
     currentPeriodEnd: topLevelEnd ?? itemEnd ?? null,
     storeId: sub.metadata?.storeId ?? null,
+    interval: sub.items?.data?.[0]?.price?.recurring?.interval ?? null,
   };
 }
 

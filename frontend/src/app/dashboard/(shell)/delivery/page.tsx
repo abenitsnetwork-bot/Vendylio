@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { sellerFirstName } from '@/lib/utils';
 import { useAuth, useUser } from '@/contexts/AuthContext';
 import { api, ApiError } from '@/lib/api';
+import { handleGateError } from '@/lib/upgradePrompt';
 import { Icon } from '@/components/ui/Icon';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -187,7 +188,9 @@ export default function DeliveryPage() {
       setSettings(res);
       setCfg(res.config);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save.');
+      if (!handleGateError(err)) {
+        setError(err instanceof ApiError ? err.message : 'Could not save.');
+      }
     } finally {
       setSaving(false);
     }

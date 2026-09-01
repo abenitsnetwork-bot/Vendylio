@@ -3,6 +3,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
+import { handleGateError } from '@/lib/upgradePrompt';
+import { UpgradeModalHost } from '@/components/seller/UpgradeModalHost';
 import { Field, inputClass } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { ImageDropzone } from '@/components/ui/ImageDropzone';
@@ -94,6 +96,10 @@ export function ProductForm(props: CreateProps | EditProps) {
       });
       setDescription(res.description);
     } catch (err) {
+      if (handleGateError(err)) {
+        setGeneratingDescription(false);
+        return;
+      }
       setAiError(
         err instanceof ApiError
           ? (AI_ERROR_MESSAGES[err.code] ?? 'Could not generate a description. Try again.')
@@ -194,6 +200,7 @@ export function ProductForm(props: CreateProps | EditProps) {
 
   return (
     <form onSubmit={onSubmit} className="mx-auto w-full max-w-3xl">
+      <UpgradeModalHost />
       {props.mode === 'create' && (
         <div className="mb-10 flex items-center gap-3">
           <div className="h-1 flex-1 rounded-full bg-primary" />

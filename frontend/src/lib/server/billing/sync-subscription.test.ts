@@ -94,6 +94,18 @@ describe('syncSubscriptionFromStripe', () => {
     await syncSubscriptionFromStripe(tx, { ...base, currentPeriodEnd: null });
     expect(lastData().subscriptionCurrentPeriodEnd).toBeNull();
   });
+
+  it('Phase 5 — writes subscriptionInterval from the input', async () => {
+    findUnique.mockResolvedValueOnce({ id: 'store-1', plan: 'FREE', planSource: null });
+    await syncSubscriptionFromStripe(tx, { ...base, interval: 'year' });
+    expect(lastData().subscriptionInterval).toBe('year');
+  });
+
+  it('Phase 5 — ignores an unknown interval', async () => {
+    findUnique.mockResolvedValueOnce({ id: 'store-1', plan: 'FREE', planSource: null });
+    await syncSubscriptionFromStripe(tx, { ...base, interval: 'weekly' });
+    expect(lastData().subscriptionInterval).toBeUndefined();
+  });
 });
 
 describe('markSubscriptionPastDue', () => {

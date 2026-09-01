@@ -70,7 +70,8 @@ Les route handlers sous [`frontend/src/app/api/`](frontend/src/app/api/) **sont*
 
 - **`/api/auth/*`** — signup / login / logout / refresh / me / verify-email / forgot-password / reset-password / change-password / set-password / resend-verification, + `/api/auth/oauth/google/{start,callback}`
 - **`/api/stores*`** — CRUD boutique du commerçant, `/publish` + `/unpublish` (readiness re-validée serveur), `/stores/me`, `/stores/fulfillment`, `/stores/stripe/*` (onboarding Connect)
-- **`/api/billing/*`** — `checkout` / `portal` / `status` de l'abonnement Pro (Stripe Billing) ; `Store.plan` (`FREE | PRO`) piloté par le webhook `stripe-billing`
+- **`/api/billing/*`** — `checkout` (`{ interval: month|year }`) / `portal` / `status` / `setup-intent` de l'abonnement Pro (Stripe Billing) ; `Store.plan` (`FREE | PRO`) piloté par le webhook `stripe-billing`
+- **`/api/business-waitlist`** — capture d'attente « Business » depuis `/pricing` (public, IP-limité)
 - **`/api/products*`**, **`/api/categories*`**, **`/api/inventory/adjust`** — catalogue + ledger de stock append-only
 - **`/api/orders`** (checkout invité, server-authoritative), `/api/orders/[id]` (transitions vendeur), `/api/orders/[id]/refund`, `/api/orders/track/[token]` (lecture invité), `/api/cart/validate`
 - **`/api/stores/[slug]/delivery-quote`** — devis livraison multi-provider au checkout

@@ -9,8 +9,12 @@ export interface PlanStatus {
   subscriptionStatus: 'ACTIVE' | 'TRIALING' | 'PAST_DUE' | 'CANCELED' | null;
   currentPeriodEnd: string | null;
   compExpiresAt: string | null;
+  /** Phase 5 — billing interval of the active subscription ("month" | "year"). */
+  interval: 'month' | 'year' | null;
   hasBillingCustomer: boolean;
   billingConfigured: boolean;
+  /** A distinct annual price is configured → show the monthly/annual toggle. */
+  annualAvailable: boolean;
   features: PlanFeatures;
 }
 

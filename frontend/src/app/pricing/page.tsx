@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { PublicNavBar } from '@/components/marketing/PublicNavBar';
 import { CtaFooter } from '@/components/marketing/CtaFooter';
+import { BusinessWaitlistForm } from '@/components/marketing/BusinessWaitlistForm';
 import { Icon } from '@/components/ui/Icon';
 
 export const metadata: Metadata = {
@@ -18,7 +19,7 @@ interface Row {
 
 const ROWS: Row[] = [
   { label: 'Transaction fee (card sales)', free: '5%', pro: '1.5%' },
-  { label: 'Cash App & Zelle fee', free: '0%', pro: '0%' },
+  { label: 'Cash App & Zelle fee', free: '5%', pro: '1.5%' },
   { label: 'Products', free: 'Unlimited', pro: 'Unlimited' },
   { label: 'Storefronts', free: '1', pro: '1' },
   { label: 'Card, Cash App & Zelle checkout', free: true, pro: true },
@@ -155,12 +156,9 @@ export default function PricingPage() {
             </p>
             <p className="mx-auto mt-1 max-w-lg text-sm text-muted-foreground">
               For high-volume sellers: the lowest fees, multiple storefronts, API access, and
-              dedicated onboarding.{' '}
-              <a href="mailto:no-reply@vendylio.com" className="font-medium text-primary">
-                Get in touch
-              </a>
-              .
+              dedicated onboarding.
             </p>
+            <BusinessWaitlistForm />
           </div>
 
           {/* Fee FAQ */}
@@ -179,7 +177,9 @@ export default function PricingPage() {
               </li>
               <li>
                 <strong className="text-foreground">Cash App and Zelle</strong> payments go straight
-                to you — Vendylio never touches that money and takes no fee on it.
+                to you — Vendylio never handles that money. The same marketplace fee applies (you
+                confirm the payment on the order); it&apos;s withheld from your next withdrawal, or
+                billed to your card on file if you have no balance to withhold from.
               </li>
               <li>There are no withdrawal fees, setup fees, or contracts. Cancel Pro anytime.</li>
             </ul>

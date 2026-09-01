@@ -9,6 +9,7 @@ import { Icon } from '@/components/ui/Icon';
 import { Card } from '@/components/ui/Card';
 import { SellerHeader } from '@/components/seller/SellerHeader';
 import { WithdrawalRequestForm } from '@/components/seller/WithdrawalRequestForm';
+import { DowngradeDialog } from '@/components/seller/DowngradeDialog';
 
 interface WithdrawalItem {
   id: string;
@@ -34,8 +35,10 @@ interface BillingStatus {
   subscriptionStatus: 'ACTIVE' | 'TRIALING' | 'PAST_DUE' | 'CANCELED' | null;
   currentPeriodEnd: string | null;
   compExpiresAt: string | null;
+  interval: 'month' | 'year' | null;
   hasBillingCustomer: boolean;
   billingConfigured: boolean;
+  annualAvailable: boolean;
 }
 
 function formatUsd(cents: number): string {
@@ -76,8 +79,9 @@ function planSummary(b: BillingStatus): string {
       ? `Pro ends ${formatDate(b.currentPeriodEnd)}. Resubscribe anytime.`
       : 'Your Pro plan has been cancelled.';
   }
+  const cadence = b.interval === 'year' ? 'annually' : 'monthly';
   return b.currentPeriodEnd
-    ? `Pro renews ${formatDate(b.currentPeriodEnd)}. Thanks for supporting Vendylio.`
+    ? `Pro renews ${cadence} on ${formatDate(b.currentPeriodEnd)}. Thanks for supporting Vendylio.`
     : 'You’re on Pro — thanks for supporting Vendylio.';
 }
 
@@ -92,6 +96,8 @@ export default function BillingPayoutsPage() {
   const [billing, setBilling] = useState<BillingStatus | null>(null);
   const [planBusy, setPlanBusy] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
+  const [interval, setInterval] = useState<'month' | 'year'>('month');
+  const [downgradeOpen, setDowngradeOpen] = useState(false);
 
   const loadWithdrawals = useCallback(() => {
     api<{
@@ -133,7 +139,10 @@ export default function BillingPayoutsPage() {
     setPlanError(null);
     setPlanBusy(true);
     try {
-      const res = await api<{ url: string }>('/api/billing/checkout', { method: 'POST' });
+      const res = await api<{ url: string }>('/api/billing/checkout', {
+        method: 'POST',
+        body: { interval },
+      });
       window.location.href = res.url;
     } catch (err) {
       setPlanError(
@@ -310,24 +319,55 @@ export default function BillingPayoutsPage() {
               </div>
               <div className="flex flex-shrink-0 flex-col items-stretch gap-2 sm:items-end">
                 {billing.plan !== 'PRO' && billing.billingConfigured && (
-                  <button
-                    type="button"
-                    onClick={onUpgrade}
-                    disabled={planBusy}
-                    className="rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50"
-                  >
-                    {planBusy ? 'Opening…' : 'Upgrade to Pro'}
-                  </button>
+                  <>
+                    {billing.annualAvailable && (
+                      <div className="flex overflow-hidden rounded-lg border border-border text-xs font-semibold">
+                        {(['month', 'year'] as const).map((iv) => (
+                          <button
+                            key={iv}
+                            type="button"
+                            onClick={() => setInterval(iv)}
+                            className={`px-3 py-1.5 ${
+                              interval === iv
+                                ? 'bg-primary text-primary-foreground'
+                                : 'text-muted-foreground'
+                            }`}
+                          >
+                            {iv === 'month' ? 'Monthly' : 'Annual · 2 months free'}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={onUpgrade}
+                      disabled={planBusy}
+                      className="rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                    >
+                      {planBusy ? 'Opening…' : 'Upgrade to Pro'}
+                    </button>
+                  </>
                 )}
                 {billing.hasBillingCustomer && billing.planSource === 'SUBSCRIPTION' && (
-                  <button
-                    type="button"
-                    onClick={onManageBilling}
-                    disabled={planBusy}
-                    className="rounded-lg border border-border px-6 py-3 text-sm font-semibold text-foreground disabled:opacity-50"
-                  >
-                    {planBusy ? 'Opening…' : 'Manage billing'}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={onManageBilling}
+                      disabled={planBusy}
+                      className="rounded-lg border border-border px-6 py-3 text-sm font-semibold text-foreground disabled:opacity-50"
+                    >
+                      {planBusy ? 'Opening…' : 'Manage billing'}
+                    </button>
+                    {billing.subscriptionStatus !== 'CANCELED' && (
+                      <button
+                        type="button"
+                        onClick={() => setDowngradeOpen(true)}
+                        className="text-center text-xs font-medium text-muted-foreground hover:text-red-600 sm:text-right"
+                      >
+                        Cancel Pro
+                      </button>
+                    )}
+                  </>
                 )}
                 <a
                   href="/pricing"
@@ -339,6 +379,18 @@ export default function BillingPayoutsPage() {
                 </a>
               </div>
             </Card>
+          )}
+
+          {downgradeOpen && billing && (
+            <DowngradeDialog
+              periodEnd={billing.currentPeriodEnd}
+              busy={planBusy}
+              onClose={() => setDowngradeOpen(false)}
+              onContinue={() => {
+                setDowngradeOpen(false);
+                void onManageBilling();
+              }}
+            />
           )}
 
           <div className="mb-12 grid grid-cols-1 gap-8 lg:grid-cols-2">

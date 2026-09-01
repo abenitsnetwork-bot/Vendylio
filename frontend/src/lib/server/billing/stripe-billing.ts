@@ -27,18 +27,30 @@ function appUrl(): string {
   return process.env.APP_URL ?? 'http://localhost:3000';
 }
 
-export function getProPriceId(): string {
+export type BillingInterval = 'month' | 'year';
+
+/** The Stripe price id for the requested interval. `year` falls back to the
+ *  monthly price when no annual price is configured. */
+export function getProPriceId(interval: BillingInterval = 'month'): string {
+  if (interval === 'year' && process.env.STRIPE_PRO_ANNUAL_PRICE_ID) {
+    return process.env.STRIPE_PRO_ANNUAL_PRICE_ID;
+  }
   return process.env.STRIPE_PRO_PRICE_ID ?? '';
 }
 
+/** Whether a distinct annual price is configured (drives the pricing toggle). */
+export function annualBillingAvailable(): boolean {
+  return Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PRO_ANNUAL_PRICE_ID);
+}
+
 export function isBillingConfigured(): boolean {
-  return Boolean(process.env.STRIPE_SECRET_KEY && getProPriceId());
+  return Boolean(process.env.STRIPE_SECRET_KEY && getProPriceId('month'));
 }
 
 function getClient(): Stripe {
   if (_client) return _client;
   const secretKey = process.env.STRIPE_SECRET_KEY ?? '';
-  if (!secretKey || !getProPriceId()) throw new BillingUnconfiguredError();
+  if (!secretKey || !getProPriceId('month')) throw new BillingUnconfiguredError();
   _client = new Stripe(secretKey, { apiVersion: STRIPE_API_VERSION, typescript: true });
   return _client;
 }
@@ -88,6 +100,7 @@ export async function getOrCreateBillingCustomer(
 export async function createProCheckoutSession(opts: {
   customerId: string;
   storeId: string;
+  interval?: BillingInterval;
 }): Promise<{ url: string }> {
   const stripe = getClient();
   const base = appUrl();
@@ -95,7 +108,7 @@ export async function createProCheckoutSession(opts: {
     mode: 'subscription',
     customer: opts.customerId,
     client_reference_id: opts.storeId,
-    line_items: [{ price: getProPriceId(), quantity: 1 }],
+    line_items: [{ price: getProPriceId(opts.interval ?? 'month'), quantity: 1 }],
     subscription_data: { metadata: { storeId: opts.storeId } },
     success_url: `${base}/dashboard/billing?upgraded=1`,
     cancel_url: `${base}/dashboard/billing`,

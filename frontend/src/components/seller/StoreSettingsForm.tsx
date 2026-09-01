@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '@/lib/api';
+import { handleGateError } from '@/lib/upgradePrompt';
 import { Field, inputClass } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { ImageDropzone } from '@/components/ui/ImageDropzone';
@@ -158,7 +159,9 @@ export function StoreSettingsForm({
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Network error. Try again.');
+      if (!handleGateError(err)) {
+        setError(err instanceof ApiError ? err.message : 'Network error. Try again.');
+      }
     } finally {
       setSubmitting(false);
     }

@@ -23,10 +23,17 @@ const mockConfigured = vi.mocked(isBillingConfigured);
 
 const authedCtx = { user: { sub: 'user-1', email: 'seller@example.com' } };
 
-function makePost(csrf: 'match' | 'missing' = 'match'): NextRequest {
-  const headers: Record<string, string> = {};
+function makePost(
+  arg: 'match' | 'missing' | { interval: 'month' | 'year' } = 'match',
+): NextRequest {
+  const csrf = typeof arg === 'string' ? arg : 'match';
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (csrf === 'match') headers['x-csrf-token'] = 'csrf-tok';
-  return new NextRequest('http://test/api/billing/checkout', { method: 'POST', headers });
+  return new NextRequest('http://test/api/billing/checkout', {
+    method: 'POST',
+    headers,
+    ...(typeof arg === 'object' ? { body: JSON.stringify(arg) } : {}),
+  });
 }
 
 beforeEach(() => {
@@ -75,7 +82,16 @@ describe('POST /api/billing/checkout', () => {
     expect(createProCheckoutSession).toHaveBeenCalledWith({
       customerId: 'cus_1',
       storeId: 'store-1',
+      interval: 'month',
     });
+  });
+
+  it('passes interval:year through to the checkout session', async () => {
+    mockStore.mockResolvedValueOnce({ id: 'store-1', subscriptionStatus: null } as never);
+    await POST(makePost({ interval: 'year' }));
+    expect(createProCheckoutSession).toHaveBeenCalledWith(
+      expect.objectContaining({ interval: 'year' }),
+    );
   });
 
   it("source keeps runtime='nodejs' + withRequestContext + verifyCsrf", async () => {

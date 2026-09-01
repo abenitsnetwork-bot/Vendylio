@@ -125,3 +125,14 @@ export const storefrontViewIpLimiter = createIpLimiter({
   code: 'TOO_MANY_REQUESTS',
   message: 'Too many requests. Wait a minute and try again.',
 });
+
+// Phase 5 — the public "Business" waitlist form on /pricing (`POST
+// /api/business-waitlist`). A real person submits it once; the cap just stops
+// a script filling the BusinessLead table.
+export const leadIpLimiter = createIpLimiter({
+  bucket: 'pub:lead',
+  windowMs: 60_000,
+  max: Number(process.env.LEAD_IP_RATE_LIMIT_MAX ?? 5),
+  code: 'TOO_MANY_REQUESTS',
+  message: 'Too many submissions. Wait a minute and try again.',
+});

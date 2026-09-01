@@ -28,6 +28,8 @@ export interface SubscriptionInput {
   currentPeriodEnd: number | null;
   /** subscription.metadata.storeId, when set at Checkout. */
   storeId: string | null;
+  /** Phase 5 — subscription.items[0].price.recurring.interval ("month" | "year"). */
+  interval?: string | null;
 }
 
 const ACTIVE_STATES = new Set(['active', 'trialing']);
@@ -72,6 +74,7 @@ export async function syncSubscriptionFromStripe(
     stripeSubscriptionId: string;
     subscriptionStatus: SubStatus;
     subscriptionCurrentPeriodEnd: Date | null;
+    subscriptionInterval?: string | null;
     plan?: string;
     planSource?: string | null;
   } = {
@@ -80,6 +83,9 @@ export async function syncSubscriptionFromStripe(
     subscriptionStatus: status,
     subscriptionCurrentPeriodEnd: periodEnd,
   };
+  if (sub.interval === 'month' || sub.interval === 'year') {
+    data.subscriptionInterval = sub.interval;
+  }
 
   if (ACTIVE_STATES.has(sub.status)) {
     data.plan = 'PRO';

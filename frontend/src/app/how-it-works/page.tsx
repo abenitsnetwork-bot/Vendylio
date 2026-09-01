@@ -38,7 +38,7 @@ const STEPS: { num: string; title: string; desc: string; icon: IconName }[] = [
   {
     num: '06',
     title: 'Get Paid',
-    desc: 'Earnings land in your Cash App or Zelle. Zero hidden fees. You keep what you earn.',
+    desc: 'Withdraw to Cash App, Zelle or your bank — no withdrawal fees. One simple marketplace fee on sales, nothing hidden.',
     icon: 'dollar-sign',
   },
 ];

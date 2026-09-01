@@ -29,7 +29,8 @@ interface OrderLineItem {
 
 /**
  * Payment providers where the buyer pays the merchant directly (Cash App /
- * Zelle) — the platform never touches that money.
+ * Zelle) — the money never flows through the platform, but the marketplace
+ * commission is still owed (recorded as a receivable, see Phase 1b below).
  *
  * PAY-01 originally recorded `commissionAmount = 0` here because there was no
  * way to collect. Phase 1b adds the collection path: the real commission is

@@ -8,6 +8,7 @@ export const runtime = 'nodejs';
 
 import 'server-only';
 import { NextResponse, type NextRequest } from 'next/server';
+import { z } from 'zod';
 import { verifyCsrf } from '@/lib/server/auth';
 import { requireAuth } from '@/lib/server/middleware';
 import { resolveOwnStore } from '@/lib/server/org';
@@ -22,6 +23,7 @@ import {
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
 const ACTIVE_SUB = new Set(['ACTIVE', 'TRIALING']);
+const Body = z.object({ interval: z.enum(['month', 'year']).default('month') });
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const ctx = makeRequestContext(req.headers);
@@ -61,9 +63,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
+    const body = Body.safeParse(await req.json().catch(() => ({})));
+    const interval = body.success ? body.data.interval : 'month';
+
     try {
       const customerId = await getOrCreateBillingCustomer(prisma, store, auth.user.email);
-      const { url } = await createProCheckoutSession({ customerId, storeId: store.id });
+      const { url } = await createProCheckoutSession({
+        customerId,
+        storeId: store.id,
+        interval,
+      });
       return NextResponse.json({ url }, { headers: { 'x-request-id': ctx.requestId } });
     } catch (err) {
       if (err instanceof BillingUnconfiguredError) {
