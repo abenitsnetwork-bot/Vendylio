@@ -10,7 +10,7 @@ import { useCart } from '@/contexts/CartContext';
  * full-width row beneath the logo/cart row; from `sm` up it sits inline.
  * `location` shows beside the name, `description` as a thin line beneath. */
 export function StorefrontHeader({
-  storeSlug,
+  linkBase,
   storeName,
   logoUrl,
   location,
@@ -19,7 +19,8 @@ export function StorefrontHeader({
   searchQuery,
   onSearchChange,
 }: {
-  storeSlug: string;
+  /** Phase 4b — `/s/<slug>` or `''` on a custom domain. */
+  linkBase: string;
   storeName: string;
   logoUrl: string | null;
   location?: string | null;
@@ -50,7 +51,7 @@ export function StorefrontHeader({
   return (
     <header className="border-b border-border bg-card px-3 py-3 sm:px-5 lg:px-8 xl:px-10">
       <div className="flex items-center gap-3 sm:gap-4">
-        <Link href={`/s/${storeSlug}`} className="flex min-w-0 flex-shrink-0 items-center gap-3">
+        <Link href={linkBase || '/'} className="flex min-w-0 flex-shrink-0 items-center gap-3">
           {logoUrl ? (
             <img
               src={logoUrl}

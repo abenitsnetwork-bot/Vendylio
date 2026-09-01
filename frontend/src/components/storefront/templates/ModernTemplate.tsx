@@ -31,7 +31,7 @@ export function ModernTemplate({
   return (
     <div>
       <StorefrontHeader
-        storeSlug={store.slug}
+        linkBase={store.linkBase}
         storeName={store.name}
         logoUrl={store.logoUrl}
         location={location}
@@ -75,7 +75,7 @@ export function ModernTemplate({
                         className="flex flex-col overflow-hidden rounded-lg border border-border bg-card"
                       >
                         <Link
-                          href={`/s/${store.slug}/products/${product.id}`}
+                          href={`${store.linkBase}/products/${product.id}`}
                           className="relative block"
                         >
                           {product.imageUrl ? (
@@ -96,7 +96,7 @@ export function ModernTemplate({
                           )}
                         </Link>
                         <div className="flex flex-1 flex-col p-2.5">
-                          <Link href={`/s/${store.slug}/products/${product.id}`}>
+                          <Link href={`${store.linkBase}/products/${product.id}`}>
                             <p className="line-clamp-2 font-headings text-xs font-semibold leading-snug text-foreground hover:text-primary sm:text-sm">
                               {product.name}
                             </p>
@@ -114,7 +114,7 @@ export function ModernTemplate({
                             />
                             {hasVariants ? (
                               <Link
-                                href={`/s/${store.slug}/products/${product.id}`}
+                                href={`${store.linkBase}/products/${product.id}`}
                                 className="flex-shrink-0 rounded-full border border-border px-2.5 py-1 text-[11px] font-semibold text-foreground hover:bg-secondary"
                               >
                                 Options

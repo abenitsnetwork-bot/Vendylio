@@ -12,6 +12,7 @@ import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
 import { OrderStatusTracker } from '@/components/storefront/OrderStatusTracker';
 import { ClearStoreCart } from '@/components/storefront/ClearStoreCart';
+import { getPublicStore, getViaDomain } from '@/lib/server/storefront';
 
 export const runtime = 'nodejs';
 
@@ -26,10 +27,13 @@ interface Params {
 
 export default async function OrderSuccessPage({ params }: Params) {
   const { slug, token } = await params;
+  const store = await getPublicStore(slug, { viaDomain: await getViaDomain() });
+  const cartSlug = store?.slug ?? slug;
+  const linkBase = store?.linkBase ?? `/s/${slug}`;
 
   return (
     <div className="mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center px-4 text-center font-body">
-      <ClearStoreCart storeSlug={slug} />
+      <ClearStoreCart storeSlug={cartSlug} />
       <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary">
         <Icon i="check" size={24} className="text-primary-foreground" />
       </div>
@@ -47,7 +51,7 @@ export default async function OrderSuccessPage({ params }: Params) {
       <OrderStatusTracker token={token} />
 
       <Link
-        href={`/s/${slug}`}
+        href={linkBase || '/'}
         className="mt-8 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90"
       >
         Continue Shopping

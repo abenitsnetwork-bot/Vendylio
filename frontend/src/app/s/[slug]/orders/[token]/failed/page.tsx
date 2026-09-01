@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
 import { prisma } from '@/lib/server/prisma';
 import { cancelAbandonedOrder } from '@/lib/server/orders/cancelAbandoned';
+import { getPublicStore, getViaDomain } from '@/lib/server/storefront';
 
 export const runtime = 'nodejs';
 
@@ -23,6 +24,8 @@ interface Params {
 
 export default async function OrderFailedPage({ params }: Params) {
   const { slug, token } = await params;
+  const store = await getPublicStore(slug, { viaDomain: await getViaDomain() });
+  const linkBase = store?.linkBase ?? `/s/${slug}`;
 
   // Best-effort — a DB hiccup here must never break rendering the page the
   // buyer is actively looking at. Worst case the cron catches it later.
@@ -51,7 +54,7 @@ export default async function OrderFailedPage({ params }: Params) {
         Your card was not charged. You can try again from your cart.
       </p>
       <Link
-        href={`/s/${slug}/checkout`}
+        href={`${linkBase}/checkout`}
         className="rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90"
       >
         Try Again

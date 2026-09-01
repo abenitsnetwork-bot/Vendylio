@@ -9,8 +9,23 @@ export function siteOrigin(): string {
   return (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 }
 
-export function absoluteUrl(path: string): string {
-  return `${siteOrigin()}${path.startsWith('/') ? path : `/${path}`}`;
+export function absoluteUrl(path: string, origin: string = siteOrigin()): string {
+  return `${origin}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
+/**
+ * Phase 4b — where a storefront is canonically served. On a custom domain the
+ * origin is `https://<host>` and links are root-relative (`linkBase === ''`);
+ * on the platform domain it's `siteOrigin()` + `/s/<slug>`.
+ */
+interface StorefrontLocation {
+  linkBase?: string;
+  canonicalHost?: string | null;
+}
+function locationOf(s: StorefrontLocation, slug: string): { origin: string; base: string } {
+  const origin = s.canonicalHost ? `https://${s.canonicalHost}` : siteOrigin();
+  const base = s.linkBase ?? `/s/${slug}`;
+  return { origin, base };
 }
 
 /**
@@ -38,7 +53,7 @@ export function metaText(input: string | null | undefined, max = 160): string | 
   return clean.length > max ? `${clean.slice(0, max - 1).trimEnd()}…` : clean;
 }
 
-interface StoreSeoInput {
+interface StoreSeoInput extends StorefrontLocation {
   slug: string;
   name: string;
   description: string | null;
@@ -59,7 +74,8 @@ interface ProductSeoInput {
 
 /** `<title>` and description for the storefront landing page. */
 export function storeMetadata(store: StoreSeoInput): Metadata {
-  const path = `/s/${store.slug}`;
+  const { origin, base } = locationOf(store, store.slug);
+  const path = base || '/';
   const location = [store.city, store.state].filter(Boolean).join(', ');
   const description =
     metaText(store.description) ??
@@ -69,11 +85,13 @@ export function storeMetadata(store: StoreSeoInput): Metadata {
   return {
     title: store.name,
     description,
-    alternates: { canonical: path },
+    // Relative on the platform domain (Next resolves it against metadataBase);
+    // absolute on a custom domain so the canonical points at the merchant's host.
+    alternates: { canonical: store.canonicalHost ? absoluteUrl(path, origin) : path },
     robots: { index: true, follow: true },
     openGraph: {
       type: 'website',
-      url: absoluteUrl(path),
+      url: absoluteUrl(path, origin),
       siteName: store.name,
       title: store.name,
       description,
@@ -90,10 +108,11 @@ export function storeMetadata(store: StoreSeoInput): Metadata {
 
 /** `<title>` and description for a product detail page. */
 export function productMetadata(
-  store: { slug: string; name: string },
+  store: { slug: string; name: string } & StorefrontLocation,
   product: ProductSeoInput,
 ): Metadata {
-  const path = `/s/${store.slug}/products/${product.id}`;
+  const { origin, base } = locationOf(store, store.slug);
+  const path = `${base}/products/${product.id}`;
   const description =
     metaText(product.description) ?? `${product.name} from ${store.name}. Order online.`;
   const images = product.imageUrl ? [{ url: product.imageUrl, alt: product.name }] : undefined;
@@ -101,11 +120,11 @@ export function productMetadata(
   return {
     title: `${product.name} — ${store.name}`,
     description,
-    alternates: { canonical: path },
+    alternates: { canonical: store.canonicalHost ? absoluteUrl(path, origin) : path },
     robots: { index: true, follow: true },
     openGraph: {
       type: 'website',
-      url: absoluteUrl(path),
+      url: absoluteUrl(path, origin),
       siteName: store.name,
       title: product.name,
       description,
@@ -128,13 +147,13 @@ export function productMetadata(
 export function storeJsonLd(
   store: StoreSeoInput & { phone: string | null },
 ): Record<string, unknown> {
-  const path = `/s/${store.slug}`;
+  const { origin, base } = locationOf(store, store.slug);
   const hasLocation = Boolean(store.city || store.state);
   return {
     '@context': 'https://schema.org',
     '@type': hasLocation ? 'LocalBusiness' : 'Store',
     name: store.name,
-    url: absoluteUrl(path),
+    url: absoluteUrl(base || '/', origin),
     ...(store.description ? { description: metaText(store.description, 300) } : {}),
     ...(store.logoUrl ? { logo: store.logoUrl, image: store.logoUrl } : {}),
     ...(store.phone ? { telephone: store.phone } : {}),
@@ -158,10 +177,11 @@ export function storeJsonLd(
  * fabricated.
  */
 export function productJsonLd(
-  store: { slug: string; name: string },
+  store: { slug: string; name: string } & StorefrontLocation,
   product: ProductSeoInput,
 ): Record<string, unknown> {
-  const path = `/s/${store.slug}/products/${product.id}`;
+  const { origin, base } = locationOf(store, store.slug);
+  const path = `${base}/products/${product.id}`;
   return {
     '@context': 'https://schema.org',
     '@type': 'Product',
@@ -177,7 +197,7 @@ export function productJsonLd(
       priceCurrency: 'USD',
       availability:
         product.quantity > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
-      url: absoluteUrl(path),
+      url: absoluteUrl(path, origin),
       seller: { '@type': 'Organization', name: store.name },
     },
   };

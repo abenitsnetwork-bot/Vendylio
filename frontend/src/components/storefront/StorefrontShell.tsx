@@ -118,7 +118,7 @@ export function StorefrontShell({ store }: { store: PublicStore }) {
         <CartButton onClick={() => setCartOpen(true)} />
         {cartOpen && (
           <CartDrawer
-            storeSlug={store.slug}
+            linkBase={store.linkBase}
             acceptingOrders={store.acceptingOrders}
             notAcceptingMessage={
               store.pauseMessage?.trim() || `${store.name} isn’t accepting orders right now.`

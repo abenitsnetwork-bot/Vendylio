@@ -3,7 +3,7 @@
 // Component since it reads the localStorage-backed cart.
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getPublicStore } from '@/lib/server/storefront';
+import { getPublicStore, getViaDomain } from '@/lib/server/storefront';
 import { CheckoutForm } from '@/components/storefront/CheckoutForm';
 
 export const runtime = 'nodejs';
@@ -14,7 +14,7 @@ interface Params {
 
 export default async function CheckoutPage({ params }: Params) {
   const { slug } = await params;
-  const store = await getPublicStore(slug);
+  const store = await getPublicStore(slug, { viaDomain: await getViaDomain() });
   if (!store) notFound();
 
   // Phase 8 — a direct link to /checkout bypasses the disabled cart button,
@@ -30,7 +30,7 @@ export default async function CheckoutPage({ params }: Params) {
           {store.pauseMessage?.trim() || 'Please check back soon.'}
         </p>
         <Link
-          href={`/s/${slug}`}
+          href={store.linkBase || '/'}
           className="rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90"
         >
           Back to store
@@ -42,6 +42,7 @@ export default async function CheckoutPage({ params }: Params) {
   return (
     <CheckoutForm
       storeSlug={store.slug}
+      linkBase={store.linkBase}
       storeName={store.name}
       cashAppCashtag={store.cashAppCashtag}
       zelleContact={store.zelleContact}

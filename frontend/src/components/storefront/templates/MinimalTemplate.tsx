@@ -30,7 +30,7 @@ export function MinimalTemplate({
   return (
     <div>
       <StorefrontHeader
-        storeSlug={store.slug}
+        linkBase={store.linkBase}
         storeName={store.name}
         logoUrl={store.logoUrl}
         onOpenCart={onOpenCart}
@@ -83,7 +83,7 @@ export function MinimalTemplate({
                     return (
                       <div key={product.id} className="flex items-center gap-4 py-3.5">
                         <Link
-                          href={`/s/${store.slug}/products/${product.id}`}
+                          href={`${store.linkBase}/products/${product.id}`}
                           className="flex-shrink-0"
                         >
                           {product.imageUrl ? (
@@ -99,7 +99,7 @@ export function MinimalTemplate({
                           )}
                         </Link>
                         <div className="min-w-0 flex-1">
-                          <Link href={`/s/${store.slug}/products/${product.id}`}>
+                          <Link href={`${store.linkBase}/products/${product.id}`}>
                             <p className="truncate font-headings text-sm font-semibold text-foreground hover:text-primary">
                               {product.name}
                             </p>
@@ -118,7 +118,7 @@ export function MinimalTemplate({
                           />
                           {hasVariants ? (
                             <Link
-                              href={`/s/${store.slug}/products/${product.id}`}
+                              href={`${store.linkBase}/products/${product.id}`}
                               className="inline-block rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-foreground"
                             >
                               Options

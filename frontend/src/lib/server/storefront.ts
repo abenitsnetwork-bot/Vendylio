@@ -91,6 +91,12 @@ export interface PublicStore {
   /** Phase 3 — false when the store is on Pro (whiteLabel): the shell hides
    *  the "Powered by Vendylio" footer badge. */
   showPoweredBy: boolean;
+  /** Phase 4b — prefix for in-storefront links. `/s/<slug>` on the platform
+   *  domain, `''` (root-relative) when served on the merchant's custom domain.
+   *  Components build hrefs as `${store.linkBase}/products/<id>` etc. */
+  linkBase: string;
+  /** The custom domain this render is served on, else null — for canonical URLs. */
+  canonicalHost: string | null;
 }
 
 /** Subset of PublicStore needed to render the header/top bar on a page that
@@ -103,6 +109,9 @@ export interface PublicStoreHeader {
   template: StoreTemplate;
   /** False only on the owner's preview of a draft store (see getPublicProduct opts). */
   published: boolean;
+  /** Phase 4b — see PublicStore.linkBase. */
+  linkBase: string;
+  canonicalHost: string | null;
 }
 
 /**
@@ -115,10 +124,21 @@ export interface PublicStoreHeader {
  */
 export async function getPublicStore(
   slug: string,
-  opts: { includeUnpublished?: boolean } = {},
+  opts: { includeUnpublished?: boolean; viaDomain?: string | null } = {},
 ): Promise<PublicStore | null> {
+  // Phase 4b — when the request arrives on a merchant's custom domain
+  // (middleware injects `x-vendylio-domain`), resolve by that domain (ACTIVE
+  // only) and emit root-relative links. Otherwise the [slug] segment is a
+  // real store slug.
+  const byDomain = Boolean(opts.viaDomain);
+  const where = byDomain
+    ? { customDomain: opts.viaDomain!, customDomainStatus: 'ACTIVE', published: true }
+    : opts.includeUnpublished
+      ? { slug }
+      : { slug, published: true };
+
   const store = await prisma.store.findFirst({
-    where: opts.includeUnpublished ? { slug } : { slug, published: true },
+    where,
     select: {
       slug: true,
       name: true,
@@ -224,7 +244,19 @@ export async function getPublicStore(
     averageRating,
     reviewCount,
     showPoweredBy: !planFeatures(plan).whiteLabel,
+    linkBase: byDomain ? '' : `/s/${store.slug}`,
+    canonicalHost: byDomain ? opts.viaDomain! : null,
   };
+}
+
+/**
+ * Read the `x-vendylio-domain` header the middleware injects on a custom-domain
+ * storefront request. Returns null on a normal (platform-domain) request.
+ */
+export async function getViaDomain(): Promise<string | null> {
+  const { headers } = await import('next/headers');
+  const h = await headers();
+  return h.get('x-vendylio-domain');
 }
 
 export interface PublicProductDetail {
@@ -243,10 +275,16 @@ export interface PublicProductDetail {
 export async function getPublicProduct(
   slug: string,
   productId: string,
-  opts: { includeUnpublished?: boolean } = {},
+  opts: { includeUnpublished?: boolean; viaDomain?: string | null } = {},
 ): Promise<PublicProductDetail | null> {
+  const byDomain = Boolean(opts.viaDomain);
+  const where = byDomain
+    ? { customDomain: opts.viaDomain!, customDomainStatus: 'ACTIVE', published: true }
+    : opts.includeUnpublished
+      ? { slug }
+      : { slug, published: true };
   const store = await prisma.store.findFirst({
-    where: opts.includeUnpublished ? { slug } : { slug, published: true },
+    where,
     select: {
       slug: true,
       name: true,
@@ -284,6 +322,8 @@ export async function getPublicProduct(
       logoUrl: store.logoUrl,
       phone: store.phone,
       template: isStoreTemplate(store.template) ? store.template : 'MODERN',
+      linkBase: byDomain ? '' : `/s/${store.slug}`,
+      canonicalHost: byDomain ? opts.viaDomain! : null,
     },
     product,
   };

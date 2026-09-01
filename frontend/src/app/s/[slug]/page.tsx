@@ -10,7 +10,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { viewerOwnsSlug } from '@/lib/server/storePreview';
-import { getPublicStore, type PublicStore } from '@/lib/server/storefront';
+import { getPublicStore, getViaDomain, type PublicStore } from '@/lib/server/storefront';
 import { StorefrontShell } from '@/components/storefront/StorefrontShell';
 import { JsonLd } from '@/components/JsonLd';
 import { storeMetadata, storeJsonLd } from '@/lib/seo';
@@ -25,8 +25,12 @@ interface Params {
 // signed-in seller owns a store with this exact slug, fetch it including the
 // unpublished state so they can walk the "Review your store" step for real.
 async function resolveStoreForViewer(slug: string): Promise<PublicStore | null> {
-  const live = await getPublicStore(slug);
+  const viaDomain = await getViaDomain();
+  const live = await getPublicStore(slug, { viaDomain });
   if (live) return live;
+  // Draft-preview path is platform-domain only (a draft store can't have an
+  // ACTIVE custom domain).
+  if (viaDomain) return null;
   if (!(await viewerOwnsSlug(slug))) return null;
   return getPublicStore(slug, { includeUnpublished: true });
 }

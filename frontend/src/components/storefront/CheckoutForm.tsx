@@ -139,6 +139,7 @@ function OptionCard({
 
 function CheckoutFormInner({
   storeSlug,
+  linkBase,
   storeName,
   cashAppCashtag,
   zelleContact,
@@ -146,6 +147,8 @@ function CheckoutFormInner({
   pickupAddress,
 }: {
   storeSlug: string;
+  /** Phase 4b — `/s/<slug>` on the platform domain, `''` on a custom domain. */
+  linkBase: string;
   storeName: string;
   cashAppCashtag: string | null;
   zelleContact: string | null;
@@ -508,7 +511,7 @@ function CheckoutFormInner({
         return;
       }
 
-      router.push(`/s/${storeSlug}/orders/${body.trackingToken}/success`);
+      router.push(`${linkBase}/orders/${body.trackingToken}/success`);
     } catch {
       setError('Network error. Please try again.');
       setSubmitting(false);
@@ -520,7 +523,7 @@ function CheckoutFormInner({
       <div className="mx-auto flex min-h-[60vh] max-w-lg flex-col items-center justify-center px-4 text-center">
         <Icon i="shopping-bag" size={32} className="mb-3 text-muted-foreground opacity-50" />
         <p className="mb-4 text-sm text-muted-foreground">Your cart is empty.</p>
-        <Link href={`/s/${storeSlug}`} className="text-sm font-semibold text-primary">
+        <Link href={linkBase || '/'} className="text-sm font-semibold text-primary">
           Back to {storeName}
         </Link>
       </div>
@@ -530,7 +533,7 @@ function CheckoutFormInner({
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 lg:py-12">
       <Link
-        href={`/s/${storeSlug}`}
+        href={linkBase || '/'}
         className="mb-6 flex items-center gap-2 text-sm font-medium text-primary"
       >
         <Icon i="arrow-left" size={16} />
@@ -920,6 +923,7 @@ function CheckoutFormInner({
 
 export function CheckoutForm({
   storeSlug,
+  linkBase,
   storeName,
   cashAppCashtag = null,
   zelleContact = null,
@@ -928,6 +932,7 @@ export function CheckoutForm({
   pickupAddress = null,
 }: {
   storeSlug: string;
+  linkBase?: string;
   storeName: string;
   cashAppCashtag?: string | null;
   zelleContact?: string | null;
@@ -940,6 +945,7 @@ export function CheckoutForm({
       <div className="min-h-screen bg-background font-body">
         <CheckoutFormInner
           storeSlug={storeSlug}
+          linkBase={linkBase ?? `/s/${storeSlug}`}
           storeName={storeName}
           cashAppCashtag={cashAppCashtag}
           zelleContact={zelleContact}

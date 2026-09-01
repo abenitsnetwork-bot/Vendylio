@@ -13,14 +13,71 @@ import { NextResponse, type NextRequest } from 'next/server';
 // e.g. "/dashboard,/account"). Empty by default — the API surface is the only
 // thing shipped, so out-of-the-box this middleware is a no-op.
 //
-// Edge runtime: no DB, no bcrypt, no Prisma. We only inspect cookies and
-// build redirects — the heavy lifting happens in /api/auth/refresh-and-return
-// (runtime=nodejs).
+// Phase 4b — custom storefront domains. A request whose Host is NOT one of
+// our own hosts is a merchant's connected domain (shop.brand.com): we rewrite
+// the storefront paths to /s/<host>/… so the same [slug] route renders it
+// (getPublicStore resolves slug-OR-customDomain). The page reads the injected
+// `x-vendylio-domain` header to emit root-relative links + the right canonical.
+//
+// Edge runtime: no DB, no bcrypt, no Prisma. We only inspect cookies/headers
+// and build redirects/rewrites.
 
 const COOKIE_PREFIX = process.env.COOKIE_PREFIX || 'app';
 const ACCESS_COOKIE = `${COOKIE_PREFIX}-token`;
 const REFRESH_COOKIE = `${COOKIE_PREFIX}-refresh`;
 const LOGIN_PATH = process.env.AUTH_LOGIN_PATH || '/login';
+
+function appHost(): string {
+  try {
+    return new URL(process.env.APP_URL || 'http://localhost:3000').hostname.toLowerCase();
+  } catch {
+    return 'localhost';
+  }
+}
+
+function isOwnHost(host: string): boolean {
+  const bare = host.split(':')[0]!.toLowerCase();
+  return (
+    bare === appHost() ||
+    bare === 'localhost' ||
+    bare === '127.0.0.1' ||
+    bare.endsWith('.vercel.app')
+  );
+}
+
+// Storefront paths a custom domain is allowed to serve. Everything else on a
+// custom domain passes through untouched (and will mostly 404 — a connected
+// domain must never expose /dashboard or /admin).
+function isStorefrontPath(pathname: string): boolean {
+  return (
+    pathname === '/' ||
+    pathname === '/checkout' ||
+    pathname.startsWith('/products/') ||
+    pathname.startsWith('/orders/')
+  );
+}
+
+function rewriteCustomDomain(req: NextRequest): NextResponse | null {
+  const host = req.headers.get('host');
+  if (!host || isOwnHost(host)) return null;
+
+  const bare = host.split(':')[0]!.toLowerCase();
+  const { pathname, search } = req.nextUrl;
+
+  if (!isStorefrontPath(pathname)) {
+    // Not a storefront path on a custom domain — leave it alone (no dashboard
+    // via a merchant domain). Skip the auth guards below too.
+    return NextResponse.next();
+  }
+
+  const url = req.nextUrl.clone();
+  url.pathname = `/s/${bare}${pathname === '/' ? '' : pathname}`;
+  url.search = search;
+
+  const headers = new Headers(req.headers);
+  headers.set('x-vendylio-domain', bare);
+  return NextResponse.rewrite(url, { request: { headers } });
+}
 
 function isAdminPath(pathname: string): boolean {
   return pathname === '/admin' || pathname.startsWith('/admin/');
@@ -56,6 +113,9 @@ function isAuthedPath(pathname: string): boolean {
 }
 
 export function middleware(req: NextRequest): NextResponse {
+  const domainRewrite = rewriteCustomDomain(req);
+  if (domainRewrite) return domainRewrite;
+
   const adminGuard = guardAdmin(req);
   if (adminGuard) return adminGuard;
 

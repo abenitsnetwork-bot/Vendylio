@@ -248,6 +248,57 @@ describe('getPublicStore', () => {
     const arg = prismaMock.store.findFirst.mock.calls[0]?.[0];
     expect(arg?.select).toMatchObject({ phone: true });
   });
+
+  it('Phase 4b — resolves by ACTIVE customDomain when viaDomain is set, and emits root-relative links', async () => {
+    prismaMock.store.findFirst.mockResolvedValue(null);
+    await getPublicStore('shop.brand.com', { viaDomain: 'shop.brand.com' });
+    const arg = prismaMock.store.findFirst.mock.calls[0]?.[0];
+    expect(arg?.where).toEqual({
+      customDomain: 'shop.brand.com',
+      customDomainStatus: 'ACTIVE',
+      published: true,
+    });
+    expect(arg?.select).not.toHaveProperty('id');
+  });
+
+  it('Phase 4b — linkBase is `/s/<slug>` on the platform domain, `` on a custom domain', async () => {
+    const base = {
+      name: 'S',
+      published: true,
+      plan: 'PRO',
+      description: null,
+      city: null,
+      state: null,
+      logoUrl: null,
+      phone: null,
+      cashAppCashtag: null,
+      zelleContact: null,
+      deliveryFeeCents: 0,
+      deliveryProvider: 'self_manual',
+      pickupAddress: null,
+      template: 'MODERN',
+      announcement: null,
+      heroImages: [],
+      heroHeadline: null,
+      heroSubhead: null,
+      timezone: 'UTC',
+      ordersPaused: false,
+      pauseMessage: null,
+      hours: [],
+      categories: [],
+      products: [],
+      reviews: [],
+    };
+    prismaMock.store.findFirst.mockResolvedValue({ ...base, slug: 'shea' } as never);
+    const platform = await getPublicStore('shea');
+    expect(platform?.linkBase).toBe('/s/shea');
+    expect(platform?.canonicalHost).toBeNull();
+
+    prismaMock.store.findFirst.mockResolvedValue({ ...base, slug: 'shea' } as never);
+    const custom = await getPublicStore('shop.brand.com', { viaDomain: 'shop.brand.com' });
+    expect(custom?.linkBase).toBe('');
+    expect(custom?.canonicalHost).toBe('shop.brand.com');
+  });
 });
 
 describe('getPublicProduct', () => {
@@ -317,6 +368,8 @@ describe('getPublicProduct', () => {
         logoUrl: 'https://cdn/logo.jpg',
         phone: '+1 555-0100',
         template: 'BOLD',
+        linkBase: '/s/shea-store',
+        canonicalHost: null,
       },
       product: {
         id: 'p1',

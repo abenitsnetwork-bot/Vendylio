@@ -4,7 +4,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { viewerOwnsSlug } from '@/lib/server/storePreview';
-import { getPublicProduct, type PublicProductDetail } from '@/lib/server/storefront';
+import { getPublicProduct, getViaDomain, type PublicProductDetail } from '@/lib/server/storefront';
 import { CartProvider } from '@/contexts/CartContext';
 import { ProductDetailView } from '@/components/storefront/ProductDetailView';
 import { TrackView } from '@/components/storefront/TrackView';
@@ -23,8 +23,10 @@ async function resolveProductForViewer(
   slug: string,
   productId: string,
 ): Promise<PublicProductDetail | null> {
-  const live = await getPublicProduct(slug, productId);
+  const viaDomain = await getViaDomain();
+  const live = await getPublicProduct(slug, productId, { viaDomain });
   if (live) return live;
+  if (viaDomain) return null;
   if (!(await viewerOwnsSlug(slug))) return null;
   return getPublicProduct(slug, productId, { includeUnpublished: true });
 }

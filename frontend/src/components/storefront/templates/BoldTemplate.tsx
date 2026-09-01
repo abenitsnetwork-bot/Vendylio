@@ -30,7 +30,7 @@ export function BoldTemplate({
   return (
     <div>
       <StorefrontHeader
-        storeSlug={store.slug}
+        linkBase={store.linkBase}
         storeName={store.name}
         logoUrl={store.logoUrl}
         onOpenCart={onOpenCart}
@@ -98,7 +98,7 @@ export function BoldTemplate({
                     return (
                       <div key={product.id} className="flex flex-col">
                         <Link
-                          href={`/s/${store.slug}/products/${product.id}`}
+                          href={`${store.linkBase}/products/${product.id}`}
                           className="relative mb-3 block overflow-hidden rounded-xl"
                         >
                           {product.imageUrl ? (
@@ -118,7 +118,7 @@ export function BoldTemplate({
                             </span>
                           )}
                         </Link>
-                        <Link href={`/s/${store.slug}/products/${product.id}`}>
+                        <Link href={`${store.linkBase}/products/${product.id}`}>
                           <p className="mb-1 line-clamp-2 font-headings text-base font-bold text-foreground hover:text-primary">
                             {product.name}
                           </p>
@@ -136,7 +136,7 @@ export function BoldTemplate({
                           />
                           {hasVariants ? (
                             <Link
-                              href={`/s/${store.slug}/products/${product.id}`}
+                              href={`${store.linkBase}/products/${product.id}`}
                               className="flex-shrink-0 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-foreground"
                             >
                               Options

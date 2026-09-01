@@ -9,12 +9,13 @@ import { formatUsdPerUnit } from '@/lib/productUnits';
 import { useCart } from '@/contexts/CartContext';
 
 export function CartDrawer({
-  storeSlug,
+  linkBase,
   acceptingOrders = true,
   notAcceptingMessage,
   onClose,
 }: {
-  storeSlug: string;
+  /** Phase 4b — `/s/<slug>` or `''` on a custom domain. */
+  linkBase: string;
   acceptingOrders?: boolean;
   notAcceptingMessage?: string;
   onClose: () => void;
@@ -159,7 +160,7 @@ export function CartDrawer({
           </button>
         ) : (
           <Link
-            href={`/s/${storeSlug}/checkout`}
+            href={`${linkBase}/checkout`}
             className="block w-full rounded-lg bg-primary px-6 py-3 text-center text-sm font-semibold text-primary-foreground hover:opacity-90"
           >
             Checkout

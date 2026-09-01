@@ -792,8 +792,22 @@ model Store {
   stripeSubscriptionId         String?      @unique
   subscriptionStatus           String? // ACTIVE | TRIALING | PAST_DUE | CANCELED | null
   subscriptionCurrentPeriodEnd DateTime?
+  // Phase 5 — billing interval of the active Pro subscription, mirrored from
+  // Stripe (subscription.items[0].price.recurring.interval). Display-only:
+  // "month" | "year" | null (Free / never subscribed). Drives the "renews
+  // annually" copy + the checkout toggle's default.
+  subscriptionInterval         String?
   planSource                   String? // SUBSCRIPTION | COMP | null
   planCompExpiresAt            DateTime?
+  // Phase 4b — custom storefront domain (Pro). `customDomain` is the bare
+  // hostname the merchant connected ("shop.brand.com", lowercased), added to
+  // the Vercel project via the Domains API. `customDomainStatus`: NONE (never
+  // set) | PENDING (added, DNS not verified yet) | ACTIVE (verified — the
+  // middleware rewrite serves the storefront on it) | ERROR. A request whose
+  // Host matches an ACTIVE customDomain is rewritten to /s/<slug> by
+  // middleware.ts; getPublicStore resolves slug-OR-domain.
+  customDomain                 String?      @unique
+  customDomainStatus           String       @default("NONE") // NONE | PENDING | ACTIVE | ERROR
   createdAt                    DateTime     @default(now())
   updatedAt                    DateTime     @updatedAt
 
@@ -1006,6 +1020,18 @@ model Withdrawal {
 // (SUPERADMIN-only, same as the Site Content CMS). See
 // lib/server/payments/platform-settings.ts for the read helper and
 // api/admin/settings/route.ts for the read/write endpoint.
+// Phase 5 — "Business" tier waitlist. The /pricing page's Business teaser
+// captures interested high-volume sellers here instead of a bare mailto.
+// Read via Prisma Studio (no admin view in v1). Anti-spam is the unique
+// email + a per-IP limiter on the public route.
+model BusinessLead {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  storeName String?
+  note      String?
+  createdAt DateTime @default(now())
+}
+
 model PlatformSettings {
   id                  String   @id @default("default")
   // Basis points: 600 = 6%. 0 = no commission taken.

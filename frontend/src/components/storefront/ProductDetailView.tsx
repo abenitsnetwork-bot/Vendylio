@@ -45,7 +45,7 @@ export function ProductDetailView({
 
   function handleBuyNow() {
     addItem(addable, effectiveQty);
-    router.push(`/s/${store.slug}/checkout`);
+    router.push(`${store.linkBase}/checkout`);
   }
 
   return (
@@ -57,16 +57,21 @@ export function ProductDetailView({
       )}
       <StorefrontTopBar phone={store.phone} />
       <StorefrontHeader
-        storeSlug={store.slug}
+        linkBase={store.linkBase}
         storeName={store.name}
         logoUrl={store.logoUrl}
         onOpenCart={() => setCartOpen(true)}
       />
       <Breadcrumbs
         items={[
-          { label: store.name, href: `/s/${store.slug}` },
+          { label: store.name, href: store.linkBase || '/' },
           ...(product.category
-            ? [{ label: product.category.name, href: `/s/${store.slug}#${product.category.slug}` }]
+            ? [
+                {
+                  label: product.category.name,
+                  href: `${store.linkBase || '/'}#${product.category.slug}`,
+                },
+              ]
             : []),
           { label: product.name },
         ]}
@@ -161,7 +166,7 @@ export function ProductDetailView({
         </div>
       </main>
 
-      {cartOpen && <CartDrawer storeSlug={store.slug} onClose={() => setCartOpen(false)} />}
+      {cartOpen && <CartDrawer linkBase={store.linkBase} onClose={() => setCartOpen(false)} />}
     </div>
   );
 }

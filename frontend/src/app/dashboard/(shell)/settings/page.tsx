@@ -12,6 +12,7 @@ import { StoreSettingsForm } from '@/components/seller/StoreSettingsForm';
 import { StoreHoursForm, type StoreHoursEntry } from '@/components/seller/StoreHoursForm';
 import { CategoryManager } from '@/components/seller/CategoryManager';
 import { PaymentsConnectSettings } from '@/components/seller/PaymentsConnectSettings';
+import { CustomDomainSettings } from '@/components/seller/CustomDomainSettings';
 import { AccountSecurityForm } from '@/components/seller/AccountSecurityForm';
 import type { StoreTemplate } from '@/lib/storeTemplates';
 
@@ -43,6 +44,7 @@ const TABS = [
   { value: 'hours', label: 'Hours & status' },
   { value: 'categories', label: 'Categories' },
   { value: 'payments', label: 'Payments' },
+  { value: 'domain', label: 'Domain' },
   { value: 'account', label: 'Account' },
 ] as const;
 type Tab = (typeof TABS)[number]['value'];
@@ -167,6 +169,8 @@ function SettingsTabs() {
           {activeTab === 'categories' && <CategoryManager />}
 
           {activeTab === 'payments' && <PaymentsConnectSettings />}
+
+          {activeTab === 'domain' && <CustomDomainSettings storeSlug={store?.slug ?? null} />}
 
           {activeTab === 'account' && <AccountSecurityForm user={user} />}
         </div>
