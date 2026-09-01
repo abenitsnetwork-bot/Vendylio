@@ -56,6 +56,30 @@ export function orderPaid(
 }
 
 /**
+ * ORD-01 (Prompt #15) — nudges the store owner when a paid order has gone
+ * `ORDER_NUDGE_HOURS` without being moved forward (still PAID or PREPARING).
+ * dedupeKey has NO time bucket: at most one nudge per order, ever — the
+ * `order-nudge` cron also pre-filters orders that already have this
+ * notification, so it is never spammy.
+ */
+export function orderUnfulfilled(
+  userId: string,
+  orderId: string,
+  hoursWaiting: number,
+  reference?: string,
+): CreateNotificationInput {
+  const ref = reference ?? orderId;
+  return {
+    userId,
+    type: 'ORDER_UNFULFILLED',
+    title: 'An order is still waiting',
+    body: `Order ${ref} was paid about ${hoursWaiting}h ago and hasn't moved forward. Mark it as preparing so the customer sees progress.`,
+    data: { orderId, hoursWaiting },
+    dedupeKey: `order-unfulfilled:${orderId}`,
+  };
+}
+
+/**
  * Uber Direct — notifies the store owner once a courier confirms drop-off.
  * Dispatched from the Uber Direct webhook via the outbox.
  */

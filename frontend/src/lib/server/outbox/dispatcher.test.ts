@@ -283,6 +283,82 @@ describe('drainOutbox (TEST-02)', () => {
     expect(enqueueArgs?.subject).toContain('refunded');
   });
 
+  // NOTIF-01 / ORD-01 (Prompt #15) — seller operational emails + nudge.
+  const SELLER_ORDER_ROW = {
+    id: 'order-1',
+    orderNumber: 42,
+    customerName: 'Jamie',
+    customerPhone: '555-0100',
+    fulfillmentMethod: 'DELIVERY',
+    deliveryAddress: { street: '1 Main St', city: 'Dakar', state: 'DK', zip: '10001' },
+    amount: 3600,
+    currency: 'USD',
+    lineItems: [{ name: 'Shea Butter', quantity: 2, priceCents: 1800, unit: 'UNIT' }],
+    store: {
+      name: "Consty's Kitchen",
+      organization: { owner: { id: 'seller-1', email: 'seller@example.com' } },
+    },
+  };
+
+  it('dispatches email.order_new_seller to the store owner (NOTIF-01)', async () => {
+    const row = makeRow({ kind: 'email.order_new_seller', payload: { orderId: 'order-1' } });
+    prismaMock.outboxEvent.findMany.mockResolvedValue([{ id: 'oe_1' }] as never);
+    prismaMock.outboxEvent.updateMany.mockResolvedValue({ count: 1 } as never);
+    prismaMock.outboxEvent.findUnique.mockResolvedValue(row as never);
+    prismaMock.order.findUnique.mockResolvedValue(SELLER_ORDER_ROW as never);
+    prismaMock.notificationPreferences.findUnique.mockResolvedValue(null as never);
+    vi.mocked(emailQueueMock.enqueue).mockResolvedValue(undefined as never);
+    prismaMock.outboxEvent.update.mockResolvedValue({} as never);
+
+    const stats = await drainOutbox({ prisma: prismaMock, emailQueue: emailQueueMock });
+
+    expect(stats.succeeded).toBe(1);
+    const enqueueArgs = vi.mocked(emailQueueMock.enqueue).mock.calls[0]?.[0];
+    expect(enqueueArgs).toMatchObject({ to: 'seller@example.com' });
+    expect(enqueueArgs?.subject).toContain('VND-10042');
+    expect(enqueueArgs?.html).toContain('555-0100'); // seller needs the contact
+  });
+
+  it('email.order_new_seller respects the owner ORDER_PAID email opt-out', async () => {
+    const row = makeRow({ kind: 'email.order_new_seller', payload: { orderId: 'order-1' } });
+    prismaMock.outboxEvent.findMany.mockResolvedValue([{ id: 'oe_1' }] as never);
+    prismaMock.outboxEvent.updateMany.mockResolvedValue({ count: 1 } as never);
+    prismaMock.outboxEvent.findUnique.mockResolvedValue(row as never);
+    prismaMock.order.findUnique.mockResolvedValue(SELLER_ORDER_ROW as never);
+    prismaMock.notificationPreferences.findUnique.mockResolvedValue({
+      prefs: { ORDER_PAID: { email: false } },
+    } as never);
+    prismaMock.outboxEvent.update.mockResolvedValue({} as never);
+
+    const stats = await drainOutbox({ prisma: prismaMock, emailQueue: emailQueueMock });
+
+    expect(stats.succeeded).toBe(1); // handled — just a no-op send
+    expect(vi.mocked(emailQueueMock.enqueue)).not.toHaveBeenCalled();
+  });
+
+  it('dispatches notification.order_unfulfilled via createNotification (ORD-01)', async () => {
+    const row = makeRow({
+      kind: 'notification.order_unfulfilled',
+      payload: { userId: 'seller-1', orderId: 'order-1', hoursWaiting: 8 },
+    });
+    prismaMock.outboxEvent.findMany.mockResolvedValue([{ id: 'oe_1' }] as never);
+    prismaMock.outboxEvent.updateMany.mockResolvedValue({ count: 1 } as never);
+    prismaMock.outboxEvent.findUnique.mockResolvedValue(row as never);
+    prismaMock.order.findUnique.mockResolvedValue({ orderNumber: 42 } as never);
+    prismaMock.notification.create.mockResolvedValue({ id: 'n1' } as never);
+    prismaMock.outboxEvent.update.mockResolvedValue({} as never);
+
+    const stats = await drainOutbox({ prisma: prismaMock });
+
+    expect(stats.succeeded).toBe(1);
+    const createArgs = prismaMock.notification.create.mock.calls[0]?.[0];
+    expect(createArgs?.data).toMatchObject({
+      userId: 'seller-1',
+      type: 'ORDER_UNFULFILLED',
+      dedupeKey: 'order-unfulfilled:order-1',
+    });
+  });
+
   // Phase 4 — low-stock alerts.
   it('dispatches notification.low_stock via createNotification and stamps lowStockNotifiedAt', async () => {
     const row = makeRow({

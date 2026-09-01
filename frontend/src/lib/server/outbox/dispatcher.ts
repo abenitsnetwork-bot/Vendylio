@@ -23,11 +23,13 @@ import type { PrismaClient } from '@prisma/client';
 import { createNotification } from '../notifications/index';
 import {
   orderPaid,
+  orderUnfulfilled,
   deliveryCompleted,
   deliveryFailed,
   lowStockNotification,
   outOfStockNotification,
 } from '../notifications/templates';
+import { isChannelEnabled } from '../notifications/prefs-merge';
 import type { EmailQueue } from '../queues/email-queue';
 import { createLogger } from '../logger';
 import { formatOrderNumber } from '@/lib/orderNumber';
@@ -197,6 +199,51 @@ async function dispatchEvent(deps: OutboxDispatcherDeps, event: OutboxEvent): Pr
       const { userId, orderId, amount, currency } = event.payload;
       const ref = await orderReference(deps.prisma, orderId);
       await createNotification(deps.prisma, orderPaid(userId, orderId, amount, currency, ref));
+      return;
+    }
+    case 'email.order_new_seller': {
+      // NOTIF-01 — the store owner's operational "new order" email. Recipient +
+      // order details resolved from the order row; skipped when the owner opted
+      // out of the ORDER_PAID email channel (default-on) or the store/owner
+      // vanished. Email failure retries via the outbox — never touches the order.
+      if (!deps.emailQueue) throw new Error('email queue not configured');
+      const { resolveSellerOrderEmailContext } = await import('../emails/sellerOrderEmailContext');
+      const { orderNewSellerEmail } = await import('../emails/sellerEmails');
+      const resolved = await resolveSellerOrderEmailContext(deps.prisma, event.payload.orderId);
+      if (!resolved) return;
+      if (!isChannelEnabled(resolved.prefs, 'ORDER_PAID', 'email')) return;
+      const tpl = orderNewSellerEmail(resolved.context);
+      await deps.emailQueue.enqueue({
+        to: resolved.to,
+        subject: tpl.subject,
+        html: tpl.html,
+        text: tpl.text,
+      });
+      return;
+    }
+    case 'notification.order_unfulfilled': {
+      // ORD-01 — in-app nudge for a paid order the seller hasn't progressed.
+      // Deduped once-per-order by createNotification.
+      const { userId, orderId, hoursWaiting } = event.payload;
+      const ref = await orderReference(deps.prisma, orderId);
+      await createNotification(deps.prisma, orderUnfulfilled(userId, orderId, hoursWaiting, ref));
+      return;
+    }
+    case 'email.order_unfulfilled': {
+      // ORD-01 — the email sibling of notification.order_unfulfilled.
+      if (!deps.emailQueue) throw new Error('email queue not configured');
+      const { resolveSellerOrderEmailContext } = await import('../emails/sellerOrderEmailContext');
+      const { orderUnfulfilledReminderEmail } = await import('../emails/sellerEmails');
+      const resolved = await resolveSellerOrderEmailContext(deps.prisma, event.payload.orderId);
+      if (!resolved) return;
+      if (!isChannelEnabled(resolved.prefs, 'ORDER_UNFULFILLED', 'email')) return;
+      const tpl = orderUnfulfilledReminderEmail(resolved.context, event.payload.hoursWaiting);
+      await deps.emailQueue.enqueue({
+        to: resolved.to,
+        subject: tpl.subject,
+        html: tpl.html,
+        text: tpl.text,
+      });
       return;
     }
     case 'email.order_confirmation': {

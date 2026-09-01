@@ -226,6 +226,13 @@ export async function applyOrderPaidEffects(
         currency: order.currency,
       },
     });
+    // NOTIF-01 — the seller's operational "new order" email. The dispatcher
+    // resolves the owner's address + honours their ORDER_PAID email pref; a
+    // send failure retries in the outbox and never touches order state.
+    await enqueueOutbox(tx, {
+      kind: 'email.order_new_seller',
+      payload: { orderId: order.id },
+    });
   }
   if (order.customerEmail) {
     // Phase 7 — the dispatcher renders the branded template + resolves the

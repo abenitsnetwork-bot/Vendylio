@@ -7,6 +7,7 @@
     { "path": "/api/cron/webhook-log-purge", "schedule": "0 0 * * *" },
     { "path": "/api/cron/email-job-purge", "schedule": "0 0 * * *" },
     { "path": "/api/cron/low-stock-sweep", "schedule": "0 7 * * *" },
-    { "path": "/api/cron/fulfillment-tick", "schedule": "*/2 * * * *" }
+    { "path": "/api/cron/fulfillment-tick", "schedule": "*/2 * * * *" },
+    { "path": "/api/cron/order-nudge", "schedule": "0 * * * *" }
   ]
 }

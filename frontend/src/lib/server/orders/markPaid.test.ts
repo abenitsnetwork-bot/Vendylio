@@ -188,6 +188,22 @@ describe('applyOrderPaidEffects', () => {
     expect(kinds).toContain('email.order_confirmation');
   });
 
+  it('enqueues email.order_new_seller (NOTIF-01) for the store owner', async () => {
+    prismaMock.store.findUnique.mockResolvedValueOnce({
+      plan: 'FREE',
+      organization: { ownerId: 'seller-1' },
+    } as never);
+    prismaMock.product.findUnique.mockResolvedValueOnce({ quantity: 10 } as never);
+
+    await applyOrderPaidEffects(prismaMock, BASE_ORDER, {});
+
+    const sellerEmail = prismaMock.outboxEvent.create.mock.calls
+      .map((c) => (c[0] as { data: { kind: string; payload: Record<string, unknown> } }).data)
+      .find((d) => d.kind === 'email.order_new_seller');
+    expect(sellerEmail).toBeDefined();
+    expect(sellerEmail?.payload).toMatchObject({ orderId: BASE_ORDER.id });
+  });
+
   it('enqueues notification.low_stock when a SALE crosses the low-stock threshold', async () => {
     prismaMock.store.findUnique.mockResolvedValueOnce({
       plan: 'FREE',

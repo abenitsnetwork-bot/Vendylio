@@ -13,6 +13,9 @@ export type OutboxEvent =
   | EmailVerificationCodeEvent
   | EmailPasswordResetEvent
   | NotificationOrderPaidEvent
+  | EmailOrderNewSellerEvent
+  | NotificationOrderUnfulfilledEvent
+  | EmailOrderUnfulfilledEvent
   | EmailOrderConfirmationEvent
   | EmailOrderStatusEvent
   | EmailOrderRefundedEvent
@@ -60,6 +63,51 @@ export interface NotificationOrderPaidEvent {
     orderId: string;
     amount: number;
     currency: string;
+  };
+}
+
+/**
+ * NOTIF-01 (Prompt #15) — emitted by markPaid.ts once payment is authoritative,
+ * for the STORE OWNER's operational "new order" email (the buyer has their own
+ * `email.order_confirmation`). The dispatcher resolves the owner's address +
+ * the order details from the order row and honours the owner's
+ * NotificationPreferences (`ORDER_PAID` / `email` channel, default-on). A
+ * payload for an order whose store/owner vanished is a no-op.
+ */
+export interface EmailOrderNewSellerEvent {
+  kind: 'email.order_new_seller';
+  payload: {
+    orderId: string;
+  };
+}
+
+/**
+ * ORD-01 (Prompt #15) — emitted by the `order-nudge` cron when a PAID/PREPARING
+ * order has gone `ORDER_NUDGE_HOURS` without the seller moving it forward.
+ * In-app reminder for the store owner; deduped once-per-order by
+ * `createNotification` (dedupeKey `order-unfulfilled:<orderId>`), and the cron
+ * also skips orders that already have the notification, so it is never spammy.
+ */
+export interface NotificationOrderUnfulfilledEvent {
+  kind: 'notification.order_unfulfilled';
+  payload: {
+    userId: string;
+    orderId: string;
+    hoursWaiting: number;
+  };
+}
+
+/**
+ * ORD-01 (Prompt #15) — the email sibling of `notification.order_unfulfilled`,
+ * emitted by the same cron. Recipient + order details resolved from the order
+ * row; honours the owner's NotificationPreferences (`ORDER_UNFULFILLED` /
+ * `email` channel, default-on).
+ */
+export interface EmailOrderUnfulfilledEvent {
+  kind: 'email.order_unfulfilled';
+  payload: {
+    orderId: string;
+    hoursWaiting: number;
   };
 }
 
