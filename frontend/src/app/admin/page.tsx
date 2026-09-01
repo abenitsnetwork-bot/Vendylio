@@ -10,6 +10,7 @@ import { StoreOverviewSection } from '@/components/admin/StoreOverviewSection';
 import { SectionBand } from '@/components/admin/dashboard/SectionBand';
 import { KpiTile } from '@/components/admin/dashboard/KpiTile';
 import { BreakdownDonut } from '@/components/admin/dashboard/BreakdownDonut';
+import { RevenueDonut } from '@/components/admin/dashboard/RevenueDonut';
 import { TrendComboChart, type TrendPoint } from '@/components/admin/dashboard/TrendComboChart';
 import {
   SystemQueueStrip,
@@ -40,6 +41,7 @@ interface Pulse {
     activeDeliveries: KpiSeries;
     failedPayments: KpiSeries;
   };
+  revenueMix: { method: string; gmvCents: number; orderCount: number }[];
   daily: { date: string; gmvCents: number; orderCount: number; newCustomers: number }[];
   queue: QueueSnapshot;
 }
@@ -135,49 +137,116 @@ export default function AdminDashboardPage() {
       {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
       {!pulse && !error && <p className="text-sm text-muted-foreground">Loading…</p>}
 
-      {/* ── KPIs ──────────────────────────────────────────────────────────── */}
+      {/* ── Sales overview (Octoboard-style: stacked KPIs · donut · trend) ─── */}
       {k && (
         <SectionBand
-          title={`Platform overview — last ${pulse!.periodDays} days`}
+          title={`Sales overview — last ${pulse!.periodDays} days`}
           icon="bar-chart-3"
-          meta="vs previous period"
+          meta={
+            <div className="flex overflow-hidden rounded-md border border-panel-foreground/25">
+              {(['30d', '6m'] as const).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setTrendRange(r)}
+                  className={`px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${
+                    trendRange === r
+                      ? 'bg-panel-foreground text-panel'
+                      : 'text-panel-foreground/70 hover:text-panel-foreground'
+                  }`}
+                >
+                  {r === '30d' ? '30 days' : '6 months'}
+                </button>
+              ))}
+            </div>
+          }
         >
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <KpiTile
-              label="GMV"
-              icon="trending-up"
-              value={usdCompact(k.gmv.value)}
-              deltaPct={k.gmv.deltaPct ?? null}
-              deltaSuffix={period}
-              spark={k.gmv.spark}
-              accent
-            />
-            <KpiTile
-              label="Paid orders"
-              icon="shopping-bag"
-              value={count(k.orders.value)}
-              deltaPct={k.orders.deltaPct ?? null}
-              deltaSuffix={period}
-              spark={k.orders.spark}
-            />
-            <KpiTile
-              label="New customers"
-              icon="users"
-              value={count(k.newCustomers.value)}
-              deltaPct={k.newCustomers.deltaPct ?? null}
-              deltaSuffix={period}
-              spark={k.newCustomers.spark}
-              sparkTone="accent"
-            />
-            <KpiTile
-              label="Platform revenue"
-              icon="dollar-sign"
-              value={usdCompact(k.platformRevenue.value)}
-              deltaPct={k.platformRevenue.deltaPct ?? null}
-              deltaSuffix={period}
-              spark={k.platformRevenue.spark}
-              accent
-            />
+          <div className="grid gap-4 lg:grid-cols-3 xl:grid-cols-4">
+            {/* Left — the money story, stacked */}
+            <div className="space-y-3 lg:col-span-1">
+              <KpiTile
+                label="GMV"
+                icon="trending-up"
+                value={usdCompact(k.gmv.value)}
+                deltaPct={k.gmv.deltaPct ?? null}
+                deltaSuffix={period}
+                spark={k.gmv.spark}
+                accent
+                compact
+                valueTone="positive"
+              />
+              <KpiTile
+                label="Platform revenue"
+                icon="dollar-sign"
+                value={usdCompact(k.platformRevenue.value)}
+                deltaPct={k.platformRevenue.deltaPct ?? null}
+                deltaSuffix={period}
+                spark={k.platformRevenue.spark}
+                accent
+                compact
+                valueTone="positive"
+              />
+              <KpiTile
+                label="Paid orders"
+                icon="shopping-bag"
+                value={count(k.orders.value)}
+                deltaPct={k.orders.deltaPct ?? null}
+                deltaSuffix={period}
+                spark={k.orders.spark}
+                compact
+              />
+              <KpiTile
+                label="New customers"
+                icon="users"
+                value={count(k.newCustomers.value)}
+                deltaPct={k.newCustomers.deltaPct ?? null}
+                deltaSuffix={period}
+                spark={k.newCustomers.spark}
+                sparkTone="accent"
+                compact
+              />
+            </div>
+
+            {/* Centre — the "Sales revenue" ring (GMV split by payment method) */}
+            <div className="rounded-lg border border-border bg-card p-4 lg:col-span-1">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Sales revenue · by method
+              </p>
+              <RevenueDonut
+                slices={(pulse?.revenueMix ?? []).map((m) => ({
+                  label: m.method,
+                  valueCents: m.gmvCents,
+                  note: `${m.orderCount} ${m.orderCount === 1 ? 'order' : 'orders'}`,
+                }))}
+                centerValue={usdCompact(k.gmv.value)}
+                centerLabel={`total · ${period}`}
+                formatMoney={usd}
+              />
+            </div>
+
+            {/* Right — the trend combo */}
+            <div className="rounded-lg border border-border bg-card p-4 lg:col-span-1 xl:col-span-2">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {trendRange === '30d' ? 'Daily' : 'Monthly'} GMV &amp; orders
+              </p>
+              {!pulse && !analytics ? (
+                <p className="py-16 text-center text-sm text-muted-foreground">Loading…</p>
+              ) : trendData.length === 0 ? (
+                <p className="py-16 text-center text-sm text-muted-foreground">
+                  No revenue data yet.
+                </p>
+              ) : (
+                <TrendComboChart data={trendData} formatMoney={usd} height={240} />
+              )}
+            </div>
+          </div>
+        </SectionBand>
+      )}
+
+      {/* ── Platform health (ops KPIs + live queue) ───────────────────────── */}
+      {pulse && k && (
+        <SectionBand title="Platform health" icon="life-buoy" meta="live snapshot">
+          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
             <KpiTile
               label="Merchants"
               icon="briefcase"
@@ -212,47 +281,9 @@ export default function AdminDashboardPage() {
               invertDelta
             />
           </div>
-        </SectionBand>
-      )}
-
-      {/* ── System health ─────────────────────────────────────────────────── */}
-      {pulse && (
-        <SectionBand title="System health" icon="life-buoy" meta="live queue snapshot">
           <SystemQueueStrip queue={pulse.queue} />
         </SectionBand>
       )}
-
-      {/* ── Revenue & orders ──────────────────────────────────────────────── */}
-      <SectionBand
-        title="Revenue & orders"
-        icon="trending-up"
-        meta={
-          <div className="flex overflow-hidden rounded-md border border-panel-foreground/25">
-            {(['30d', '6m'] as const).map((r) => (
-              <button
-                key={r}
-                type="button"
-                onClick={() => setTrendRange(r)}
-                className={`px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${
-                  trendRange === r
-                    ? 'bg-panel-foreground text-panel'
-                    : 'text-panel-foreground/70 hover:text-panel-foreground'
-                }`}
-              >
-                {r === '30d' ? '30 days' : '6 months'}
-              </button>
-            ))}
-          </div>
-        }
-      >
-        {!pulse && !analytics ? (
-          <p className="py-16 text-center text-sm text-muted-foreground">Loading…</p>
-        ) : trendData.length === 0 ? (
-          <p className="py-16 text-center text-sm text-muted-foreground">No revenue data yet.</p>
-        ) : (
-          <TrendComboChart data={trendData} formatMoney={usd} />
-        )}
-      </SectionBand>
 
       {/* ── Sales mix ─────────────────────────────────────────────────────── */}
       <SectionBand title="Sales mix" icon="pie-chart" meta="paid orders">

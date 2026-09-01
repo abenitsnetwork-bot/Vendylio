@@ -79,6 +79,7 @@ describe('GET /api/admin/pulse', () => {
     expect(body.kpis.activeDeliveries).toEqual({ value: 0 });
     expect(body.daily).toHaveLength(30);
     expect(body.daily[0]).toMatchObject({ gmvCents: 0, orderCount: 0, newCustomers: 0 });
+    expect(body.revenueMix).toEqual([]);
     expect(body.queue).toEqual({
       outboxPending: 0,
       outboxFailed: 0,
@@ -92,10 +93,10 @@ describe('GET /api/admin/pulse', () => {
   it('computes GMV / orders deltas from this-30d vs the prior 30d', async () => {
     prismaMock.order.findMany.mockResolvedValueOnce([
       // this period: 2 orders, $150
-      { amount: 10000, commissionAmount: 600, paidAt: daysAgo(3) },
-      { amount: 5000, commissionAmount: 300, paidAt: daysAgo(10) },
+      { amount: 10000, commissionAmount: 600, paidAt: daysAgo(3), provider: 'stripe_connect' },
+      { amount: 5000, commissionAmount: 300, paidAt: daysAgo(10), provider: 'stripe_connect' },
       // prior period: 1 order, $100
-      { amount: 10000, commissionAmount: 600, paidAt: daysAgo(40) },
+      { amount: 10000, commissionAmount: 600, paidAt: daysAgo(40), provider: 'stripe_connect' },
     ] as never);
 
     const res = await GET(makeGet());
@@ -108,6 +109,27 @@ describe('GET /api/admin/pulse', () => {
     expect(body.kpis.platformRevenue.value).toBe(900);
     // spark sums to the period total
     expect(body.kpis.gmv.spark.reduce((a: number, b: number) => a + b, 0)).toBe(15000);
+  });
+
+  it('splits current-period GMV by payment method for the revenue donut', async () => {
+    prismaMock.order.findMany.mockResolvedValueOnce([
+      { amount: 8000, commissionAmount: 400, paidAt: daysAgo(2), provider: 'stripe_connect' },
+      { amount: 2000, commissionAmount: 100, paidAt: daysAgo(4), provider: 'stripe_platform' },
+      { amount: 5000, commissionAmount: 0, paidAt: daysAgo(6), provider: 'cashapp_manual' },
+      { amount: 3000, commissionAmount: 0, paidAt: daysAgo(8), provider: 'zelle_manual' },
+      // prior period — must not appear in the mix
+      { amount: 9000, commissionAmount: 0, paidAt: daysAgo(45), provider: 'zelle_manual' },
+    ] as never);
+
+    const res = await GET(makeGet());
+    const body = await res.json();
+
+    // Card = stripe_connect + stripe_platform, sorted desc by GMV
+    expect(body.revenueMix).toEqual([
+      { method: 'Card', gmvCents: 10000, orderCount: 2 },
+      { method: 'Cash App', gmvCents: 5000, orderCount: 1 },
+      { method: 'Zelle', gmvCents: 3000, orderCount: 1 },
+    ]);
   });
 
   it('surfaces queue health counts and scopes in-flight deliveries to REQUESTED', async () => {

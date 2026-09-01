@@ -1,6 +1,8 @@
 // GET /api/admin/pulse — dashboard-redesign aggregate: per-KPI value + period-
-// over-period delta + a 30-day daily series (sparklines), plus a system-queue
-// health snapshot. Everything is derived from existing tables (Organization,
+// over-period delta + a 30-day daily series (sparklines) + the current-period
+// GMV split by payment method (`revenueMix`, feeds the "Sales revenue" donut),
+// plus a system-queue health snapshot. Everything is derived from existing
+// tables (Organization,
 // Store, Order, Customer, Delivery, OutboxEvent, EmailJob, Withdrawal) — no new
 // schema, no fabricated numbers.
 //
@@ -27,6 +29,14 @@ function dayKey(d: Date): string {
 /** prev>0 ? rounded 1-dp percent change : null — same shape as stores/overview. */
 function deltaPct(cur: number, prev: number): number | null {
   return prev > 0 ? Math.round(((cur - prev) / prev) * 1000) / 10 : null;
+}
+
+/** Order.provider → the buyer-facing payment-method bucket for the revenue donut. */
+function methodLabel(provider: string): 'Card' | 'Cash App' | 'Zelle' | 'Other' {
+  if (provider === 'stripe_connect' || provider === 'stripe_platform') return 'Card';
+  if (provider === 'cashapp_manual') return 'Cash App';
+  if (provider === 'zelle_manual') return 'Zelle';
+  return 'Other';
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
@@ -74,7 +84,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       }),
       prisma.order.findMany({
         where: { status: 'PAID', paidAt: { gte: spanStart } },
-        select: { amount: true, commissionAmount: true, paidAt: true },
+        select: { amount: true, commissionAmount: true, paidAt: true, provider: true },
       }),
       prisma.customer.findMany({
         where: { createdAt: { gte: spanStart } },
@@ -106,6 +116,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     let ordersPrev = 0;
     let revenueCur = 0;
     let revenuePrev = 0;
+    // Current-period GMV split by payment method — feeds the "Sales revenue" donut.
+    const mix = new Map<string, { gmvCents: number; orderCount: number }>();
     for (const o of paidOrders) {
       if (!o.paidAt) continue;
       const inCur = o.paidAt >= periodStart;
@@ -114,6 +126,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         gmvCur += o.amount;
         ordersCur += 1;
         revenueCur += o.commissionAmount ?? 0;
+        const method = methodLabel(o.provider);
+        const m = mix.get(method) ?? { gmvCents: 0, orderCount: 0 };
+        m.gmvCents += o.amount;
+        m.orderCount += 1;
+        mix.set(method, m);
         const bucket = daily.get(dayKey(o.paidAt));
         if (bucket) {
           bucket.gmvCents += o.amount;
@@ -126,6 +143,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         revenuePrev += o.commissionAmount ?? 0;
       }
     }
+    const revenueMix = [...mix.entries()]
+      .map(([method, v]) => ({ method, ...v }))
+      .sort((a, b) => b.gmvCents - a.gmvCents);
 
     let customersCur = 0;
     let customersPrev = 0;
@@ -181,6 +201,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
             deltaPct: deltaPct(failedThisPeriod, failedPrevPeriod),
           },
         },
+        revenueMix,
         daily: days.map((d) => daily.get(d)!),
         queue: {
           outboxPending,
