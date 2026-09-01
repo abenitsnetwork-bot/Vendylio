@@ -17,7 +17,7 @@ export function PublicNavBar() {
     <header className="sticky top-0 z-50 border-b border-border bg-card font-body">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 lg:px-14">
         <Link href="/" className="flex items-center">
-          <img src="/logo.png" alt="Vendylio" className="h-8 w-auto" />
+          <img src="/logo.png" alt="Vendylio" className="h-10 w-auto" />
         </Link>
 
         <nav className="hidden items-center gap-8 lg:flex">

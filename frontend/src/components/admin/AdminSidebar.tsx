@@ -46,7 +46,7 @@ export function AdminSidebar() {
         className="fixed inset-y-0 left-0 z-30 hidden w-56 flex-col border-r border-border bg-card lg:flex"
       >
         <Link href="/admin" className="flex h-16 items-center gap-2 border-b border-border px-6">
-          <img src="/logo.png" alt="Vendylio" className="h-6 w-auto" />
+          <img src="/logo.png" alt="Vendylio" className="h-8 w-auto" />
           <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Admin
           </span>
