@@ -120,6 +120,25 @@ export default function AdminWithdrawalsPage() {
     }
   }
 
+  async function sendTransfer(id: string) {
+    if (
+      !window.confirm(
+        'Fire a Stripe Connect transfer to the seller for this bank/ACH payout? This moves real money.',
+      )
+    ) {
+      return;
+    }
+    setBusyId(id);
+    try {
+      await api(`/api/admin/withdrawals/${id}/send-transfer`, { method: 'POST', body: {} });
+      load(status);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not send this transfer.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <div className="px-4 py-8 font-body lg:px-8">
       <h1
@@ -185,6 +204,18 @@ export default function AdminWithdrawalsPage() {
                 >
                   {w.status}
                 </span>
+                {canManageWithdrawals &&
+                  w.provider === 'stripe_transfer' &&
+                  w.status === 'PENDING' && (
+                    <button
+                      type="button"
+                      disabled={busyId === w.id}
+                      onClick={() => sendTransfer(w.id)}
+                      className="flex-shrink-0 rounded-lg border border-primary bg-white px-3 py-1.5 text-xs font-semibold text-primary disabled:opacity-50"
+                    >
+                      Send transfer
+                    </button>
+                  )}
                 {canManageWithdrawals && COMPLETABLE.has(w.status) && (
                   <button
                     type="button"

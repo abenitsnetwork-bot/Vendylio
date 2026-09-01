@@ -474,3 +474,54 @@ describe('POST /api/withdrawals — commission settlement (Phase 1b)', () => {
     expect(txCommissionCharge.updateMany).not.toHaveBeenCalled();
   });
 });
+
+// ────────────────────────────────────────────────────────────────────────
+// Phase 2 — BANK payout (ACH via Stripe Connect)
+// ────────────────────────────────────────────────────────────────────────
+describe('POST /api/withdrawals — BANK destination (Phase 2)', () => {
+  const bankBody: PostBody = {
+    amount: 5000,
+    currency: 'USD',
+    destination: { method: 'BANK' },
+    pin: '1234',
+  };
+
+  it('422 BANK_PAYOUT_UNAVAILABLE when the store has no ACTIVE Connect account', async () => {
+    resolveOwnStoreMock.mockResolvedValue({
+      id: 'store-1',
+      stripeOnboardingStatus: 'PENDING',
+    } as never);
+    const { POST } = await import('./route');
+    const res = await POST(makePostReq(bankBody) as never);
+    expect(res.status).toBe(422);
+    expect((await res.json()).code).toBe('BANK_PAYOUT_UNAVAILABLE');
+    expect(txWithdrawal.create).not.toHaveBeenCalled();
+  });
+
+  it('creates a stripe_transfer withdrawal when the Connect account is ACTIVE', async () => {
+    validateMock.mockResolvedValueOnce({ ok: true });
+    resolveOwnStoreMock.mockResolvedValue({
+      id: 'store-1',
+      stripeOnboardingStatus: 'ACTIVE',
+    } as never);
+    const { POST } = await import('./route');
+    const res = await POST(makePostReq(bankBody) as never);
+    expect(res.status).toBe(201);
+    const createArg = (txWithdrawal.create.mock.calls as unknown[][])[0]?.[0] as {
+      data: { provider: string; destination: { method: string } };
+    };
+    expect(createArg.data.provider).toBe('stripe_transfer');
+    expect(createArg.data.destination).toEqual({ method: 'BANK' });
+  });
+
+  it('Cash App / Zelle stay on provider "manual"', async () => {
+    validateMock.mockResolvedValueOnce({ ok: true });
+    resolveOwnStoreMock.mockResolvedValue(null);
+    const { POST } = await import('./route');
+    await POST(makePostReq(validBody) as never);
+    const createArg = (txWithdrawal.create.mock.calls as unknown[][])[0]?.[0] as {
+      data: { provider: string };
+    };
+    expect(createArg.data.provider).toBe('manual');
+  });
+});

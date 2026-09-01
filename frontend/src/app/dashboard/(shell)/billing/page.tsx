@@ -45,6 +45,7 @@ function formatUsd(cents: number): string {
 function destinationLabel(d: WithdrawalItem['destination']): string {
   if (d.method === 'CASH_APP') return `Cash App ${d.cashtag ?? ''}`.trim();
   if (d.method === 'ZELLE') return `Zelle ${d.contact ?? ''}`.trim();
+  if (d.method === 'BANK') return 'Bank (ACH via Stripe)';
   return d.method ?? 'Unknown method';
 }
 
@@ -348,6 +349,7 @@ export default function BillingPayoutsPage() {
               <WithdrawalRequestForm
                 onRequested={loadWithdrawals}
                 commissionOwedCents={commissionOwedCents}
+                bankPayoutAvailable={stripe?.stripeOnboardingStatus === 'ACTIVE'}
               />
             </Card>
 

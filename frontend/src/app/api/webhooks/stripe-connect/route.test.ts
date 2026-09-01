@@ -7,6 +7,8 @@ const webhookLogCreate = vi.fn();
 const webhookLogUpdate = vi.fn();
 const storeFindUnique = vi.fn();
 const storeUpdate = vi.fn();
+const withdrawalFindUnique = vi.fn();
+const withdrawalUpdate = vi.fn();
 
 const $transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>, _opts?: unknown) =>
   fn({
@@ -16,6 +18,7 @@ const $transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>, _opts?:
       update: webhookLogUpdate,
     },
     store: { findUnique: storeFindUnique, update: storeUpdate },
+    withdrawal: { findUnique: withdrawalFindUnique, update: withdrawalUpdate },
   }),
 );
 
@@ -56,6 +59,24 @@ function accountEvent(opts: {
   return { req, event };
 }
 
+function transferReversedEvent(opts: { transferId: string; eventId?: string }) {
+  const event = {
+    id: opts.eventId ?? 'evt_transfer_rev_1',
+    object: 'event',
+    type: 'transfer.reversed',
+    data: { object: { id: opts.transferId, object: 'transfer' } },
+  };
+  const payload = JSON.stringify(event);
+  const stripe = new Stripe('sk_test_fixture');
+  const sig = stripe.webhooks.generateTestHeaderString({ payload, secret: SECRET });
+  const req = new NextRequest('http://localhost/api/webhooks/stripe-connect', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'stripe-signature': sig },
+    body: Buffer.from(payload) as unknown as BodyInit,
+  });
+  return { req };
+}
+
 beforeEach(() => {
   vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test_fixture');
   vi.stubEnv('STRIPE_CONNECT_WEBHOOK_SECRET', SECRET);
@@ -64,6 +85,8 @@ beforeEach(() => {
   webhookLogUpdate.mockReset();
   storeFindUnique.mockReset();
   storeUpdate.mockReset();
+  withdrawalFindUnique.mockReset();
+  withdrawalUpdate.mockReset();
 });
 
 afterEach(() => {
@@ -141,5 +164,42 @@ describe('POST /api/webhooks/stripe-connect', () => {
     const mod = (await import('./route')) as { runtime?: string; dynamic?: string };
     expect(mod.runtime).toBe('nodejs');
     expect(mod.dynamic).toBe('force-dynamic');
+  });
+
+  // Phase 2 — a BANK payout bounced back to the platform.
+  it('transfer.reversed → marks the matching withdrawal FAILED', async () => {
+    withdrawalFindUnique.mockResolvedValueOnce({ id: 'w1', status: 'COMPLETED' });
+    const { POST } = await import('./route');
+    const { req } = transferReversedEvent({ transferId: 'tr_123' });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(withdrawalFindUnique).toHaveBeenCalledWith({
+      where: { providerPayoutId: 'tr_123' },
+      select: { id: true, status: true },
+    });
+    expect(withdrawalUpdate).toHaveBeenCalledWith({
+      where: { id: 'w1' },
+      data: expect.objectContaining({
+        status: 'FAILED',
+        failureReason: 'Stripe transfer reversed',
+      }),
+    });
+  });
+
+  it('transfer.reversed for an unknown transfer id is a 200 no-op', async () => {
+    withdrawalFindUnique.mockResolvedValueOnce(null);
+    const { POST } = await import('./route');
+    const { req } = transferReversedEvent({ transferId: 'tr_unknown' });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(withdrawalUpdate).not.toHaveBeenCalled();
+  });
+
+  it('transfer.reversed is idempotent — already-FAILED withdrawal is not re-written', async () => {
+    withdrawalFindUnique.mockResolvedValueOnce({ id: 'w1', status: 'FAILED' });
+    const { POST } = await import('./route');
+    const { req } = transferReversedEvent({ transferId: 'tr_123' });
+    await POST(req);
+    expect(withdrawalUpdate).not.toHaveBeenCalled();
   });
 });

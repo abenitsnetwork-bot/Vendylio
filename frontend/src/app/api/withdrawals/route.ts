@@ -85,6 +85,14 @@ const Destination = z.discriminatedUnion('method', [
     method: z.literal('ZELLE'),
     contact: z.string().trim().min(3).max(120),
   }),
+  // Phase 2 — ACH payout via the seller's Stripe Connect account. No bank
+  // details in the body: Stripe already holds the seller's verified bank
+  // account (collected during Connect onboarding). Only allowed when the
+  // store's Connect account is ACTIVE (charges + payouts enabled) — enforced
+  // in the handler, returns 422 BANK_PAYOUT_UNAVAILABLE otherwise.
+  z.object({
+    method: z.literal('BANK'),
+  }),
 ]);
 
 const Body = z.object({
@@ -129,6 +137,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // debit (net + settled commission) so the base balance formula stays
     // correct; the merchant receives `amount - commissionSettledCents`.
     const ownStore = await resolveOwnStore(auth.user.sub);
+
+    // Phase 2 — a BANK payout needs the seller's Connect account fully live
+    // (stripeOnboardingStatus ACTIVE ⇒ charges + payouts enabled, per the
+    // stripe-connect webhook). Cash App / Zelle stay open to everyone.
+    if (destination.method === 'BANK' && ownStore?.stripeOnboardingStatus !== 'ACTIVE') {
+      return NextResponse.json(
+        {
+          code: 'BANK_PAYOUT_UNAVAILABLE',
+          message:
+            'Connect a Stripe account (fully onboarded) to receive bank payouts. Cash App and Zelle are available now.',
+        },
+        { status: 422, headers: { 'x-request-id': ctx.requestId } },
+      );
+    }
+    const provider = destination.method === 'BANK' ? 'stripe_transfer' : 'manual';
+
     const baseComputeBalance = createDefaultBalanceComputer(prisma);
     const computeBalance = async (
       userId: string,
@@ -191,7 +215,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               currency,
               status: 'PENDING',
               destination: destination as Prisma.InputJsonValue,
-              provider: 'manual',
+              provider,
             },
             select: {
               id: true,

@@ -28,7 +28,8 @@ Pour obtenir `DATABASE_URL` + `DIRECT_URL` : crée un projet gratuit sur https:/
 
 - **App :** Next.js 16 (App Router) + React 19 + TypeScript strict — full-stack via `frontend/src/app/api/<resource>/route.ts` + Server Actions
 - **Base de données :** Prisma 5 (Postgres / Neon serverless via URL `-pooler` + `DIRECT_URL` pour les migrations)
-- **Paiements :** **Stripe + Stripe Connect** (destination charges + application fee ; fallback compte plateforme quand le commerçant n'a pas fini l'onboarding Connect) ; **Cash App / Zelle** en méthodes manuelles (le commerçant encaisse et confirme lui-même, aucune commission plateforme)
+- **Paiements :** **Stripe + Stripe Connect** (destination charges + application fee ; fallback compte plateforme quand le commerçant n'a pas fini l'onboarding Connect) ; **Cash App / Zelle** en méthodes manuelles (le commerçant encaisse et confirme lui-même ; la commission marketplace est prélevée au retrait ou facturée sur la carte en fichier — Phase 1b)
+- **Retraits (payouts) :** Cash App / Zelle (opérateur manuel, `provider='manual'`) ou **virement bancaire / ACH** (`provider='stripe_transfer'`, Phase 2) — un SUPERADMIN déclenche `stripe.transfers.create` vers le compte Connect du vendeur via `POST /api/admin/withdrawals/[id]/send-transfer` (semi-auto, pas de cron) ; `BANK` exige un compte Connect `ACTIVE`, aucune coordonnée bancaire stockée
 - **Livraison :** moteur provider-agnostic — `PICKUP`, `MERCHANT` (auto-livraison), `DOORDASH` (Drive), `UBER_DIRECT`, derrière l'interface `FulfillmentProvider` ; machine à états normalisée, webhooks courier + poll cron
 - **Infra (optionnelles, env-gated) :** Upstash Redis (rate-limit + leader election + outbox), Cloudinary (média / uploads), Resend (email transactionnel via outbox), Google OAuth via `arctic`
 - **Auth :** cookie + CSRF double-submit + JWT (access 15min / refresh 7j scope `/api/auth` / csrf 7j) ; signup enumeration-resistant, cookies émis par `/verify-email`

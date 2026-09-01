@@ -935,12 +935,20 @@ model Withdrawal {
   amount      Int // requested amount, smallest unit (cents for Vendylio's USD)
   currency    String @default("USD")
   status      String @default("PENDING") // PENDING | PROCESSING | COMPLETED | FAILED | CANCELLED
-  // Vendylio sellers are US-based: { method: "CASH_APP", cashtag: "$..." } or
-  // { method: "ZELLE", contact: "email or phone" } — see api/withdrawals/route.ts.
+  // Vendylio sellers are US-based:
+  //   { method: "CASH_APP", cashtag: "$..." }        — operator-fulfilled
+  //   { method: "ZELLE",    contact: "email/phone" } — operator-fulfilled
+  //   { method: "BANK" }                             — Phase 2: ACH via the
+  //     seller's Connect account (no bank PII stored — Stripe holds it).
+  //   See api/withdrawals/route.ts.
   destination Json
 
-  // Provider reference
-  provider         String // "manual" for Vendylio (Cash App/Zelle have no payout API — an operator fulfills by hand)
+  // Provider reference. "manual" = Cash App / Zelle (no payout API, an operator
+  // fulfills by hand). "stripe_transfer" = Phase 2 BANK payout: a SUPERADMIN
+  // fires stripe.transfers.create to the seller's Connect account
+  // (providerPayoutId = tr_xxx); Stripe then ACHs it to their bank on its own
+  // schedule.
+  provider         String
   providerPayoutId String? @unique
   failureReason    String?
 
@@ -950,9 +958,9 @@ model Withdrawal {
 
   // Phase 1b — how much of this withdrawal's value was withheld to settle
   // Cash App / Zelle marketplace commission the merchant owed (CommissionCharge
-  // rows flipped OWED → SETTLED in the same tx). Display-only:
-  // `amount` is still what the merchant asked for; they receive
-  // `amount - commissionSettledCents` and the platform keeps the rest.
+  // rows flipped OWED → SETTLED in the same tx). Display-only: the merchant
+  // requested the NET, `amount` records the GROSS debit (net + this), and they
+  // receive `amount - commissionSettledCents`.
   commissionSettledCents Int @default(0)
 
   @@index([userId, requestedAt])

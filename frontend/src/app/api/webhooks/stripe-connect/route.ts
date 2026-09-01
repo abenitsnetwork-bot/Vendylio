@@ -8,7 +8,10 @@
  * webhook (lib/server/webhook/handler.ts — PROTECTED). See
  * webhook/stripe-connect.ts for why `account.updated` is wired through
  * `onPaid` despite the name — the factory's kind vocabulary has no
- * "account lifecycle" bucket.
+ * "account lifecycle" bucket. Phase 2 adds `transfer.reversed` → `onFailed`
+ * (a BANK payout bounced back to the platform).
+ *
+ * Subscribe this Connect endpoint to: account.updated, transfer.reversed.
  *
  * Status transition rule (deliberately conservative):
  *   - charges_enabled && payouts_enabled  → ACTIVE
@@ -27,6 +30,9 @@ import type Stripe from 'stripe';
 import { createWebhookHandler } from '@/lib/server/webhook/handler';
 import { stripeConnectWebhookProvider } from '@/lib/server/webhook/stripe-connect';
 import { prisma } from '@/lib/server/prisma';
+import { createLogger } from '@/lib/server/logger';
+
+const log = createLogger();
 
 export const POST = createWebhookHandler<Stripe.Event>({
   prisma,
@@ -57,6 +63,34 @@ export const POST = createWebhookHandler<Stripe.Event>({
       });
     }
 
+    return {};
+  },
+
+  // Phase 2 — `transfer.reversed`: a BANK payout we already marked COMPLETED
+  // bounced back to the platform balance. Flip the withdrawal to FAILED so the
+  // seller's balance is released and an operator can retry / pay another way.
+  async onFailed(event, tx) {
+    if (event.type !== 'transfer.reversed') return {};
+    const transfer = event.data.object as Stripe.Transfer;
+    const w = await tx.withdrawal.findUnique({
+      where: { providerPayoutId: transfer.id },
+      select: { id: true, status: true },
+    });
+    if (!w) {
+      log.warn('stripe-connect webhook: transfer.reversed for unknown withdrawal', {
+        transferId: transfer.id,
+      });
+      return {};
+    }
+    if (w.status === 'FAILED') return {};
+    await tx.withdrawal.update({
+      where: { id: w.id },
+      data: {
+        status: 'FAILED',
+        failureReason: 'Stripe transfer reversed',
+        completedAt: new Date(),
+      },
+    });
     return {};
   },
 });

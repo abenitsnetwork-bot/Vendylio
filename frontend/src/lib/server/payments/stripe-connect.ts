@@ -79,6 +79,37 @@ export async function retrieveAccountCapabilities(accountId: string): Promise<Ac
   };
 }
 
+/**
+ * Phase 2 — move `amountCents` from the platform balance to the seller's
+ * connected account (a Connect transfer). Stripe then ACHs it to the seller's
+ * bank on their account's payout schedule. `idempotencyKey` makes a retry
+ * (double admin click, network hiccup) safe — Stripe returns the original
+ * transfer instead of creating a second one.
+ *
+ * Throws `StripeConnectUnconfiguredError` when Stripe env is absent, or a
+ * `Stripe.errors.StripeError` when the transfer is rejected (insufficient
+ * platform balance, destination account can't receive, …) — the caller
+ * classifies + surfaces those.
+ */
+export async function createConnectTransfer(opts: {
+  destinationAccountId: string;
+  amountCents: number;
+  currency: string;
+  withdrawalId: string;
+}): Promise<{ transferId: string }> {
+  const stripe = getClient();
+  const transfer = await stripe.transfers.create(
+    {
+      amount: opts.amountCents,
+      currency: opts.currency.toLowerCase(),
+      destination: opts.destinationAccountId,
+      metadata: { withdrawalId: opts.withdrawalId },
+    },
+    { idempotencyKey: `wd-transfer-${opts.withdrawalId}` },
+  );
+  return { transferId: transfer.id };
+}
+
 /** Test-only escape hatch — clears the cached client for `vi.stubEnv` reuse. */
 export function __resetStripeConnectClient(): void {
   _client = null;

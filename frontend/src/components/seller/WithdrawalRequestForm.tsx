@@ -5,7 +5,7 @@ import { api, ApiError } from '@/lib/api';
 import { Field, inputClass } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 
-type Method = 'CASH_APP' | 'ZELLE';
+type Method = 'CASH_APP' | 'ZELLE' | 'BANK';
 
 const ERROR_MESSAGES: Record<string, string> = {
   AMOUNT_BELOW_MIN: 'That amount is below the minimum withdrawal.',
@@ -15,6 +15,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   PIN_INVALID: 'Incorrect PIN.',
   INSUFFICIENT_BALANCE:
     'Insufficient balance. Note: balance tracking isn’t linked to store sales yet in this build, so it stays at $0 until checkout is wired to your store.',
+  BANK_PAYOUT_UNAVAILABLE:
+    'Bank payouts need a fully onboarded Stripe account. Use Cash App or Zelle for now.',
   VALIDATION_FAILED: 'Please check the fields and try again.',
 };
 
@@ -27,11 +29,14 @@ interface WithdrawalResult {
 export function WithdrawalRequestForm({
   onRequested,
   commissionOwedCents = 0,
+  bankPayoutAvailable = false,
 }: {
   onRequested: () => void;
   /** Phase 1b — outstanding Cash App / Zelle commission, shown as a heads-up
    *  that it's settled from this payout. Positive = merchant owes. */
   commissionOwedCents?: number;
+  /** Phase 2 — show the "Bank (ACH)" option (store's Connect account is ACTIVE). */
+  bankPayoutAvailable?: boolean;
 }) {
   const [method, setMethod] = useState<Method>('CASH_APP');
   const [identifier, setIdentifier] = useState('');
@@ -48,7 +53,11 @@ export function WithdrawalRequestForm({
   async function submitWithdrawal(withPin: string) {
     const amountCents = Math.round(Number(amount) * 100);
     const destination =
-      method === 'CASH_APP' ? { method, cashtag: identifier } : { method, contact: identifier };
+      method === 'CASH_APP'
+        ? { method, cashtag: identifier }
+        : method === 'ZELLE'
+          ? { method, contact: identifier }
+          : { method: 'BANK' as const };
     const res = await api<WithdrawalResult>('/api/withdrawals', {
       method: 'POST',
       body: { amount: amountCents, currency: 'USD', destination, pin: withPin },
@@ -67,7 +76,7 @@ export function WithdrawalRequestForm({
       setError('Enter a valid amount.');
       return;
     }
-    if (!identifier.trim()) {
+    if (method !== 'BANK' && !identifier.trim()) {
       setError(method === 'CASH_APP' ? 'Enter your $Cashtag.' : 'Enter your Zelle email or phone.');
       return;
     }
@@ -161,10 +170,19 @@ export function WithdrawalRequestForm({
     );
   }
 
+  const methods: Method[] = bankPayoutAvailable
+    ? ['CASH_APP', 'ZELLE', 'BANK']
+    : ['CASH_APP', 'ZELLE'];
+  const methodLabel: Record<Method, string> = {
+    CASH_APP: 'Cash App',
+    ZELLE: 'Zelle',
+    BANK: 'Bank (ACH)',
+  };
+
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <div className="flex gap-2">
-        {(['CASH_APP', 'ZELLE'] as const).map((m) => (
+        {methods.map((m) => (
           <button
             key={m}
             type="button"
@@ -175,23 +193,30 @@ export function WithdrawalRequestForm({
                 : 'border-border text-muted-foreground'
             }`}
           >
-            {m === 'CASH_APP' ? 'Cash App' : 'Zelle'}
+            {methodLabel[m]}
           </button>
         ))}
       </div>
 
-      <Field
-        label={method === 'CASH_APP' ? '$Cashtag' : 'Zelle email or phone'}
-        htmlFor="identifier"
-      >
-        <input
-          id="identifier"
-          className={inputClass}
-          placeholder={method === 'CASH_APP' ? '$yourshop' : 'you@example.com'}
-          value={identifier}
-          onChange={(e) => setIdentifier(e.target.value)}
-        />
-      </Field>
+      {method === 'BANK' ? (
+        <p className="rounded-lg bg-secondary/50 px-3 py-2 text-xs text-muted-foreground">
+          Paid to the bank account on your connected Stripe account. Stripe deposits it on its
+          standard ACH schedule (usually 2 business days).
+        </p>
+      ) : (
+        <Field
+          label={method === 'CASH_APP' ? '$Cashtag' : 'Zelle email or phone'}
+          htmlFor="identifier"
+        >
+          <input
+            id="identifier"
+            className={inputClass}
+            placeholder={method === 'CASH_APP' ? '$yourshop' : 'you@example.com'}
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
+          />
+        </Field>
+      )}
 
       <Field label="Amount (USD)" htmlFor="amount">
         <input

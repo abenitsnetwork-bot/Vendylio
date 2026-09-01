@@ -46,11 +46,17 @@ export function getStripeConnectWebhookProvider(): WebhookProvider<Stripe.Event>
       // createWebhookHandler's `kind` vocabulary is fixed to
       // paid|refunded|failed|other, all payment-shaped — there's no
       // "account lifecycle" bucket and no generic catch-all handler ('other'
-      // silently no-ops). We repurpose 'paid' as this endpoint's only real
-      // event ('account.updated' → wired to `onPaid` in the route, despite
-      // the name) rather than duplicating the factory's HMAC+dedup+
-      // Serializable-tx logic (PROTECTED, deliberately not reimplemented).
-      const kind: ParsedIds['kind'] = event.type === 'account.updated' ? 'paid' : 'other';
+      // silently no-ops). We repurpose:
+      //   account.updated   → 'paid'   (Connect account status sync)
+      //   transfer.reversed → 'failed' (Phase 2 — a BANK payout bounced)
+      // rather than duplicating the factory's HMAC+dedup+Serializable-tx
+      // logic (PROTECTED, deliberately not reimplemented).
+      const kind: ParsedIds['kind'] =
+        event.type === 'account.updated'
+          ? 'paid'
+          : event.type === 'transfer.reversed'
+            ? 'failed'
+            : 'other';
       return { externalId: event.id, eventType: event.type, kind };
     },
   };
