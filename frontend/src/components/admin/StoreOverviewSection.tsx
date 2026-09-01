@@ -136,14 +136,10 @@ export function StoreOverviewSection() {
   }, []);
 
   return (
-    <section className="mb-8">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Icon i="store" size={16} className="text-muted-foreground" />
-          <h2 className="font-headings text-sm font-bold text-foreground">Stores</h2>
-        </div>
+    <div>
+      <div className="mb-4 flex justify-end">
         <Link href="/admin/stores" className="text-xs font-semibold text-primary">
-          Manage all →
+          Manage all stores →
         </Link>
       </div>
 
@@ -272,6 +268,6 @@ export function StoreOverviewSection() {
           )}
         </>
       )}
-    </section>
+    </div>
   );
 }
