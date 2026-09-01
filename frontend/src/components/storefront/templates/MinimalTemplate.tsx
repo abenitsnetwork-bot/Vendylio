@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import type { PublicStore } from '@/lib/server/storefront';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
+import { StorefrontImage } from '@/components/storefront/StorefrontImage';
 import { Icon } from '@/components/ui/Icon';
 import { PriceTag } from '@/components/storefront/PriceTag';
 import { toAddableProduct } from '@/lib/productVariants';
@@ -86,9 +87,11 @@ export function MinimalTemplate({
                           className="flex-shrink-0"
                         >
                           {product.imageUrl ? (
-                            <img
+                            <StorefrontImage
                               src={product.imageUrl}
                               alt={product.name}
+                              displayWidth={56}
+                              sizes="56px"
                               className="h-14 w-14 rounded-lg object-cover"
                             />
                           ) : (

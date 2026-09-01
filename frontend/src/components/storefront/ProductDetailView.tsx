@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { PublicProduct, PublicStoreHeader } from '@/lib/server/storefront';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
+import { StorefrontImage } from '@/components/storefront/StorefrontImage';
 import { formatQuantityWithUnit } from '@/lib/productUnits';
 import { PriceTag } from '@/components/storefront/PriceTag';
 import { toAddableProduct } from '@/lib/productVariants';
@@ -74,9 +75,12 @@ export function ProductDetailView({
       <main className="mx-auto grid max-w-6xl grid-cols-1 gap-10 px-4 py-8 lg:grid-cols-2 lg:px-14 lg:py-10">
         <div className="overflow-hidden rounded-2xl bg-secondary">
           {product.imageUrl ? (
-            <img
+            <StorefrontImage
               src={product.imageUrl}
               alt={product.name}
+              displayWidth={640}
+              sizes="(min-width: 1024px) 50vw, 100vw"
+              priority
               className="aspect-square w-full object-cover"
             />
           ) : (

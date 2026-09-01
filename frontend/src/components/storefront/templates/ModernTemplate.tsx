@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import type { PublicStore } from '@/lib/server/storefront';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
+import { StorefrontImage } from '@/components/storefront/StorefrontImage';
 import { Icon } from '@/components/ui/Icon';
 import { formatQuantityWithUnit } from '@/lib/productUnits';
 import { PriceTag } from '@/components/storefront/PriceTag';
@@ -78,9 +79,11 @@ export function ModernTemplate({
                           className="relative block"
                         >
                           {product.imageUrl ? (
-                            <img
+                            <StorefrontImage
                               src={product.imageUrl}
                               alt={product.name}
+                              displayWidth={400}
+                              sizes="(min-width: 768px) 33vw, 50vw"
                               className="aspect-square w-full object-cover"
                             />
                           ) : (

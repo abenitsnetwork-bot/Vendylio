@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { StoreHero } from '@/lib/storeHero';
+import { cloudinaryUrl, cloudinarySrcSet } from '@/lib/cloudinaryImage';
 
 const ADVANCE_MS = 5000;
 
@@ -40,8 +41,12 @@ export function StorefrontHero({ hero, storeName }: { hero: StoreHero; storeName
           {images.map((src, i) => (
             <img
               key={src}
-              src={src}
+              src={cloudinaryUrl(src, { width: 1400, crop: 'limit' })}
+              srcSet={cloudinarySrcSet(src, 1400, 'limit')}
+              sizes="100vw"
               alt=""
+              loading={i === 0 ? 'eager' : 'lazy'}
+              decoding="async"
               className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${
                 i === index ? 'opacity-100' : 'opacity-0'
               }`}

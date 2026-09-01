@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import type { PublicStore } from '@/lib/server/storefront';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
+import { StorefrontImage } from '@/components/storefront/StorefrontImage';
 import { Icon } from '@/components/ui/Icon';
 import { PriceTag } from '@/components/storefront/PriceTag';
 import { toAddableProduct } from '@/lib/productVariants';
@@ -101,9 +102,11 @@ export function BoldTemplate({
                           className="relative mb-3 block overflow-hidden rounded-xl"
                         >
                           {product.imageUrl ? (
-                            <img
+                            <StorefrontImage
                               src={product.imageUrl}
                               alt={product.name}
+                              displayWidth={400}
+                              sizes="(min-width: 768px) 33vw, 50vw"
                               className="aspect-square w-full object-cover"
                             />
                           ) : (

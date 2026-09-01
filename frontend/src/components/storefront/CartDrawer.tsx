@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Drawer } from '@/components/ui/Drawer';
 import { Icon } from '@/components/ui/Icon';
 import { ImagePlaceholder } from '@/components/ui/ImagePlaceholder';
+import { StorefrontImage } from '@/components/storefront/StorefrontImage';
 import { formatUsdPerUnit } from '@/lib/productUnits';
 import { useCart } from '@/contexts/CartContext';
 
@@ -47,9 +48,11 @@ export function CartDrawer({
             {items.map((item) => (
               <div key={`${item.productId}:${item.variantId ?? ''}`} className="flex gap-3">
                 {item.imageUrl ? (
-                  <img
+                  <StorefrontImage
                     src={item.imageUrl}
                     alt={item.name}
+                    displayWidth={64}
+                    sizes="64px"
                     className="h-16 w-16 flex-shrink-0 rounded-lg object-cover"
                   />
                 ) : (
