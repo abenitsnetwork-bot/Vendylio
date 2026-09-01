@@ -24,4 +24,14 @@ describe('next.config.ts is clean of deprecated config (OPS-05)', () => {
     // a refactor splits the assignment across lines.
     expect(src).not.toMatch(/experimental[^}]*instrumentation/i);
   });
+
+  // UX-01 (Prompt #15) — CSP is in phase 1: Report-Only. Promoting it to the
+  // enforcing header must be a deliberate change (needs nonce-based script-src
+  // first), so lock the current state.
+  it('ships CSP as Report-Only, not yet enforcing', () => {
+    expect(src).toContain('Content-Security-Policy-Report-Only');
+    expect(src).toMatch(/report-uri \/api\/csp-report/);
+    // No bare enforcing header yet.
+    expect(src).not.toMatch(/key:\s*['"]Content-Security-Policy['"]/);
+  });
 });

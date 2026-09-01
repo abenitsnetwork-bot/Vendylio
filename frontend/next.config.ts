@@ -5,10 +5,33 @@ import { withSentryConfig } from '@sentry/nextjs';
 // Set via next.config.ts (not middleware.ts) so Vercel's edge can serve them
 // from the CDN cache without invoking a function — zero per-request latency.
 //
-// CSP is intentionally NOT included here. App Router pages need a per-request
-// nonce (server-rendered) for inline scripts; ship CSP via middleware.ts when
-// the first frontend page lands. For now, the API-only surface doesn't render
-// HTML and doesn't need CSP.
+// UX-01 (Prompt #15) — CSP rollout, phase 1: REPORT-ONLY. This header never
+// blocks anything; the browser just POSTs violations to /api/csp-report so we
+// can see what a real enforced policy would break before turning it on. The
+// allowlist below is derived from the actual external surface: hCaptcha
+// (script + iframe), Cloudinary (storefront images), Sentry (browser SDK
+// ingest). Google Fonts are self-hosted by next/font — no font host needed.
+//
+// Phase 2 (follow-up, after observing reports): switch `script-src` to a
+// per-request nonce (needs middleware.ts), drop `'unsafe-inline'` there, and
+// promote this to the enforcing `Content-Security-Policy` header.
+const cspReportOnly = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  // 'unsafe-inline' stays for phase 1 (Next's framework bootstrap + inline
+  // JSON). Phase 2 replaces it with a nonce.
+  "script-src 'self' 'unsafe-inline' https://js.hcaptcha.com https://*.hcaptcha.com",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https://res.cloudinary.com",
+  "font-src 'self' data:",
+  "connect-src 'self' https://*.hcaptcha.com https://*.sentry.io https://*.ingest.sentry.io",
+  'frame-src https://*.hcaptcha.com',
+  "form-action 'self'",
+  'report-uri /api/csp-report',
+].join('; ');
+
 const securityHeaders = [
   {
     key: 'Strict-Transport-Security',
@@ -22,6 +45,7 @@ const securityHeaders = [
     value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()',
   },
   { key: 'X-DNS-Prefetch-Control', value: 'off' },
+  { key: 'Content-Security-Policy-Report-Only', value: cspReportOnly },
 ];
 
 const config: NextConfig = {

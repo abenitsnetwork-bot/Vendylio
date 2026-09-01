@@ -148,6 +148,8 @@ If a change is genuinely required in any of these, surface a brief "I am about t
 - OAuth callback MUST refuse `email_verified !== true` from Google — otherwise an attacker with an unverified Google account matching a victim's email can take over the account via auto-linking.
 - Cron handlers MUST verify `Authorization: Bearer ${CRON_SECRET}` to prevent unauthenticated invocation of background work.
 - Cookies stay `httpOnly` + `Secure` (prod) + `SameSite=Lax`.
+- **CSP is phase 1: `Content-Security-Policy-Report-Only`** in [frontend/next.config.ts](frontend/next.config.ts) (`cspReportOnly`), violations POSTed to `/api/csp-report` (logs + 204). It never blocks. Phase 2 = nonce-based `script-src` via `middleware.ts` + promote to the enforcing header — a deliberate change, guarded by `observability/next-config-clean.test.ts`. See [frontend/docs/security/csp.md](frontend/docs/security/csp.md).
+- Public guest routes (`POST /api/orders`, `/api/cart/validate`, `/api/stores/[slug]/delivery-quote`, `GET /api/orders/track/[token]`) carry a per-IP throttle ([frontend/src/lib/server/middleware/rate-limit-by-ip.ts](frontend/src/lib/server/middleware/rate-limit-by-ip.ts)) on top of CSRF — checked first, before body parse.
 - Sentry init stays in [frontend/instrumentation.ts](frontend/instrumentation.ts) `register()` — do not move it into a route module (the hook fires before app code, route imports do not).
 
 ## Design system — fully swappable (no UI shipped)
