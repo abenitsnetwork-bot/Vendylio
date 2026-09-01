@@ -16,7 +16,6 @@ import { verifyCsrf } from '@/lib/server/auth';
 import { requireAuth } from '@/lib/server/middleware';
 import { prisma } from '@/lib/server/prisma';
 import { resolveOwnStore } from '@/lib/server/org';
-import { planFeatures } from '@/lib/server/plan/features';
 import {
   readFulfillmentConfig,
   serializeFulfillmentConfig,
@@ -113,22 +112,9 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
     const current = readFulfillmentConfig(store);
     const p = parsed.data;
 
-    // Phase 3 — courier delivery (DoorDash / Uber Direct) is a Pro feature.
-    // Gate only the OFF→ON transition; a store that downgrades keeps whatever
-    // it already had enabled until it toggles it itself.
-    const enablingCourier =
-      (p.uberDirect?.enabled === true && !current.uberDirect.enabled) ||
-      (p.doordash?.enabled === true && !current.doordash.enabled);
-    if (enablingCourier && !planFeatures(store.plan).courierDelivery) {
-      return NextResponse.json(
-        {
-          error: 'PLAN_UPGRADE_REQUIRED',
-          feature: 'courierDelivery',
-          message: 'Courier delivery (DoorDash / Uber Direct) is available on the Pro plan.',
-        },
-        { status: 402, headers: { 'x-request-id': reqCtx.requestId } },
-      );
-    }
+    // Courier delivery (DoorDash / Uber Direct) is available on every plan — it
+    // is core to the platform. Free vs Pro differ on the commission rate + the
+    // subscription, not on being able to deliver.
     const next: FulfillmentConfig = {
       pickup: {
         enabled: p.pickup?.enabled ?? current.pickup.enabled,

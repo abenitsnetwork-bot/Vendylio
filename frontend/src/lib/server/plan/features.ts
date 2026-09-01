@@ -4,17 +4,16 @@
 // it into a concrete feature set. Pure + synchronous so both server routes
 // and (via a thin client mirror) the UI can call it without a DB round-trip.
 //
-// NOTHING in the app gates on these flags yet — Phase 1a only ships the
-// billing pipe that flips `Store.plan`. The gates (courier delivery, promo
-// codes, hero-image cap, AI quota, …) land in Phase 3 and will consume
-// `planFeatures()` + `requirePro()` from here so the policy lives in one place.
+// The gates (promo codes, hero-image cap, AI quota, analytics, team, custom
+// domain, …) consume `planFeatures()` + `requirePro()` from here so the policy
+// lives in one place. Courier delivery (DoorDash / Uber Direct) is deliberately
+// NOT gated — it is core to the platform; Free vs Pro differ on the commission
+// rate + the subscription, not on being able to deliver.
 import 'server-only';
 
 export type Plan = 'FREE' | 'PRO';
 
 export interface PlanFeatures {
-  /** Enable DoorDash / Uber Direct courier delivery methods. */
-  courierDelivery: boolean;
   /** Create + apply promo codes (the Discount engine). */
   promoCodes: boolean;
   /** Storefront analytics page (visits, conversion, trends, export). */
@@ -36,7 +35,6 @@ export interface PlanFeatures {
 }
 
 const FREE: PlanFeatures = {
-  courierDelivery: false,
   promoCodes: false,
   advancedAnalytics: false,
   customDomain: false,
@@ -49,7 +47,6 @@ const FREE: PlanFeatures = {
 };
 
 const PRO: PlanFeatures = {
-  courierDelivery: true,
   promoCodes: true,
   advancedAnalytics: true,
   customDomain: true,

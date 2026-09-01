@@ -13,7 +13,6 @@ describe('plan/features (Phase 1a)', () => {
 
   it('FREE is the generous-but-limited set', () => {
     const f = planFeatures('FREE');
-    expect(f.courierDelivery).toBe(false);
     expect(f.promoCodes).toBe(false);
     expect(f.customDomain).toBe(false);
     expect(f.teamMembers).toBe(false);
@@ -25,7 +24,6 @@ describe('plan/features (Phase 1a)', () => {
 
   it('PRO unlocks everything + unlimited AI + 3 hero images', () => {
     const f = planFeatures('PRO');
-    expect(f.courierDelivery).toBe(true);
     expect(f.promoCodes).toBe(true);
     expect(f.advancedAnalytics).toBe(true);
     expect(f.customDomain).toBe(true);

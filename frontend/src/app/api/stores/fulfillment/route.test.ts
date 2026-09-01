@@ -88,13 +88,12 @@ describe('PATCH /api/stores/fulfillment', () => {
     expect(res.status).toBe(400);
   });
 
-  // Phase 3 — enabling a courier is Pro-only; toggling pickup/merchant is not.
-  it('402 PLAN_UPGRADE_REQUIRED when a FREE store enables a courier', async () => {
+  // Courier delivery is available on every plan — a FREE store can enable it.
+  it('lets a FREE store enable a courier (no plan gate)', async () => {
     mockResolveOwnStore.mockResolvedValueOnce({ ...STORE, plan: 'FREE' } as never);
     const res = await PATCH(req('PATCH', { uberDirect: { enabled: true } }));
-    expect(res.status).toBe(402);
-    expect((await res.json()).feature).toBe('courierDelivery');
-    expect(prismaMock.store.update).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect((await res.json()).config.uberDirect.enabled).toBe(true);
   });
 
   it('lets a FREE store still toggle pickup / merchant', async () => {

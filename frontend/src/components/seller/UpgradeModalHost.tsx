@@ -11,7 +11,6 @@ import { onUpgradeNeeded, type UpgradeDetail } from '@/lib/upgradePrompt';
 // single "go Pro" modal instead of every gated surface rendering a raw string.
 
 const FEATURE_LABEL: Record<string, string> = {
-  courierDelivery: 'Courier delivery',
   promoCodes: 'Promo codes',
   advancedAnalytics: 'Storefront analytics',
   customDomain: 'Custom domain',

@@ -10,7 +10,6 @@ import { Icon } from '@/components/ui/Icon';
 const LOSSES = [
   'Card fee goes back to 5% (from 1.5%)',
   'Cash App / Zelle fee goes back to 5%',
-  'Courier delivery (DoorDash / Uber Direct) turns off',
   'Promo codes can no longer be created',
   'Storefront analytics is hidden',
   'Custom domain disconnects',

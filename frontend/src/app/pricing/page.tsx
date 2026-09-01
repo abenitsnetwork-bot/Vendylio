@@ -8,7 +8,7 @@ import { Icon } from '@/components/ui/Icon';
 export const metadata: Metadata = {
   title: 'Pricing — Vendylio',
   description:
-    'Start free with a 5% card fee, or go Pro for $29/mo and a 1.5% fee plus courier delivery, promo codes, analytics, a custom domain and more.',
+    'Start free with a 5% card fee, or go Pro for $29/mo and a 1.5% fee plus promo codes, analytics, a custom domain and more.',
 };
 
 interface Row {
@@ -24,11 +24,11 @@ const ROWS: Row[] = [
   { label: 'Storefronts', free: '1', pro: '1' },
   { label: 'Card, Cash App & Zelle checkout', free: true, pro: true },
   { label: 'Pickup & self-delivery', free: true, pro: true },
+  { label: 'Courier delivery (DoorDash / Uber Direct)', free: true, pro: true },
   { label: 'Inventory & low-stock alerts', free: true, pro: true },
   { label: 'Order tracking & customer emails', free: true, pro: true },
   { label: 'Storefront hero images', free: '1', pro: '3' },
   { label: 'AI product descriptions', free: '5 / month', pro: 'Unlimited' },
-  { label: 'Courier delivery (DoorDash / Uber Direct)', free: false, pro: true },
   { label: 'Promo codes', free: false, pro: true },
   { label: 'Advanced analytics', free: false, pro: true },
   { label: 'Custom domain', free: false, pro: true },
@@ -98,7 +98,7 @@ export default function PricingPage() {
               </span>
               <p className="font-headings text-lg font-bold text-foreground">Pro</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Lower fees plus the tools to grow — delivery, promos, analytics.
+                Lower fees plus the tools to grow — promos, analytics, your own domain.
               </p>
               <p className="mt-5 font-headings text-4xl font-bold text-foreground">
                 $29<span className="text-base font-medium text-muted-foreground">/month</span>
