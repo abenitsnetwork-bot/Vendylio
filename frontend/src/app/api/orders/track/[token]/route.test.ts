@@ -1,6 +1,11 @@
 import { prismaMock } from '@/test-utils/prisma-mock';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
+
+vi.mock('@/lib/server/middleware/rate-limit-by-ip', () => ({
+  trackingIpLimiter: { check: async () => null },
+}));
+
 import { GET } from './route';
 
 const TOKEN = 'tok_abcdefabcdefabcdef1234567890';

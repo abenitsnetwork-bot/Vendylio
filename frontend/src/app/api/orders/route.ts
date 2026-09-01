@@ -37,6 +37,7 @@ import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { verifyCsrf } from '@/lib/server/auth';
 import { optionalAuth, requireAuth } from '@/lib/server/middleware';
+import { checkoutIpLimiter } from '@/lib/server/middleware/rate-limit-by-ip';
 import { resolveOwnStore } from '@/lib/server/org';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 import { prisma } from '@/lib/server/prisma';
@@ -141,6 +142,10 @@ const Body = z.object({
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const ctx = makeRequestContext(req.headers);
   return withRequestContext(ctx, async () => {
+    // 0. API-01 — per-IP throttle (public + guest). Cheapest reject first.
+    const rl = await checkoutIpLimiter.check(req);
+    if (rl) return rl;
+
     // 1. CSRF (guest-safe — see file header)
     const csrfFail = verifyCsrf(req);
     if (csrfFail) return csrfFail;

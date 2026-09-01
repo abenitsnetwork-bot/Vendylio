@@ -19,6 +19,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 
 import { verifyCsrf } from '@/lib/server/auth';
+import { quoteIpLimiter } from '@/lib/server/middleware/rate-limit-by-ip';
 import { prisma } from '@/lib/server/prisma';
 import { storeAcceptsOrders } from '@/lib/server/store/availability';
 import { effectivePriceCents } from '@/lib/productVariants';
@@ -74,6 +75,9 @@ const BLOCKING: ReadonlySet<Change> = new Set<Change>([
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const ctx = makeRequestContext(req.headers);
   return withRequestContext(ctx, async () => {
+    const rl = await quoteIpLimiter.check(req); // API-01 — per-IP throttle
+    if (rl) return rl;
+
     const csrfFail = verifyCsrf(req);
     if (csrfFail) return csrfFail;
 

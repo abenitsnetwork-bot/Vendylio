@@ -31,7 +31,7 @@ export const METHOD_COLORS: Record<string, string> = {
 };
 
 export const CHART_GRID = '#dbe2d6';
-export const CHART_AXIS = '#756f5e';
+export const CHART_AXIS = '#615c4d'; // A11Y-01 — matches --color-muted-foreground
 export const CHART_INK = '#14201d';
 export const CHART_ACCENT = '#dd5b2e';
 export const CHART_POSITIVE = '#15803d';

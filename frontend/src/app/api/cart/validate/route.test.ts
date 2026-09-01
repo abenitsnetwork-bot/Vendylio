@@ -1,6 +1,11 @@
 import { prismaMock } from '@/test-utils/prisma-mock';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+
+vi.mock('@/lib/server/middleware/rate-limit-by-ip', () => ({
+  quoteIpLimiter: { check: async () => null },
+}));
+
 import { POST } from './route';
 
 function makeReq(body: unknown, csrf: 'match' | 'missing' = 'match') {

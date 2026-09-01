@@ -4,6 +4,9 @@ import { NextRequest } from 'next/server';
 
 const { createQuote } = vi.hoisted(() => ({ createQuote: vi.fn() }));
 vi.mock('@/lib/server/fulfillment/service', () => ({ createQuote }));
+vi.mock('@/lib/server/middleware/rate-limit-by-ip', () => ({
+  quoteIpLimiter: { check: async () => null },
+}));
 
 import { POST } from './route';
 

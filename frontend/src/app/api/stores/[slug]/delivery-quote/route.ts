@@ -17,6 +17,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/server/prisma';
 import { verifyCsrf } from '@/lib/server/auth';
+import { quoteIpLimiter } from '@/lib/server/middleware/rate-limit-by-ip';
 import { createQuote } from '@/lib/server/fulfillment/service';
 import { readFulfillmentConfig } from '@/lib/server/fulfillment/config';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
@@ -33,6 +34,9 @@ const Body = z.object({
 export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextResponse> {
   const reqCtx = makeRequestContext(req.headers);
   return withRequestContext(reqCtx, async () => {
+    const rl = await quoteIpLimiter.check(req); // API-01 — per-IP throttle
+    if (rl) return rl;
+
     const csrfFail = verifyCsrf(req);
     if (csrfFail) return csrfFail;
 

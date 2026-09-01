@@ -30,6 +30,11 @@ function fingerprintBody(input: {
   return createHash('sha256').update(canonical).digest('hex');
 }
 
+vi.mock('@/lib/server/middleware/rate-limit-by-ip', () => ({
+  checkoutIpLimiter: { check: async () => null },
+  quoteIpLimiter: { check: async () => null },
+  trackingIpLimiter: { check: async () => null },
+}));
 vi.mock('@/lib/server/middleware', () => ({
   optionalAuth: vi.fn(),
   requireAuth: vi.fn(),

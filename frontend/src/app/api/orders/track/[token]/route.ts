@@ -17,6 +17,7 @@ import 'server-only';
 import { NextResponse, type NextRequest } from 'next/server';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/server/prisma';
+import { trackingIpLimiter } from '@/lib/server/middleware/rate-limit-by-ip';
 import { formatOrderNumber } from '@/lib/orderNumber';
 import {
   mapOrderStatusForCustomer,
@@ -100,6 +101,9 @@ interface RawLineItem {
 export async function GET(req: NextRequest, ctx: RouteCtx): Promise<NextResponse> {
   const reqCtx = makeRequestContext(req.headers);
   return withRequestContext(reqCtx, async () => {
+    const rl = await trackingIpLimiter.check(req); // API-01 — per-IP throttle on the public tracking read
+    if (rl) return rl;
+
     const { token } = await ctx.params;
 
     // Guard against a probe with an obviously-not-a-token value before hitting
