@@ -24,6 +24,7 @@ describe('sitemap()', () => {
 
     expect(urls).toContain('https://vendylio.example/');
     expect(urls).toContain('https://vendylio.example/how-it-works');
+    expect(urls).toContain('https://vendylio.example/pricing');
     expect(urls).toContain('https://vendylio.example/s/marias-bakery');
     expect(urls).toContain('https://vendylio.example/s/marias-bakery/products/p1');
 

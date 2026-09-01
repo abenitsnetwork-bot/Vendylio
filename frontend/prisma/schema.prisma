@@ -9,35 +9,35 @@ datasource db {
 }
 
 model User {
-  id                String    @id @default(cuid())
-  email             String    @unique
+  id                 String    @id @default(cuid())
+  email              String    @unique
   // Nullable: OAuth-only users (e.g. signed up with Google) never set a
   // password. Email/password signup still requires it; the auth route
   // enforces presence at runtime.
-  passwordHash      String?
-  emailVerifiedAt   DateTime?
-  tokenVersion      Int       @default(0)
-  withdrawalPinHash String? // bcrypt hash of withdrawal PIN; null = no PIN set
+  passwordHash       String?
+  emailVerifiedAt    DateTime?
+  tokenVersion       Int       @default(0)
+  withdrawalPinHash  String? // bcrypt hash of withdrawal PIN; null = no PIN set
   // Optional display name — populated from OAuth profile on first sign-in.
   // Email/password users can fill it later via /api/auth/me PATCH (future).
-  name              String?
+  name               String?
   // Optional avatar URL — populated from OAuth profile on first sign-in.
-  avatarUrl         String?
+  avatarUrl          String?
   // App-wide role. USER is the default; ADMIN unlocks /admin back-office;
   // SUPERADMIN can promote/demote other admins. Bootstrap an initial
   // SUPERADMIN via `pnpm db:make-superadmin <email>` (see scripts).
-  role              String    @default("USER") // USER | ADMIN | SUPERADMIN
+  role               String    @default("USER") // USER | ADMIN | SUPERADMIN
   // Account status. ACTIVE = login + refresh allowed; SUSPENDED = both
   // refused with 403 ACCOUNT_SUSPENDED. Mutated via /api/admin/users/[id]/status
   // (ADMIN can suspend; only SUPERADMIN can restore).
-  status            String    @default("ACTIVE") // ACTIVE | SUSPENDED
+  status             String    @default("ACTIVE") // ACTIVE | SUSPENDED
   // Set true when a SUPERADMIN issues a one-time temporary password via
   // /api/admin/users/[id]/temp-password. Login still succeeds but the authed
   // shell redirects to /settings until the user picks a new password;
   // cleared by change-password / reset-password.
-  mustChangePassword Boolean  @default(false)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  mustChangePassword Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   verificationCodes VerificationCode[]
   uploads           FileUpload[]
@@ -601,23 +601,23 @@ model Customer {
 // no longer has that column.
 // ───────────────────────────────────────────────────────────────────────
 model Store {
-  id                       String       @id @default(cuid())
-  organizationId           String       @unique
-  organization             Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  slug                     String       @unique
-  name                     String
-  description              String?
-  city                     String?
-  state                    String?
-  logoUrl                  String?
+  id                           String       @id @default(cuid())
+  organizationId               String       @unique
+  organization                 Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  slug                         String       @unique
+  name                         String
+  description                  String?
+  city                         String?
+  state                        String?
+  logoUrl                      String?
   // Storefront contact number — shown prominently in the public storefront's
   // top bar (see StorefrontTopBar). Free-text, no format validation: sellers
   // span many countries/formats and this is display-only, never dialed
   // programmatically.
-  phone                    String?
+  phone                        String?
   // Storefront layout — MODERN (grid), MINIMAL (single-column list), or
   // BOLD (large imagery, editorial). See src/components/storefront/templates/.
-  template                 String       @default("MODERN")
+  template                     String       @default("MODERN")
   // Gates visibility on /s/[slug] AND POST /api/orders. Phase 14: a new store
   // starts as a DRAFT (published=false) and only goes live when the merchant
   // finishes onboarding and clicks "Launch" — POST /api/stores/publish
@@ -626,14 +626,14 @@ model Store {
   // store that predates this phase). POST /api/stores/unpublish flips it back;
   // that is distinct from `ordersPaused` (which keeps the store visible but
   // refuses new orders).
-  published                Boolean      @default(false)
-  publishedAt              DateTime?
+  published                    Boolean      @default(false)
+  publishedAt                  DateTime?
   // Phase 3 — Stripe Connect (direct-to-seller payouts, optional). A Store
   // without a connected account still sells fine via the Phase 2 platform
   // charge path — see api/orders/route.ts's routing check on
   // stripeOnboardingStatus === 'ACTIVE'.
-  stripeAccountId          String?      @unique
-  stripeOnboardingStatus   String       @default("NOT_STARTED") // NOT_STARTED|PENDING|ACTIVE|RESTRICTED
+  stripeAccountId              String?      @unique
+  stripeOnboardingStatus       String       @default("NOT_STARTED") // NOT_STARTED|PENDING|ACTIVE|RESTRICTED
   // Manual payment methods — no webhook/API exists for either of these to
   // confirm a peer-to-peer payment automatically, so a buyer who checks out
   // this way sees the seller's Cash App QR / Zelle contact, the order stays
@@ -641,17 +641,17 @@ model Store {
   // POST /api/orders/[id]/confirm-payment (see lib/server/orders/markPaid.ts
   // for the same side effects a real Stripe payment triggers). Both null =
   // the checkout payment-method selector doesn't offer that option at all.
-  cashAppCashtag           String? // stored WITHOUT the leading "$" (e.g. "AdaezeShop")
-  zelleContact             String? // email or phone registered with Zelle — free text
+  cashAppCashtag               String? // stored WITHOUT the leading "$" (e.g. "AdaezeShop")
+  zelleContact                 String? // email or phone registered with Zelle — free text
   // Phase 5 — delivery. self_manual works with zero configuration (the
   // seller is their own courier) so it's the default for every store, no
   // separate on/off flag needed. uber_direct is a real courier integration
   // (lib/server/delivery/uber-direct.ts) that requires a pickup address —
   // self_manual ignores this column entirely (the seller picks up nothing,
   // they just walk the order out themselves).
-  deliveryProvider         String       @default("self_manual")
-  deliveryFeeCents         Int          @default(0)
-  pickupAddress            String?
+  deliveryProvider             String       @default("self_manual")
+  deliveryFeeCents             Int          @default(0)
+  pickupAddress                String?
   // Prompt #12 — the fulfillment engine's per-method config. Shape:
   //   { pickup:   { enabled, instructions },
   //     merchant: { enabled, feeCents, minOrderCents, instructions },
@@ -660,19 +660,19 @@ model Store {
   // Normalised (with legacy `deliveryProvider`/`deliveryFeeCents` backfill)
   // by lib/server/fulfillment/config.ts::readFulfillmentConfig. Provider
   // credentials are PLATFORM-level env vars, never stored here.
-  fulfillmentConfig        Json         @default("{}")
+  fulfillmentConfig            Json         @default("{}")
   // Store's operating country — default US. Kept off the hot path; the core
   // fulfillment code stays country-agnostic for a future CA/MX expansion.
-  country                  String       @default("US")
+  country                      String       @default("US")
   // Phase 12 — Free/Pro tiers. No hard enforcement in the MVP (no feature is
   // gated behind PRO yet); the one branchable benefit today is a reduced
   // marketplace commission — see COMMISSION_RATE_BP_PRO and
   // resolveCommissionRateBp() in lib/server/payments/commission.ts.
-  plan                     String       @default("FREE") // FREE|PRO
+  plan                         String       @default("FREE") // FREE|PRO
   // Phase 3 — inventory. Default "low stock" threshold applied to a product
   // whose own `lowStockThreshold` is null. A product/variant is LOW when its
   // quantity is > 0 and <= the effective threshold, OUT when quantity <= 0.
-  defaultLowStockThreshold Int          @default(3)
+  defaultLowStockThreshold     Int          @default(3)
   // Phase 8 — store operations. `timezone` (IANA, e.g. "America/New_York") is
   // the business's own timezone: it drives the "today" boundary for dashboard
   // metrics and the interpretation of `hours`. `ordersPaused` is a HARD,
@@ -681,24 +681,24 @@ model Store {
   // informational only (soft): [{day:0-6 (0=Sun), open:"HH:MM", close:"HH:MM"}]
   // — an empty array means "no hours configured", i.e. always shown as open.
   // See lib/server/store/availability.ts.
-  timezone                 String       @default("America/New_York")
-  ordersPaused             Boolean      @default(false)
-  pauseMessage             String?
-  hours                    Json         @default("[]")
+  timezone                     String       @default("America/New_York")
+  ordersPaused                 Boolean      @default(false)
+  pauseMessage                 String?
+  hours                        Json         @default("[]")
   // Phase 9 — storefront hero. `heroImages` is an ordered array of up to 3
   // uploaded image URLs (Cloudinary secure_url, same as logoUrl); the
   // storefront renders them as an auto-advancing carousel above the product
   // list. `heroHeadline`/`heroSubhead` are one global promo message overlaid
   // on every slide. Empty array = no hero (storefront looks exactly as
   // before). See lib/storeHero.ts + components/storefront/StorefrontHero.tsx.
-  heroImages               Json         @default("[]")
-  heroHeadline             String?
-  heroSubhead              String?
+  heroImages                   Json         @default("[]")
+  heroHeadline                 String?
+  heroSubhead                  String?
   // Phase 9b — a thin, always-visible promo strip at the very top of the
   // storefront ("Free delivery over $30", "10% off this week"). Distinct
   // from the hero (which is images + a headline) and from `pauseMessage`
   // (which only shows while `ordersPaused`). Null / empty = no strip.
-  announcement             String?
+  announcement                 String?
   // Terms of Service acceptance, stamped by POST /api/stores at store
   // creation. The onboarding "business" step gates "Create store" behind a
   // checkbox + a Terms modal, and the route rejects a create without
@@ -706,10 +706,27 @@ model Store {
   // (the live value from getLegalDocument('terms'), default in
   // lib/legal/defaults.ts) so a future version bump can ask for
   // re-acceptance. Null on stores that predate this.
-  termsAcceptedAt          DateTime?
-  termsVersion             String?
-  createdAt                DateTime     @default(now())
-  updatedAt                DateTime     @updatedAt
+  termsAcceptedAt              DateTime?
+  termsVersion                 String?
+  // Pro plan billing (Phase 1a). `Store.plan` (FREE|PRO, above) stays the
+  // single source of truth read everywhere — these columns only DRIVE its
+  // value. `stripeCustomerId` identifies the merchant as a CUSTOMER of
+  // Vendylio (the Pro subscription), distinct from `stripeAccountId` which is
+  // the merchant's own connected account for receiving SALES. Set/cleared by
+  // the stripe-billing webhook (syncSubscriptionFromStripe) and, for the
+  // comped pilot, by a SUPERADMIN via the admin store route. `planSource`
+  // records WHY a store is PRO — SUBSCRIPTION (paying) or COMP (granted,
+  // e.g. pilot) — so the daily plan-downgrade-sweep cron can retire an
+  // expired comp without touching a paying store. Null everywhere = FREE,
+  // never subscribed (the default for every existing store).
+  stripeCustomerId             String?      @unique
+  stripeSubscriptionId         String?      @unique
+  subscriptionStatus           String? // ACTIVE | TRIALING | PAST_DUE | CANCELED | null
+  subscriptionCurrentPeriodEnd DateTime?
+  planSource                   String? // SUBSCRIPTION | COMP | null
+  planCompExpiresAt            DateTime?
+  createdAt                    DateTime     @default(now())
+  updatedAt                    DateTime     @updatedAt
 
   products       Product[]
   orders         Order[]

@@ -7,7 +7,15 @@ export const runtime = 'nodejs';
 // slowly and crawlers don't need second-fresh data.
 export const revalidate = 3600;
 
-const STATIC_PATHS = ['/', '/how-it-works', '/register', '/privacy', '/terms', '/refund-policy'];
+const STATIC_PATHS = [
+  '/',
+  '/how-it-works',
+  '/pricing',
+  '/register',
+  '/privacy',
+  '/terms',
+  '/refund-policy',
+];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const origin = siteOrigin();

@@ -12,7 +12,7 @@ export function CtaFooter() {
             Ready to open your store?
           </h2>
           <p className="max-w-md text-sm font-body leading-relaxed text-panel-foreground/80">
-            Free. No subscription. Ready in 5 minutes. Your community is waiting.
+            Start free. No card required. Ready in 5 minutes. Your community is waiting.
           </p>
         </div>
         <div className="flex w-full flex-col items-start gap-2 lg:w-auto lg:items-end">
@@ -32,6 +32,9 @@ export function CtaFooter() {
           <p className="mt-2 text-xs text-muted-foreground">© 2026 Vendylio · Maryland, USA</p>
         </div>
         <div className="flex flex-wrap items-center gap-6 text-sm text-muted-foreground">
+          <Link href="/pricing" className="hover:text-foreground">
+            Pricing
+          </Link>
           <Link href="/privacy" className="hover:text-foreground">
             Privacy
           </Link>

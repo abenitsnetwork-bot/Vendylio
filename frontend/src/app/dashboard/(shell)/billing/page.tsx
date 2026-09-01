@@ -25,6 +25,16 @@ interface StripeStatus {
   connected: boolean;
 }
 
+interface BillingStatus {
+  plan: 'FREE' | 'PRO';
+  planSource: 'SUBSCRIPTION' | 'COMP' | null;
+  subscriptionStatus: 'ACTIVE' | 'TRIALING' | 'PAST_DUE' | 'CANCELED' | null;
+  currentPeriodEnd: string | null;
+  compExpiresAt: string | null;
+  hasBillingCustomer: boolean;
+  billingConfigured: boolean;
+}
+
 function formatUsd(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
@@ -35,6 +45,38 @@ function destinationLabel(d: WithdrawalItem['destination']): string {
   return d.method ?? 'Unknown method';
 }
 
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+function planSummary(b: BillingStatus): string {
+  if (b.plan !== 'PRO') {
+    return b.billingConfigured
+      ? 'Upgrade to Pro for a 1.5% card fee, courier delivery, promo codes, analytics and more.'
+      : 'You’re on the Free plan.';
+  }
+  if (b.planSource === 'COMP') {
+    return b.compExpiresAt
+      ? `Pro is on the house until ${formatDate(b.compExpiresAt)}.`
+      : 'Pro is on the house.';
+  }
+  if (b.subscriptionStatus === 'PAST_DUE') {
+    return 'Your last payment failed — update your card to keep Pro. Manage billing below.';
+  }
+  if (b.subscriptionStatus === 'CANCELED') {
+    return b.currentPeriodEnd
+      ? `Pro ends ${formatDate(b.currentPeriodEnd)}. Resubscribe anytime.`
+      : 'Your Pro plan has been cancelled.';
+  }
+  return b.currentPeriodEnd
+    ? `Pro renews ${formatDate(b.currentPeriodEnd)}. Thanks for supporting Vendylio.`
+    : 'You’re on Pro — thanks for supporting Vendylio.';
+}
+
 export default function BillingPayoutsPage() {
   const user = useUser();
   const { logout } = useAuth();
@@ -42,8 +84,8 @@ export default function BillingPayoutsPage() {
   const [availableCents, setAvailableCents] = useState<number | null>(null);
   const [stripe, setStripe] = useState<StripeStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [plan, setPlan] = useState<string | null>(null);
-  const [upgrading, setUpgrading] = useState(false);
+  const [billing, setBilling] = useState<BillingStatus | null>(null);
+  const [planBusy, setPlanBusy] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
 
   const loadWithdrawals = useCallback(() => {
@@ -58,11 +100,11 @@ export default function BillingPayoutsPage() {
   }, []);
 
   const loadPlan = useCallback(() => {
-    api<{ store: { plan: string } }>('/api/stores/me')
-      .then((res) => setPlan(res.store.plan))
+    api<BillingStatus>('/api/billing/status')
+      .then(setBilling)
       .catch(() => {
-        // Non-critical for this page — the withdrawal history above is the
-        // primary content, so a failed plan lookup just hides the card.
+        // Non-critical for this page — the withdrawal history is the primary
+        // content, so a failed plan lookup just hides the plan card.
       });
   }, []);
 
@@ -79,16 +121,31 @@ export default function BillingPayoutsPage() {
 
   async function onUpgrade() {
     setPlanError(null);
-    setUpgrading(true);
+    setPlanBusy(true);
     try {
-      const res = await api<{ store: { plan: string } }>('/api/stores/upgrade', {
-        method: 'POST',
-      });
-      setPlan(res.store.plan);
+      const res = await api<{ url: string }>('/api/billing/checkout', { method: 'POST' });
+      window.location.href = res.url;
+    } catch (err) {
+      setPlanError(
+        err instanceof ApiError
+          ? err.code === 'BILLING_NOT_CONFIGURED'
+            ? 'Subscription billing isn’t available yet — check back soon.'
+            : err.message
+          : 'Network error. Try again.',
+      );
+      setPlanBusy(false);
+    }
+  }
+
+  async function onManageBilling() {
+    setPlanError(null);
+    setPlanBusy(true);
+    try {
+      const res = await api<{ url: string }>('/api/billing/portal', { method: 'POST' });
+      window.location.href = res.url;
     } catch (err) {
       setPlanError(err instanceof ApiError ? err.message : 'Network error. Try again.');
-    } finally {
-      setUpgrading(false);
+      setPlanBusy(false);
     }
   }
 
@@ -209,32 +266,55 @@ export default function BillingPayoutsPage() {
             </Card>
           </div>
 
-          {plan && (
+          {billing && (
             <Card className="mb-12 flex flex-col items-start justify-between gap-4 p-8 sm:flex-row sm:items-center">
               <div>
                 <p className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">
                   Your Plan
                 </p>
                 <p className="font-headings text-2xl font-bold text-foreground">
-                  {plan === 'PRO' ? 'Pro' : 'Free'}
+                  {billing.plan === 'PRO' ? 'Pro' : 'Free'}
+                  {billing.plan === 'PRO' && billing.subscriptionStatus === 'PAST_DUE' && (
+                    <span className="ml-2 rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                      Payment due
+                    </span>
+                  )}
                 </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {plan === 'PRO'
-                    ? "You're on Pro — thanks for supporting Vendylio."
-                    : 'Upgrade to Pro for a reduced marketplace commission.'}
+                <p className="mt-1 max-w-md text-sm text-muted-foreground">
+                  {planSummary(billing)}
                 </p>
                 {planError && <p className="mt-2 text-sm text-red-600">{planError}</p>}
               </div>
-              {plan !== 'PRO' && (
-                <button
-                  type="button"
-                  onClick={onUpgrade}
-                  disabled={upgrading}
-                  className="flex-shrink-0 rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+              <div className="flex flex-shrink-0 flex-col items-stretch gap-2 sm:items-end">
+                {billing.plan !== 'PRO' && billing.billingConfigured && (
+                  <button
+                    type="button"
+                    onClick={onUpgrade}
+                    disabled={planBusy}
+                    className="rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                  >
+                    {planBusy ? 'Opening…' : 'Upgrade to Pro'}
+                  </button>
+                )}
+                {billing.hasBillingCustomer && billing.planSource === 'SUBSCRIPTION' && (
+                  <button
+                    type="button"
+                    onClick={onManageBilling}
+                    disabled={planBusy}
+                    className="rounded-lg border border-border px-6 py-3 text-sm font-semibold text-foreground disabled:opacity-50"
+                  >
+                    {planBusy ? 'Opening…' : 'Manage billing'}
+                  </button>
+                )}
+                <a
+                  href="/pricing"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-center text-xs font-medium text-primary sm:text-right"
                 >
-                  {upgrading ? 'Upgrading…' : 'Upgrade to Pro'}
-                </button>
-              )}
+                  Compare plans
+                </a>
+              </div>
             </Card>
           )}
 

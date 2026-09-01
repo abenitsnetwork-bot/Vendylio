@@ -7,8 +7,32 @@ import { Icon } from '@/components/ui/Icon';
 const LINKS = [
   { href: '#how-it-works', label: 'How It Works' },
   { href: '#features', label: 'Features' },
+  { href: '/pricing', label: 'Pricing' },
   { href: '#testimonials', label: 'Reviews' },
 ];
+
+function NavLink({
+  href,
+  label,
+  className,
+  onClick,
+}: {
+  href: string;
+  label: string;
+  className: string;
+  onClick?: () => void;
+}) {
+  const handlers = onClick ? { onClick } : {};
+  return href.startsWith('/') ? (
+    <Link href={href} className={className} {...handlers}>
+      {label}
+    </Link>
+  ) : (
+    <a href={href} className={className} {...handlers}>
+      {label}
+    </a>
+  );
+}
 
 export function PublicNavBar() {
   const [open, setOpen] = useState(false);
@@ -22,13 +46,12 @@ export function PublicNavBar() {
 
         <nav className="hidden items-center gap-8 lg:flex">
           {LINKS.map((link) => (
-            <a
+            <NavLink
               key={link.href}
               href={link.href}
+              label={link.label}
               className="text-sm font-medium text-muted-foreground hover:text-foreground"
-            >
-              {link.label}
-            </a>
+            />
           ))}
         </nav>
 
@@ -62,14 +85,13 @@ export function PublicNavBar() {
         <div className="border-t border-border px-4 py-4 lg:hidden">
           <nav className="flex flex-col gap-1">
             {LINKS.map((link) => (
-              <a
+              <NavLink
                 key={link.href}
                 href={link.href}
+                label={link.label}
                 onClick={() => setOpen(false)}
                 className="rounded-lg px-3 py-3 text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground"
-              >
-                {link.label}
-              </a>
+              />
             ))}
             <Link
               href="/login"

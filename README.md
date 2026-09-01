@@ -51,6 +51,7 @@ Groupes optionnels (set les vars pour activer ; absent = inerte) :
 | Groupe | Vars | Comportement quand absent |
 |---|---|---|
 | Paiements (Stripe) | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_CONNECT_*` | `POST /api/orders` en carte renvoie 503 `PAYMENT_PROVIDER_UNCONFIGURED` ; Cash App / Zelle restent disponibles |
+| Abonnement Pro (Stripe Billing) | `STRIPE_PRO_PRICE_ID`, `STRIPE_BILLING_WEBHOOK_SECRET` | `POST /api/billing/checkout` renvoie 503 `BILLING_NOT_CONFIGURED` ; le dashboard masque « Upgrade to Pro », toutes les boutiques restent en Free |
 | Livraison courier | `DOORDASH_*`, `UBER_DIRECT_*` (platform-level, jamais par boutique) | Le provider se présente comme indisponible ; `PICKUP` + `MERCHANT` restent disponibles |
 | Storage (Cloudinary) | `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_UPLOAD_PRESET?` | `/api/upload` renvoie 503 ; les URLs sont des `secure_url` Cloudinary publiques (OK pour photos produit / logos) |
 | Email (Resend) | `RESEND_API_KEY`, `EMAIL_FROM` | Les lignes en queue email s'accumulent, drainées au cron dès que la clé arrive |
@@ -67,13 +68,14 @@ Les route handlers sous [`frontend/src/app/api/`](frontend/src/app/api/) **sont*
 
 - **`/api/auth/*`** — signup / login / logout / refresh / me / verify-email / forgot-password / reset-password / change-password / set-password / resend-verification, + `/api/auth/oauth/google/{start,callback}`
 - **`/api/stores*`** — CRUD boutique du commerçant, `/publish` + `/unpublish` (readiness re-validée serveur), `/stores/me`, `/stores/fulfillment`, `/stores/stripe/*` (onboarding Connect)
+- **`/api/billing/*`** — `checkout` / `portal` / `status` de l'abonnement Pro (Stripe Billing) ; `Store.plan` (`FREE | PRO`) piloté par le webhook `stripe-billing`
 - **`/api/products*`**, **`/api/categories*`**, **`/api/inventory/adjust`** — catalogue + ledger de stock append-only
 - **`/api/orders`** (checkout invité, server-authoritative), `/api/orders/[id]` (transitions vendeur), `/api/orders/[id]/refund`, `/api/orders/track/[token]` (lecture invité), `/api/cart/validate`
 - **`/api/stores/[slug]/delivery-quote`** — devis livraison multi-provider au checkout
 - **`/api/discounts*`** — codes promo (FREE_DELIVERY en v1)
 - **`/api/notifications*`** — cloche in-app + préférences `{email, inApp}` par type d'événement
-- **`/api/webhooks/{stripe,doordash,uber-direct}`** — HMAC raw-body + idempotence + outbox (factory `createWebhookHandler`, PROTÉGÉE)
-- **`/api/cron/*`** — 9 handlers, tous `Authorization: Bearer ${CRON_SECRET}` (voir table ci-dessous)
+- **`/api/webhooks/{stripe,stripe-connect,stripe-billing,doordash,uber-direct}`** — HMAC raw-body + idempotence + outbox (factory `createWebhookHandler`, PROTÉGÉE ; chaque endpoint a son propre signing secret)
+- **`/api/cron/*`** — 10 handlers, tous `Authorization: Bearer ${CRON_SECRET}` (voir table ci-dessous)
 - **`/api/admin/*`** — back-office : users / orders / withdrawals / stores / audit-log / site-content / legal / analytics / pulse (rôle `ADMIN` < `SUPERADMIN`)
 - **`/api/upload`** — allowlist MIME + sniff magic-bytes avant Cloudinary
 - **`/api/health`**, **`/api/readyz`** — liveness / readiness
@@ -92,6 +94,7 @@ Les route handlers sous [`frontend/src/app/api/`](frontend/src/app/api/) **sont*
 | `/api/cron/webhook-log-purge` | quotidien |
 | `/api/cron/email-job-purge` | quotidien |
 | `/api/cron/low-stock-sweep` | quotidien — filet de sécurité alertes stock bas |
+| `/api/cron/plan-downgrade-sweep` | quotidien 03:00 — retire un Pro offert expiré / un abonnement past-due lapsé |
 
 Requiert un plan **Vercel Pro** (le Hobby ne fait que du quotidien, trop lent pour le TTL de 15 min des codes de vérification).
 
