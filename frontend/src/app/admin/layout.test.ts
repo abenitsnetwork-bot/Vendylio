@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 // layout.tsx to a client-only ('use client') gate would silently start
 // serving the admin shell to everyone again — the exact hole this closed.
 const layoutSrc = readFileSync(resolve(__dirname, 'layout.tsx'), 'utf8');
-const middlewareSrc = readFileSync(resolve(__dirname, '../../../middleware.ts'), 'utf8');
+const middlewareSrc = readFileSync(resolve(__dirname, '../../middleware.ts'), 'utf8');
 
 describe('admin layout is a server-enforced gate', () => {
   it('is a server component (no "use client")', () => {

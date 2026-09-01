@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { NextRequest } from 'next/server';
-// middleware.ts lives at the package root (frontend/), one level above src/.
-import { middleware } from '../middleware';
+// middleware.ts lives at src/ (Next 16 requires it inside src/ when app/ is
+// under src/ — a root-level middleware.ts is silently ignored).
+import { middleware } from './middleware';
 
 // Default host is one of our own (localhost) so the custom-domain rewrite is
 // inert for these; the custom-domain tests pass an explicit foreign host.
