@@ -21,7 +21,8 @@ Checkout → Order → Fulfillment Engine → Delivery provider (Uber / DoorDash
 | `stateMachine.ts` | `rank()`, `canTransition(from, to, actor)`, `mapToOrderStatus()`. Pure. The single authority on which state changes are legal and what they mean for `Order.status`. |
 | `config.ts` | `readFulfillmentConfig(store)` — normalizes the `Store.fulfillmentConfig` JSON blob, backfilling from the legacy `deliveryProvider` / `deliveryFeeCents` columns. |
 | `registry.ts` | `getDeliveryProvider(type)` — **the only** `ProviderType → adapter` switch in the codebase. |
-| `service.ts` | `recordTransition`, `initFulfillment`, `handleProviderEvent`, `selectProvider`, `quoteMethod`. Every write to `Delivery.state` / `Order.status` goes through here. |
+| `service.ts` | `recordTransition`, `initFulfillment`, `handleProviderEvent`, `selectProvider`, `quoteMethod`, `createFulfillment`, `cancelFulfillment`, `applyCourierWebhookEvent`. Every write to `Delivery.state` / `Order.status` goes through here. |
+| `http.ts` | Prompt #13 — `fetchWithTimeout` / `withTimeout` (every outbound provider call is time-boxed) + `classifyDeliveryError` (raw provider error → stable `DELIVERY_*` code). |
 | `providers/pickup.ts` | No courier, no API — the buyer collects in person. |
 | `providers/merchant.ts` | The seller is their own courier (the historical `self_manual`). Flat fee + min-order gate from config. |
 | `providers/uber-direct.ts` | v2 wrapper over the Phase-5 `lib/server/delivery/uber-direct.ts` SDK integration. |
@@ -48,6 +49,18 @@ order where the seller has it; PICKED_UP / OUT_FOR_DELIVERY → order
 `OUT_FOR_DELIVERY`; DELIVERED → order `DELIVERED`; FAILED / CANCELLED → order
 `READY` **only if** it is currently `OUT_FOR_DELIVERY`. An order is **never**
 auto-cancelled or auto-refunded by a delivery failure.
+
+### Terminal side-effects — one funnel (Prompt #13)
+
+When a delivery reaches DELIVERED / FAILED / CANCELLED, `recordTransition`
+(and only it) enqueues the seller notification + the customer status email via
+`enqueueDeliveryTerminalEffects`. Every write path funnels through
+`recordTransition`, so the emit is exactly-once regardless of who observed the
+terminal first — courier webhook, `fulfillment-tick` poll, the Retry route's
+reconcile, or a merchant "Mark delivered" click. All four write paths also take
+the same `pg_advisory_xact_lock(hashtext(deliveryId))` inside a `Serializable`
+tx, so a retry racing a webhook racing the cron produces one deterministic
+final state, never a duplicate delivery or event.
 
 ## Data model
 

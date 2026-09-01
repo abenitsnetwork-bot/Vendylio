@@ -240,6 +240,138 @@ describe('recordTransition', () => {
   });
 });
 
+// Prompt #13 R1 — the ONE terminal side-effect funnel. Every path
+// (webhook / poll cron / retry reconcile / merchant "Mark delivered") reaches
+// a terminal state through recordTransition, so the seller notification +
+// customer email are enqueued here exactly once.
+describe('recordTransition — terminal side-effects', () => {
+  const outboxKinds = () =>
+    prismaMock.outboxEvent.create.mock.calls.map(
+      (c) => (c[0] as { data: { kind: string } }).data.kind,
+    );
+
+  function seedWithOwner(state: string, orderStatus = 'OUT_FOR_DELIVERY') {
+    prismaMock.delivery.findUnique.mockResolvedValue({
+      id: 'del_1',
+      orderId: 'ord_1',
+      state,
+      providerType: 'UBER_DIRECT',
+    } as never);
+    prismaMock.deliveryEvent.findUnique.mockResolvedValue(null as never);
+    prismaMock.deliveryEvent.create.mockResolvedValue({} as never);
+    prismaMock.delivery.update.mockResolvedValue({} as never);
+    prismaMock.order.findUnique.mockResolvedValue({
+      status: orderStatus,
+      store: { organization: { ownerId: 'owner_1' } },
+    } as never);
+    prismaMock.order.update.mockResolvedValue({} as never);
+    prismaMock.orderStatusEvent.create.mockResolvedValue({} as never);
+  }
+
+  it('DELIVERED from CRON → completed notification + delivered email', async () => {
+    seedWithOwner('OUT_FOR_DELIVERY');
+    await recordTransition(prismaMock as never, {
+      deliveryId: 'del_1',
+      toState: 'DELIVERED',
+      actor: 'CRON',
+      providerEventId: 'poll:delivered',
+    });
+    const kinds = outboxKinds();
+    expect(kinds).toContain('notification.delivery_completed');
+    expect(kinds.filter((k) => k === 'email.order_status')).toHaveLength(1);
+    const email = prismaMock.outboxEvent.create.mock.calls
+      .map((c) => (c[0] as { data: { kind: string; payload: Record<string, unknown> } }).data)
+      .find((d) => d.kind === 'email.order_status');
+    expect(email?.payload).toMatchObject({ kind: 'DELIVERED' });
+  });
+
+  it('DELIVERED from a MERCHANT click also emits (self-delivery parity)', async () => {
+    seedWithOwner('OUT_FOR_DELIVERY');
+    await recordTransition(prismaMock as never, {
+      deliveryId: 'del_1',
+      toState: 'DELIVERED',
+      actor: 'MERCHANT',
+    });
+    expect(outboxKinds()).toContain('notification.delivery_completed');
+  });
+
+  it('FAILED from PROVIDER → delivery-issue notification + email', async () => {
+    seedWithOwner('OUT_FOR_DELIVERY');
+    await recordTransition(prismaMock as never, {
+      deliveryId: 'del_1',
+      toState: 'FAILED',
+      actor: 'PROVIDER',
+      providerStatus: 'returned',
+    });
+    const events = prismaMock.outboxEvent.create.mock.calls.map(
+      (c) => (c[0] as { data: { kind: string; payload: Record<string, unknown> } }).data,
+    );
+    expect(events.find((e) => e.kind === 'notification.delivery_failed')?.payload).toMatchObject({
+      status: 'returned',
+    });
+    expect(events.find((e) => e.kind === 'email.order_status')?.payload).toMatchObject({
+      kind: 'DELIVERY_ISSUE',
+    });
+  });
+
+  it('CANCELLED by the MERCHANT emits NOTHING to the customer (seller-initiated)', async () => {
+    seedWithOwner('OUT_FOR_DELIVERY');
+    await recordTransition(prismaMock as never, {
+      deliveryId: 'del_1',
+      toState: 'CANCELLED',
+      actor: 'MERCHANT',
+    });
+    expect(prismaMock.outboxEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('DELIVERED with no resolvable owner still emails the customer, skips the notification', async () => {
+    prismaMock.delivery.findUnique.mockResolvedValue({
+      id: 'del_1',
+      orderId: 'ord_1',
+      state: 'OUT_FOR_DELIVERY',
+      providerType: 'UBER_DIRECT',
+    } as never);
+    prismaMock.deliveryEvent.findUnique.mockResolvedValue(null as never);
+    prismaMock.deliveryEvent.create.mockResolvedValue({} as never);
+    prismaMock.delivery.update.mockResolvedValue({} as never);
+    prismaMock.order.findUnique.mockResolvedValue({ status: 'OUT_FOR_DELIVERY' } as never);
+    prismaMock.order.update.mockResolvedValue({} as never);
+    prismaMock.orderStatusEvent.create.mockResolvedValue({} as never);
+
+    await recordTransition(prismaMock as never, {
+      deliveryId: 'del_1',
+      toState: 'DELIVERED',
+      actor: 'CRON',
+    });
+    const kinds = outboxKinds();
+    expect(kinds).toEqual(['email.order_status']);
+  });
+
+  it('a deduped replay of a terminal event emits nothing', async () => {
+    seedWithOwner('OUT_FOR_DELIVERY');
+    prismaMock.deliveryEvent.findUnique.mockResolvedValue({ id: 'seen' } as never);
+    const res = await recordTransition(prismaMock as never, {
+      deliveryId: 'del_1',
+      toState: 'DELIVERED',
+      actor: 'PROVIDER',
+      providerEventId: 'evt_dup',
+    });
+    expect(res).toMatchObject({ deduped: true });
+    expect(prismaMock.outboxEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('an illegal terminal→terminal move emits nothing', async () => {
+    seedWithOwner('DELIVERED');
+    const res = await recordTransition(prismaMock as never, {
+      deliveryId: 'del_1',
+      toState: 'CANCELLED',
+      actor: 'PROVIDER',
+    });
+    expect(res.changed).toBe(false);
+    expect(prismaMock.outboxEvent.create).not.toHaveBeenCalled();
+  });
+});
+
 describe('initFulfillment', () => {
   it('upserts a PENDING Delivery with the legacy provider name', async () => {
     prismaMock.delivery.upsert.mockResolvedValue({} as never);
@@ -426,7 +558,9 @@ describe('createFulfillment', () => {
     seedTransitionMocks('PENDING');
     mockProvider.createDelivery.mockRejectedValue(new Error('provider 503'));
     const res = await createFulfillment(prismaMock as never, 'del_1', { actor: 'SYSTEM' });
-    expect(res).toMatchObject({ state: 'PENDING', error: 'provider 503' });
+    // Prompt #13 Y4 — the raw provider string is mapped to a stable code.
+    expect(res).toMatchObject({ state: 'PENDING', code: 'DELIVERY_PROVIDER_UNAVAILABLE' });
+    expect(res.error).not.toContain('provider 503');
     // no FAILED transition event yet
     const failEvent = prismaMock.deliveryEvent.create.mock.calls.find(
       (c) => (c[0] as { data: { state: string } }).data.state === 'FAILED',
@@ -582,7 +716,10 @@ describe('applyCourierWebhookEvent', () => {
     prismaMock.deliveryEvent.findUnique.mockResolvedValue(null as never);
     prismaMock.deliveryEvent.create.mockResolvedValue({} as never);
     prismaMock.delivery.update.mockResolvedValue({} as never);
-    prismaMock.order.findUnique.mockResolvedValue({ status: 'OUT_FOR_DELIVERY' } as never);
+    prismaMock.order.findUnique.mockResolvedValue({
+      status: 'OUT_FOR_DELIVERY',
+      store: { organization: { ownerId: 'owner_1' } },
+    } as never);
     prismaMock.order.update.mockResolvedValue({} as never);
     prismaMock.orderStatusEvent.create.mockResolvedValue({} as never);
   }
@@ -793,6 +930,21 @@ describe('priceDeliveryForOrder', () => {
     } as never);
     const res = await priceDeliveryForOrder(prismaMock as never, { ...base, quoteId: 'q1' });
     expect(res).toMatchObject({ ok: false, code: 'DELIVERY_UNAVAILABLE' });
+  });
+
+  it('rejects a quote whose provider the store has since disabled (Prompt #13 R2)', async () => {
+    prismaMock.quote.findUnique.mockResolvedValue({
+      id: 'q1',
+      storeId: 'store_1',
+      providerType: 'UBER_DIRECT', // never enabled in the merchant-only fixture
+      feeCents: 900,
+      subtotalCents: 4000,
+      dropoffAddressHash: hashDropoffAddress(base.deliveryAddress),
+      expiresAt: new Date(Date.now() + 60_000),
+    } as never);
+    const res = await priceDeliveryForOrder(prismaMock as never, { ...base, quoteId: 'q1' });
+    expect(res).toMatchObject({ ok: false, code: 'DELIVERY_UNAVAILABLE' });
+    expect(mockProvider.quote).not.toHaveBeenCalled();
   });
 });
 

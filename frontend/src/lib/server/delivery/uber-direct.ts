@@ -40,6 +40,7 @@
  */
 import 'server-only';
 import { getAccessToken, createDeliveriesClient } from 'uber-direct';
+import { fetchWithTimeout } from '@/lib/server/fulfillment/http';
 import type { DeliveryProvider, DeliveryRequestInput, DeliveryRequestResult } from './provider';
 
 export class UberDirectNotConfiguredError extends Error {
@@ -238,7 +239,7 @@ export async function getUberDelivery(
   try {
     const token = await getCachedAccessToken();
     const customerId = process.env.UBER_DIRECT_CUSTOMER_ID!;
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `${UBER_API_BASE}/customers/${customerId}/deliveries/${encodeURIComponent(providerDeliveryId)}`,
       { headers: { Authorization: `Bearer ${token}` } },
     );
@@ -260,7 +261,7 @@ export async function cancelUberDelivery(
   try {
     const token = await getCachedAccessToken();
     const customerId = process.env.UBER_DIRECT_CUSTOMER_ID!;
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `${UBER_API_BASE}/customers/${customerId}/deliveries/${encodeURIComponent(providerDeliveryId)}/cancel`,
       { method: 'POST', headers: { Authorization: `Bearer ${token}` } },
     );

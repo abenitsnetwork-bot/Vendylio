@@ -98,9 +98,13 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
 
     const result = await createFulfillment(prisma, delivery.id, { actor: 'MERCHANT', force: true });
 
-    if (result.state === 'FAILED' && result.error) {
+    // `error` is set only when this invocation's courier request failed —
+    // surface a stable code (Prompt #13 Y4) whether the delivery went FAILED
+    // (attempt cap) or stayed PENDING (will be retried by the cron), so the
+    // merchant never sees a silent 201 for a retry that didn't dispatch.
+    if (result.error) {
       return NextResponse.json(
-        { error: 'DELIVERY_CREATION_FAILED', message: result.error },
+        { error: result.code ?? 'DELIVERY_CREATION_FAILED', message: result.error },
         { status: 503, headers: { 'x-request-id': reqCtx.requestId } },
       );
     }

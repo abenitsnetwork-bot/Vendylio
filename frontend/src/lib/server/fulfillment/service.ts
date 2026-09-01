@@ -16,7 +16,13 @@ import { createHash } from 'crypto';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import type { PrismaTransactionClient } from '@/lib/server/webhook/handler';
 import { log } from '@/lib/server/observability/log';
-import { canTransition, mapToOrderStatus } from './stateMachine';
+import { canTransition, isTerminal, mapToOrderStatus } from './stateMachine';
+import {
+  classifyDeliveryError,
+  withTimeout,
+  PROVIDER_TIMEOUT_MS,
+  type DeliveryErrorCode,
+} from './http';
 import type {
   DeliveryQuote,
   DeliveryQuoteInput,
@@ -160,13 +166,19 @@ export async function recordTransition(
   };
   await tx.delivery.update({ where: { id: delivery.id }, data: deliveryPatch });
 
-  // 4. Map to Order.status.
+  // 4. Map to Order.status. The lookup is widened to also carry the store
+  //    owner, reused below for the terminal side-effects (one query).
   const map = mapToOrderStatus(input.toState);
+  let ownerId: string | null = null;
   if (map.target) {
     const order = await tx.order.findUnique({
       where: { id: delivery.orderId },
-      select: { status: true },
+      select: {
+        status: true,
+        store: { select: { organization: { select: { ownerId: true } } } },
+      },
     });
+    ownerId = order?.store?.organization?.ownerId ?? null;
     const canMove =
       order &&
       order.status !== map.target &&
@@ -186,7 +198,74 @@ export async function recordTransition(
     }
   }
 
+  // 5. Terminal side-effects — the ONE funnel (Prompt #13 R1). Because
+  //    `canTransition` blocks every terminal→* move and we only get here when
+  //    the state actually changed, this fires exactly once per delivery across
+  //    every path: courier webhook, poll cron, retry-route reconcile, and a
+  //    merchant self-delivery "Mark delivered" click.
+  if (isTerminal(input.toState)) {
+    await enqueueDeliveryTerminalEffects(tx, {
+      orderId: delivery.orderId,
+      ownerId,
+      finalState: input.toState,
+      rawStatus: input.providerStatus ?? null,
+      actor: input.actor,
+    });
+  }
+
   return { changed: true, deduped: false, state: input.toState };
+}
+
+/**
+ * Enqueue the seller notification + the customer status email for a delivery
+ * that just reached a terminal state. Called from `recordTransition` only.
+ *
+ * - DELIVERED (any actor): "delivered" notification + email.
+ * - FAILED / CANCELLED from PROVIDER or CRON (i.e. the courier failed/cancelled
+ *   it, or a poll discovered that): "delivery issue" notification + email.
+ * - FAILED / CANCELLED from MERCHANT or SYSTEM: the seller initiated it (manual
+ *   cancel, or a dispatch that exhausted retries — which already sends its own
+ *   `FULFILLMENT_FAILED` seller notification) → no customer-facing email.
+ */
+async function enqueueDeliveryTerminalEffects(
+  tx: FulfillmentTx,
+  input: {
+    orderId: string;
+    ownerId: string | null;
+    finalState: NormalizedState;
+    rawStatus: string | null;
+    actor: FulfillmentActor;
+  },
+): Promise<void> {
+  const { orderId, ownerId, finalState, rawStatus, actor } = input;
+  const courierEnded = actor === 'PROVIDER' || actor === 'CRON';
+
+  if (finalState === 'DELIVERED') {
+    if (ownerId) {
+      await enqueueOutbox(tx, {
+        kind: 'notification.delivery_completed',
+        payload: { userId: ownerId, orderId },
+      });
+    }
+    await enqueueOutbox(tx, {
+      kind: 'email.order_status',
+      payload: { orderId, kind: 'DELIVERED' },
+    });
+    return;
+  }
+
+  // FAILED | CANCELLED
+  if (!courierEnded) return;
+  if (ownerId) {
+    await enqueueOutbox(tx, {
+      kind: 'notification.delivery_failed',
+      payload: { userId: ownerId, orderId, status: rawStatus ?? finalState },
+    });
+  }
+  await enqueueOutbox(tx, {
+    kind: 'email.order_status',
+    payload: { orderId, kind: 'DELIVERY_ISSUE' },
+  });
 }
 
 // ── initFulfillment ──────────────────────────────────────────────────────
@@ -312,50 +391,26 @@ export async function applyCourierWebhookEvent(
 ): Promise<{ matched: boolean; changed: boolean; state?: NormalizedState }> {
   const delivery = await tx.delivery.findFirst({
     where: input.correlateBy,
-    select: {
-      id: true,
-      order: {
-        select: {
-          id: true,
-          storeId: true,
-          store: { select: { organization: { select: { ownerId: true } } } },
-        },
-      },
-    },
+    select: { id: true },
   });
   if (!delivery) return { matched: false, changed: false };
 
+  // Prompt #13 (Y3): serialize against a concurrent retry / poll on the same
+  // delivery, same lock `createFulfillment` and the poll cron take. The
+  // webhook factory's Serializable tx already prevents corruption; the lock
+  // makes contention deterministic instead of abort-and-retry.
+  await lockDeliveryTx(tx, delivery.id);
+
   const normalized = getDeliveryProvider(input.providerType).normalizeStatus(input.rawStatus);
+  // The terminal seller-notification + customer email are enqueued by
+  // `recordTransition` → `enqueueDeliveryTerminalEffects` (Prompt #13 R1), the
+  // single funnel every path shares — this route no longer emits them itself.
   const res = await handleProviderEvent(tx, {
     deliveryId: delivery.id,
     snapshot: { providerDeliveryId: null, rawStatus: input.rawStatus, state: normalized },
     source: 'PROVIDER',
     providerEventId: input.eventId,
   });
-
-  if (res.changed) {
-    const ownerId = delivery.order.store.organization.ownerId;
-    const orderId = delivery.order.id;
-    if (res.state === 'DELIVERED') {
-      await enqueueOutbox(tx, {
-        kind: 'notification.delivery_completed',
-        payload: { userId: ownerId, orderId },
-      });
-      await enqueueOutbox(tx, {
-        kind: 'email.order_status',
-        payload: { orderId, kind: 'DELIVERED' },
-      });
-    } else if (res.state === 'FAILED' || res.state === 'CANCELLED') {
-      await enqueueOutbox(tx, {
-        kind: 'notification.delivery_failed',
-        payload: { userId: ownerId, orderId, status: input.rawStatus },
-      });
-      await enqueueOutbox(tx, {
-        kind: 'email.order_status',
-        payload: { orderId, kind: 'DELIVERY_ISSUE' },
-      });
-    }
-  }
 
   return { matched: true, changed: res.changed, state: res.state };
 }
@@ -431,10 +486,12 @@ export async function quoteMethod(
   if (!provider.isConfigured()) return unserviceable('Not configured.');
 
   try {
-    const timeout = new Promise<DeliveryQuote>((resolve) =>
-      setTimeout(() => resolve(unserviceable('Quote timed out.')), timeoutMs),
+    return await withTimeout(
+      provider.quote(input),
+      timeoutMs,
+      () => unserviceable('Quote timed out.'),
+      `${providerType} quote`,
     );
-    return await Promise.race([provider.quote(input), timeout]);
   } catch (err) {
     log.warn('fulfillment: quote threw', {
       providerType,
@@ -730,6 +787,15 @@ export async function priceDeliveryForOrder(
       };
     }
     const providerType = quote.providerType as ProviderType;
+    // Prompt #13 (R2): the store may have switched this method off between the
+    // quote and the pay — never dispatch through a disabled provider.
+    if (!enabledProviderTypes(cfg).includes(providerType)) {
+      return {
+        ok: false,
+        code: 'DELIVERY_UNAVAILABLE',
+        message: 'That delivery method is no longer offered by this store — please pick another.',
+      };
+    }
     const expired = quote.expiresAt ? quote.expiresAt.getTime() < Date.now() : false;
     if (isCourierProvider(providerType) || expired) {
       return liveQuote(providerType);
@@ -876,8 +942,10 @@ export interface CreateFulfillmentResult {
   state: NormalizedState;
   /** True when a courier delivery was actually requested this call. */
   dispatched: boolean;
-  /** Set when the courier request failed this call. */
+  /** Merchant-safe message when the courier request failed this call. */
   error?: string;
+  /** Stable Vendylio error code (Prompt #13 Y4) — switch on this, not `error`. */
+  code?: DeliveryErrorCode;
 }
 
 /**
@@ -932,8 +1000,11 @@ export async function createFulfillment(
       //    reconcile from the provider, never create a second one. ──
       if (delivery.dispatchedAt && delivery.externalDeliveryId) {
         try {
-          const snapshot = await provider.getDelivery(
-            delivery.providerDeliveryId ?? delivery.externalDeliveryId,
+          const snapshot = await withTimeout(
+            provider.getDelivery(delivery.providerDeliveryId ?? delivery.externalDeliveryId),
+            PROVIDER_TIMEOUT_MS,
+            undefined,
+            `${providerType} getDelivery`,
           );
           if (snapshot.state !== 'UNKNOWN') {
             const res = await handleProviderEvent(tx, {
@@ -963,21 +1034,26 @@ export async function createFulfillment(
       await tx.delivery.update({ where: { id: deliveryId }, data: { externalDeliveryId } });
 
       try {
-        const result = await provider.createDelivery({
-          externalDeliveryId,
-          orderId: delivery.orderId,
-          storeId: delivery.order.storeId,
-          storeName: store.name,
-          pickupAddress: store.pickupAddress,
-          pickupPhone: store.phone,
-          customerName: delivery.order.customerName,
-          customerPhone: delivery.order.customerPhone,
-          dropoffAddress:
-            (delivery.order.deliveryAddress as Record<string, unknown> | null) ?? null,
-          subtotalCents: delivery.order.amount,
-          currency: delivery.order.currency,
-          manifestItems: manifestItemsFrom(delivery.order.lineItems),
-        });
+        const result = await withTimeout(
+          provider.createDelivery({
+            externalDeliveryId,
+            orderId: delivery.orderId,
+            storeId: delivery.order.storeId,
+            storeName: store.name,
+            pickupAddress: store.pickupAddress,
+            pickupPhone: store.phone,
+            customerName: delivery.order.customerName,
+            customerPhone: delivery.order.customerPhone,
+            dropoffAddress:
+              (delivery.order.deliveryAddress as Record<string, unknown> | null) ?? null,
+            subtotalCents: delivery.order.amount,
+            currency: delivery.order.currency,
+            manifestItems: manifestItemsFrom(delivery.order.lineItems),
+          }),
+          PROVIDER_TIMEOUT_MS,
+          undefined,
+          `${providerType} createDelivery`,
+        );
 
         await recordTransition(tx, {
           deliveryId,
@@ -1005,23 +1081,36 @@ export async function createFulfillment(
 
         return { state: 'REQUESTED', dispatched: true };
       } catch (err) {
-        const reason = err instanceof Error ? err.message : String(err);
+        // Prompt #13 (Y4): map the raw provider error to a stable code +
+        // merchant-safe message. `failureReason` stores the code so the
+        // dashboard / retry route never surface a raw provider string.
+        const { code, message } = classifyDeliveryError(err);
         const attempts = delivery.attemptCount + 1;
         const giveUp = attempts >= DISPATCH_MAX_ATTEMPTS;
+
+        log.warn('fulfillment: dispatch failed', {
+          deliveryId,
+          orderId: delivery.orderId,
+          providerType,
+          code,
+          attempts,
+          giveUp,
+          err: err instanceof Error ? err.message : String(err),
+        });
 
         if (giveUp) {
           await recordTransition(tx, {
             deliveryId,
             toState: 'FAILED',
             actor,
-            patch: { attemptCount: attempts, failureReason: reason },
+            patch: { attemptCount: attempts, failureReason: code },
           });
           await createNotification(
             tx as unknown as PrismaClient,
             fulfillmentSetupFailed(
               store.organization.ownerId,
               delivery.orderId,
-              reason,
+              message,
               formatOrderNumber(delivery.order.orderNumber),
             ),
           );
@@ -1029,10 +1118,10 @@ export async function createFulfillment(
           // stay PENDING; the cron retries with the bumped attemptCount.
           await tx.delivery.update({
             where: { id: deliveryId },
-            data: { attemptCount: attempts, failureReason: reason },
+            data: { attemptCount: attempts, failureReason: code },
           });
         }
-        return { state: giveUp ? 'FAILED' : 'PENDING', dispatched: false, error: reason };
+        return { state: giveUp ? 'FAILED' : 'PENDING', dispatched: false, error: message, code };
       }
     },
     { isolationLevel: 'Serializable' },

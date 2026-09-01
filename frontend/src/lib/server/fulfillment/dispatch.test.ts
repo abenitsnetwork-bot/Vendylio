@@ -24,6 +24,7 @@ beforeEach(() => {
   );
   prismaMock.$executeRawUnsafe.mockResolvedValue(0 as never);
   prismaMock.delivery.findMany.mockResolvedValue([] as never);
+  prismaMock.delivery.count.mockResolvedValue(0 as never);
   prismaMock.quote.deleteMany.mockResolvedValue({ count: 0 } as never);
 });
 
@@ -93,5 +94,36 @@ describe('runFulfillmentTick', () => {
       expect.objectContaining({ where: { createdAt: { lt: expect.any(Date) } } }),
     );
     expect(res.quotesPurged).toBe(12);
+  });
+
+  it('counts stale deliveries in each bucket without cancelling anything (Prompt #13 Y2)', async () => {
+    // dispatch batch, poll batch, then 3 stale count() calls
+    prismaMock.delivery.count
+      .mockResolvedValueOnce(2 as never) // staleDispatch
+      .mockResolvedValueOnce(1 as never) // staleUnassigned
+      .mockResolvedValueOnce(3 as never); // staleInTransit
+
+    const res = await runFulfillmentTick(prismaMock as never);
+
+    expect(res.staleDispatch).toBe(2);
+    expect(res.staleUnassigned).toBe(1);
+    expect(res.staleInTransit).toBe(3);
+    // detection only — never writes / cancels
+    expect(prismaMock.delivery.update).not.toHaveBeenCalled();
+    expect(prismaMock.delivery.updateMany).not.toHaveBeenCalled();
+
+    const staleWhere = prismaMock.delivery.count.mock.calls.map(
+      (c) => (c[0] as { where: unknown }).where,
+    );
+    expect(staleWhere[0]).toMatchObject({ state: 'PENDING', order: { status: 'READY' } });
+    expect(staleWhere[1]).toMatchObject({ state: 'REQUESTED' });
+    expect(staleWhere[2]).toMatchObject({ state: { in: ['PICKED_UP', 'OUT_FOR_DELIVERY'] } });
+  });
+
+  it('stays quiet when nothing is stale', async () => {
+    const res = await runFulfillmentTick(prismaMock as never);
+    expect(res.staleDispatch).toBe(0);
+    expect(res.staleUnassigned).toBe(0);
+    expect(res.staleInTransit).toBe(0);
   });
 });

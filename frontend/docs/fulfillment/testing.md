@@ -24,7 +24,10 @@ pnpm --filter frontend exec vitest run src/app/api/stores/fulfillment
 | `createFulfillment` (dispatch, retry-below-cap, cap → FAILED + notify, reconcile) | `service.test.ts` |
 | `applyCourierWebhookEvent` (correlation, terminal notifications, dedupe) | `service.test.ts` |
 | `createQuote` / `priceDeliveryForOrder` (parallel quotes, bind-check, re-quote, 409) | `service.test.ts` |
-| `fulfillment-tick` cron core (claim, poll, purge) | `dispatch.test.ts`, `cron/fulfillment-tick/route.test.ts` |
+| `fulfillment-tick` cron core (claim, poll, purge, **stale-delivery sweep**) | `dispatch.test.ts`, `cron/fulfillment-tick/route.test.ts` |
+| Request timeout + error taxonomy (`fetchWithTimeout`, `withTimeout`, `classifyDeliveryError`) | `http.test.ts` |
+| Terminal side-effect funnel (DELIVERED/FAILED/CANCELLED emit once, per-actor customer-email gate, dedupe) | `service.test.ts` |
+| Provider-not-enabled bypass rejected at checkout (`resolveOrderProviderType`, `priceDeliveryForOrder`) | `config.test.ts`, `service.test.ts`, `security.test.ts` |
 | Webhook routes (signature, funnel, no-op on unknown) | `app/api/webhooks/{uber-direct,doordash}/route.test.ts` |
 | `markPaid` opens a PENDING Delivery for delivery orders only | `orders/markPaid.test.ts` |
 | Checkout re-price / quote validation | `orders/route.test.ts` |
@@ -38,3 +41,30 @@ See the "Verification" section of the plan
 `test-connection` creates nothing; fire a sandbox `delivered` webhook twice →
 one email + one notification; tamper the `deliveryFee` in the `POST /api/orders`
 body → the server value wins.
+
+## Production readiness checklist
+
+**Environment**
+- [ ] Uber Direct + / or DoorDash **production** credentials set (`docs/fulfillment/env-vars.md`)
+- [ ] Webhook URLs registered with each provider; `*_WEBHOOK_*` secrets set
+- [ ] `CRON_SECRET` set; `fulfillment-tick` scheduled (Vercel Pro — 2 min)
+- [ ] Stripe payment configured (delivery is never dispatched before payment)
+
+**Security**
+- [ ] `security.test.ts` green — no `DOORDASH_` / `UBER_DIRECT_` env read outside `lib/server`
+- [ ] `POST /api/orders` ignores any body `deliveryFee` / total; provider decided server-side
+- [ ] Webhook signature verification on (invalid signature → no state change)
+- [ ] Delivery routes 404 (not 403) for a non-owner order
+
+**Reliability**
+- [ ] Idempotency: duplicate webhook / duplicate retry → one delivery, one email
+- [ ] Every provider call time-boxed (`FULFILLMENT_PROVIDER_TIMEOUT_MS`)
+- [ ] Missed terminal webhook → the poll cron advances state **and** emits the email
+- [ ] Advisory lock + Serializable on all four write paths (retry / webhook / cron / cancel)
+- [ ] Retry never creates a second external delivery when one is live (reconciles)
+
+**Operations**
+- [ ] Merchant can see delivery status, Retry (only when valid), Cancel (only when valid)
+- [ ] `fulfillment-tick` response exposes `stale*` counters; `log.warn` on stale
+- [ ] Customer tracking shows a human status + ETA only when the provider gave one
+- [ ] Pickup + Merchant delivery work with **no** courier API calls

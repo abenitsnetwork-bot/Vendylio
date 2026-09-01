@@ -92,17 +92,26 @@ export function enabledProviderTypes(cfg: FulfillmentConfig): ProviderType[] {
 }
 
 /**
- * The provider that should fulfill one delivery order. `explicit` is
- * `Order.deliveryProviderType` — set from Phase 4 onward by the checkout
- * selection. When it is null (a pre-Phase-4 order, or a store with no courier
- * chosen), fall back to the merchant's enabled set: a courier if exactly the
- * config points at one, else MERCHANT.
+ * The provider that should fulfill one delivery order. `explicit` is the
+ * buyer's checkout pick (`Order.deliveryProviderType` / the request body's
+ * `deliveryProviderType`).
+ *
+ * Prompt #13 (R2): an explicit pick is honored ONLY when that provider is
+ * actually switched on in `Store.fulfillmentConfig`. A crafted request naming
+ * a provider the merchant never enabled falls through to the config default
+ * instead of routing a real courier bill through it. When `explicit` is null
+ * (a pre-Phase-4 order, or a store with no courier chosen) the same fallback
+ * applies: a courier if the config points at one, else MERCHANT.
  */
 export function resolveOrderProviderType(
   explicit: string | null,
   cfg: FulfillmentConfig,
 ): ProviderType {
-  if (explicit && (PROVIDER_TYPES as readonly string[]).includes(explicit)) {
+  if (
+    explicit &&
+    (PROVIDER_TYPES as readonly string[]).includes(explicit) &&
+    enabledProviderTypes(cfg).includes(explicit as ProviderType)
+  ) {
     return explicit as ProviderType;
   }
   if (cfg.uberDirect.enabled) return 'UBER_DIRECT';

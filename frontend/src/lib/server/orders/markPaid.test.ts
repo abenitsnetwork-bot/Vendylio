@@ -334,8 +334,8 @@ describe('applyOrderPaidEffects', () => {
       });
     });
 
-    it('honours an explicit Order.deliveryProviderType', async () => {
-      seedDeliveryStore();
+    it('honours an explicit Order.deliveryProviderType when the store enables it', async () => {
+      seedDeliveryStore({ doordash: { enabled: true } });
       await applyOrderPaidEffects(
         prismaMock,
         {
@@ -348,6 +348,26 @@ describe('applyOrderPaidEffects', () => {
       );
       expect(prismaMock.delivery.upsert.mock.calls[0]?.[0]?.create).toMatchObject({
         providerType: 'DOORDASH',
+      });
+    });
+
+    it('ignores an explicit provider the store has NOT enabled (Prompt #13 R2)', async () => {
+      // DoorDash not in the config → the crafted value is dropped, the order
+      // routes through the store's actual method instead of a courier the
+      // merchant never switched on.
+      seedDeliveryStore({ uberDirect: { enabled: true }, merchant: { enabled: false } });
+      await applyOrderPaidEffects(
+        prismaMock,
+        {
+          ...BASE_ORDER,
+          fulfillmentMethod: 'DELIVERY',
+          deliveryFeeCents: 500,
+          deliveryProviderType: 'DOORDASH',
+        },
+        {},
+      );
+      expect(prismaMock.delivery.upsert.mock.calls[0]?.[0]?.create).toMatchObject({
+        providerType: 'UBER_DIRECT',
       });
     });
 

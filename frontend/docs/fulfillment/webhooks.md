@@ -28,7 +28,21 @@ every in-flight courier delivery via the provider's GET-status API roughly
 every 2 minutes and folds the snapshot through the same
 `handleProviderEvent` → state machine. So "picked up" / "on the way" can lag by
 up to the poll interval; the terminal states are real-time via the webhook.
-The poll is also a safety net for a missed terminal webhook.
+
+### Missed-webhook recovery (Prompt #13)
+
+The poll is the safety net for a missed terminal webhook, and since Prompt #13
+it is a **complete** one: the seller "delivery completed / delivery issue"
+notification and the customer status email are enqueued by
+`recordTransition` → `enqueueDeliveryTerminalEffects` — the single funnel every
+path shares (courier webhook, poll cron, the seller's Retry-reconcile, and a
+merchant self-delivery "Mark delivered" click). Whichever path first observes a
+terminal state emits the side-effects exactly once; the others dedupe at the
+`DeliveryEvent` unique + the state-machine's terminal-immutability guard.
+
+`FAILED` / `CANCELLED` only send the customer a "delivery issue" email when the
+courier ended it (actor `PROVIDER` / `CRON`); a merchant-initiated cancel is
+silent to the buyer (the seller is already handling it).
 
 ## Idempotency
 

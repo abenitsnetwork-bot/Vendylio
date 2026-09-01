@@ -19,6 +19,9 @@ beforeEach(() => {
     polled: 5,
     pollAdvanced: 1,
     quotesPurged: 9,
+    staleDispatch: 1,
+    staleUnassigned: 0,
+    staleInTransit: 2,
   });
 });
 
@@ -49,7 +52,13 @@ describe('POST /api/cron/fulfillment-tick', () => {
     const { POST } = await import('./route');
     const res = await POST(makeReq());
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ ok: true, dispatched: 2, quotesPurged: 9 });
+    expect(await res.json()).toMatchObject({
+      ok: true,
+      dispatched: 2,
+      quotesPurged: 9,
+      staleDispatch: 1,
+      staleInTransit: 2,
+    });
     const { withLease } = await import('@/lib/server/leader-lease');
     expect((withLease as Mock).mock.calls[0]![1]).toBe('fulfillment-tick');
   });

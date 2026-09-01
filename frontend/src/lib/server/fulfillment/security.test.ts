@@ -42,3 +42,19 @@ describe('the checkout fee is authoritative, not client-supplied', () => {
     expect(a).toBe(hashDropoffAddress({ street: '1 a st', city: 'x', state: 'y', zip: '1' }));
   });
 });
+
+describe('the delivery provider is a server decision, not a client claim (Prompt #13 R2)', () => {
+  it('POST /api/orders stores the priced provider, never the raw body value', () => {
+    const src = readFileSync(resolve(ROOT, 'src/app/api/orders/route.ts'), 'utf8');
+    // the persisted provider type comes from priceDeliveryForOrder's result…
+    expect(src).toMatch(/deliveryProviderType\s*=\s*priced\.providerType/);
+    // …never assigned straight from the request body
+    expect(src).not.toMatch(/deliveryProviderType:\s*body\./);
+  });
+
+  it('resolveOrderProviderType only honours an enabled provider', () => {
+    const src = readFileSync(resolve(ROOT, 'src/lib/server/fulfillment/config.ts'), 'utf8');
+    const fn = src.slice(src.indexOf('export function resolveOrderProviderType'));
+    expect(fn).toMatch(/enabledProviderTypes\(cfg\)\.includes/);
+  });
+});

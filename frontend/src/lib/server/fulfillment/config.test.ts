@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { enabledProviderTypes, readFulfillmentConfig, serializeFulfillmentConfig } from './config';
+import {
+  enabledProviderTypes,
+  readFulfillmentConfig,
+  resolveOrderProviderType,
+  serializeFulfillmentConfig,
+} from './config';
 
 describe('readFulfillmentConfig', () => {
   it('backfills a legacy self_manual store (empty config)', () => {
@@ -94,5 +99,41 @@ describe('enabledProviderTypes', () => {
       deliveryFeeCents: 0,
     });
     expect(enabledProviderTypes(cfg)).toEqual(['UBER_DIRECT', 'DOORDASH', 'MERCHANT', 'PICKUP']);
+  });
+});
+
+describe('resolveOrderProviderType (Prompt #13 R2)', () => {
+  const uberOnly = readFulfillmentConfig({
+    fulfillmentConfig: { uberDirect: { enabled: true }, merchant: { enabled: false } },
+    deliveryProvider: 'uber_direct',
+    deliveryFeeCents: 0,
+  });
+
+  it('honours an explicit pick that IS enabled', () => {
+    const cfg = readFulfillmentConfig({
+      fulfillmentConfig: { doordash: { enabled: true }, merchant: { enabled: true } },
+      deliveryProvider: 'self_manual',
+      deliveryFeeCents: 0,
+    });
+    expect(resolveOrderProviderType('DOORDASH', cfg)).toBe('DOORDASH');
+  });
+
+  it('ignores an explicit pick that is NOT enabled and falls back to the config default', () => {
+    expect(resolveOrderProviderType('DOORDASH', uberOnly)).toBe('UBER_DIRECT');
+  });
+
+  it('ignores an unknown / garbage explicit value', () => {
+    expect(resolveOrderProviderType('LYFT', uberOnly)).toBe('UBER_DIRECT');
+    expect(resolveOrderProviderType('', uberOnly)).toBe('UBER_DIRECT');
+  });
+
+  it('falls back to MERCHANT when no courier is enabled', () => {
+    const merchantOnly = readFulfillmentConfig({
+      fulfillmentConfig: { merchant: { enabled: true } },
+      deliveryProvider: 'self_manual',
+      deliveryFeeCents: 500,
+    });
+    expect(resolveOrderProviderType('UBER_DIRECT', merchantOnly)).toBe('MERCHANT');
+    expect(resolveOrderProviderType(null, merchantOnly)).toBe('MERCHANT');
   });
 });
