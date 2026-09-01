@@ -6,6 +6,7 @@ import { api, ApiError } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
+import { StoreQrCode } from '@/components/seller/StoreQrCode';
 import { useOnboarding } from '../layout';
 
 interface ChecklistItem {
@@ -79,6 +80,18 @@ export default function LaunchStepPage() {
     }
   }
 
+  async function onShare() {
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({ title: store?.name ?? 'My store', url: storeUrl });
+        return;
+      } catch {
+        // user cancelled / unsupported — fall through to copy
+      }
+    }
+    void onCopyLink();
+  }
+
   if (live) {
     return (
       <div className="mx-auto max-w-lg text-center">
@@ -93,20 +106,33 @@ export default function LaunchStepPage() {
           Share your link to start taking orders. That&apos;s the whole job now — every order lands
           in your dashboard.
         </p>
-        <Card className="mb-6 p-4">
+        <Card className="mb-6 flex flex-col items-center gap-4 p-6">
+          <StoreQrCode url={storeUrl} />
           <p className="break-all font-mono text-sm text-foreground">{storeUrl}</p>
+          <p className="text-xs text-muted-foreground">
+            Scan to open your store, or share the link below.
+          </p>
         </Card>
         <div className="flex flex-col gap-3">
           <a href={`/s/${store.slug}`} target="_blank" rel="noopener noreferrer">
             <Button className="w-full">View My Store</Button>
           </a>
-          <button
-            type="button"
-            onClick={onCopyLink}
-            className="w-full rounded-xl border border-border px-6 py-3 text-sm font-semibold text-foreground hover:bg-secondary"
-          >
-            {copied ? 'Copied!' : 'Copy Store Link'}
-          </button>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={onCopyLink}
+              className="rounded-xl border border-border px-6 py-3 text-sm font-semibold text-foreground hover:bg-secondary"
+            >
+              {copied ? 'Copied!' : 'Copy Link'}
+            </button>
+            <button
+              type="button"
+              onClick={onShare}
+              className="rounded-xl border border-border px-6 py-3 text-sm font-semibold text-foreground hover:bg-secondary"
+            >
+              Share
+            </button>
+          </div>
           <Link
             href="/dashboard"
             className="w-full rounded-xl px-6 py-3 text-center text-sm font-semibold text-muted-foreground"

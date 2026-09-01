@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { Button } from '@/components/ui/Button';
+import { StoreQrCode } from './StoreQrCode';
 
 // Instagram and TikTok have no public web-intent for sharing a prefilled
 // link — unlike WhatsApp/email, there's no URL scheme to open a composer
@@ -64,6 +65,11 @@ export function ShareStoreModal({ storeUrl, onClose }: { storeUrl: string; onClo
             {copied === 'main' ? 'Copied!' : 'Copy'}
           </button>
         </div>
+      </div>
+
+      <div className="mb-8 flex flex-col items-center gap-2">
+        <StoreQrCode url={storeUrl} size={140} />
+        <p className="text-xs text-muted-foreground">Scan in person or print for your counter</p>
       </div>
 
       <div className="mb-8">
