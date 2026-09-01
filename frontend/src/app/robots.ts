@@ -10,7 +10,16 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: '*',
       allow: '/',
-      disallow: ['/api/', '/dashboard/', '/admin/', '/onboarding/', '/settings/', '/verify-email/'],
+      disallow: [
+        '/api/',
+        '/dashboard/',
+        '/admin/',
+        '/onboarding/',
+        '/settings/',
+        '/verify-email/',
+        '/forgot-password',
+        '/reset-password',
+      ],
     },
     sitemap: `${origin}/sitemap.xml`,
     host: origin,

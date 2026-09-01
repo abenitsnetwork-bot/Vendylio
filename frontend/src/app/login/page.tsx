@@ -3,7 +3,7 @@
 // Styled to match the Vendylio design tokens for visual coherence.
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api, ApiError, storeCsrfToken } from '@/lib/api';
@@ -22,6 +22,17 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [captchaToken, setCaptchaToken] = useState('');
   const [captchaNonce, setCaptchaNonce] = useState(0);
+  // Flash after a completed password reset (reset-password sends ?reset=1 and
+  // issues no cookies — the user signs in fresh here). Read from the URL in an
+  // effect so the page needs no Suspense boundary.
+  const [justReset, setJustReset] = useState(false);
+  useEffect(() => {
+    try {
+      setJustReset(new URLSearchParams(window.location.search).get('reset') === '1');
+    } catch {
+      /* no-op */
+    }
+  }, []);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -69,6 +80,14 @@ export default function LoginPage() {
           </h1>
           <p className="text-sm text-muted-foreground">Log in to manage your store.</p>
         </div>
+        {justReset && (
+          <p
+            role="status"
+            className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800"
+          >
+            Password updated. Log in with your new password.
+          </p>
+        )}
         <form onSubmit={onSubmit} className="flex flex-col gap-5">
           <Field label="Email Address" htmlFor="email">
             <input
@@ -91,6 +110,11 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               className={inputClass}
             />
+            <p className="mt-1.5 text-right text-sm">
+              <Link href="/forgot-password" className="font-medium text-primary">
+                Forgot password?
+              </Link>
+            </p>
           </Field>
           {error && (
             <p role="alert" className="text-sm text-red-600">

@@ -14,6 +14,12 @@ describe('robots()', () => {
     );
   });
 
+  it('keeps the password-recovery pages out of the index', () => {
+    const r = robots();
+    const rule = Array.isArray(r.rules) ? r.rules[0]! : r.rules;
+    expect(rule.disallow).toEqual(expect.arrayContaining(['/forgot-password', '/reset-password']));
+  });
+
   it('points at the absolute sitemap URL', () => {
     expect(robots().sitemap).toBe('https://vendylio.example/sitemap.xml');
   });
