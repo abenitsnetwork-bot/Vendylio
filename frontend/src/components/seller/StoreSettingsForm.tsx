@@ -377,7 +377,7 @@ export function StoreSettingsForm({
               href={`/s/${store.slug}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground"
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-border bg-secondary px-5 py-2.5 text-sm font-semibold text-foreground"
             >
               <Icon i="store" size={16} />
               View My Store

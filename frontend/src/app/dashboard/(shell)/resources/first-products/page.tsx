@@ -93,7 +93,7 @@ export default function GuideFirstProductsPage() {
           ctaText="Go to Product Manager"
           ctaHref="/dashboard/products/new"
           extraContent={
-            <div className="my-12 rounded-lg bg-accent p-8 text-accent-foreground">
+            <div className="my-12 rounded-lg bg-panel p-8 text-panel-foreground">
               <h3 className="mb-3 font-headings text-lg font-bold">The Takeaway</h3>
               <p className="text-base leading-relaxed opacity-90">
                 Your first 5 products set the tone for your store. Quality photos, clear

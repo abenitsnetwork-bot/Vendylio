@@ -150,7 +150,7 @@ export function BulkAdjustModal({
               type="button"
               onClick={onSubmit}
               disabled={submitting}
-              className="rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-50"
+              className="rounded-lg border border-border bg-secondary px-5 py-2 text-sm font-semibold text-foreground disabled:opacity-50"
             >
               {submitting ? 'Applying…' : 'Apply'}
             </button>

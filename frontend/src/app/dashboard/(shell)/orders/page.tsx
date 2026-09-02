@@ -134,7 +134,7 @@ function OrdersPageInner() {
                 onClick={() => setStatus(f.value)}
                 className={`rounded-full border px-4 py-1.5 text-xs font-semibold ${
                   status === f.value
-                    ? 'border-accent bg-accent text-accent-foreground'
+                    ? 'border-panel bg-panel text-panel-foreground'
                     : 'border-border bg-card text-foreground hover:bg-secondary'
                 }`}
               >

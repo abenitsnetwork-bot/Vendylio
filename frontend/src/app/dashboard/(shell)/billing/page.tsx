@@ -333,7 +333,7 @@ export default function BillingPayoutsPage() {
                             onClick={() => setInterval(iv)}
                             className={`px-3 py-1.5 ${
                               interval === iv
-                                ? 'bg-accent text-accent-foreground'
+                                ? 'bg-panel text-panel-foreground'
                                 : 'text-muted-foreground'
                             }`}
                           >
@@ -346,7 +346,7 @@ export default function BillingPayoutsPage() {
                       type="button"
                       onClick={onUpgrade}
                       disabled={planBusy}
-                      className="rounded-lg bg-accent px-6 py-3 text-sm font-semibold text-accent-foreground disabled:opacity-50"
+                      className="rounded-lg border border-border bg-secondary px-6 py-3 text-sm font-semibold text-foreground disabled:opacity-50"
                     >
                       {planBusy ? 'Opening…' : 'Upgrade to Pro'}
                     </button>

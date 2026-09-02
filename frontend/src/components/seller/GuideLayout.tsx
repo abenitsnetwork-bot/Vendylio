@@ -119,7 +119,7 @@ export function GuideLayout({
         <p className="mb-4 text-muted-foreground">Ready to get started?</p>
         <Link
           href={ctaHref}
-          className="inline-block rounded-lg bg-accent px-8 py-3 font-semibold text-accent-foreground"
+          className="inline-block rounded-lg border border-border bg-secondary px-8 py-3 font-semibold text-foreground"
         >
           {ctaText}
         </Link>

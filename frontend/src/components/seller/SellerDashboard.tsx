@@ -146,7 +146,7 @@ export function SellerDashboard({
             <button
               type="button"
               onClick={() => setShareOpen(true)}
-              className="flex-shrink-0 rounded-md bg-accent px-4 py-2 text-xs font-semibold text-accent-foreground hover:opacity-90"
+              className="flex-shrink-0 rounded-md border border-border bg-secondary px-4 py-2 text-xs font-semibold text-foreground hover:opacity-90"
             >
               Share your store
             </button>
@@ -294,7 +294,7 @@ export function SellerDashboard({
           </Card>
 
           <div className="flex flex-col gap-4">
-            <div className="rounded-lg bg-accent p-6 text-accent-foreground">
+            <div className="rounded-lg bg-panel p-6 text-panel-foreground">
               <Icon i="share-2" size={20} className="mb-4" />
               <p className="mb-2 text-sm font-semibold">Share Your Store</p>
               <p className="mb-4 text-xs" style={{ opacity: 0.9 }}>
@@ -303,19 +303,19 @@ export function SellerDashboard({
               <button
                 type="button"
                 onClick={() => setShareOpen(true)}
-                className="w-full rounded-md bg-white py-2 text-xs font-semibold text-accent hover:opacity-90"
+                className="w-full rounded-md bg-white py-2 text-xs font-semibold text-foreground hover:opacity-90"
               >
                 Share Link
               </button>
             </div>
 
             <Card>
-              <Icon i="package" size={20} className="mb-4 text-accent" />
+              <Icon i="package" size={20} className="mb-4 text-foreground" />
               <p className="mb-2 text-sm font-semibold text-foreground">Add Products</p>
               <p className="mb-4 text-xs text-muted-foreground">Build your product catalog.</p>
               <Link
                 href="/dashboard/products/new"
-                className="block w-full rounded-md bg-accent py-2 text-center text-xs font-semibold text-accent-foreground hover:opacity-90"
+                className="block w-full rounded-md border border-border bg-secondary py-2 text-center text-xs font-semibold text-foreground hover:bg-border"
               >
                 Add Now
               </Link>
@@ -401,7 +401,7 @@ export function SellerDashboard({
                 <div key={step.title} className="flex items-start gap-3">
                   <div
                     className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                      done ? 'bg-accent text-accent-foreground' : 'bg-muted text-foreground'
+                      done ? 'bg-panel text-panel-foreground' : 'bg-muted text-foreground'
                     }`}
                   >
                     {done ? '✓' : i + 1}

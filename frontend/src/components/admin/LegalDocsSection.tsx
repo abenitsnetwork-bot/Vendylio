@@ -100,7 +100,7 @@ export function LegalDocsSection() {
             onClick={() => setSlug(s)}
             className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${
               s === slug
-                ? 'bg-accent text-accent-foreground'
+                ? 'bg-panel text-panel-foreground'
                 : 'border border-border text-muted-foreground hover:bg-secondary'
             }`}
           >

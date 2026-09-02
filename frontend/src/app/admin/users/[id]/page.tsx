@@ -178,7 +178,7 @@ export default function AdminUserDetailPage({ params }: { params: Promise<{ id: 
                   type="button"
                   disabled={busy}
                   onClick={resendVerification}
-                  className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-50"
+                  className="rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-semibold text-foreground disabled:opacity-50"
                 >
                   Resend verification email
                 </button>
@@ -226,7 +226,7 @@ export default function AdminUserDetailPage({ params }: { params: Promise<{ id: 
                     type="button"
                     disabled={busy}
                     onClick={() => changeStatus('ACTIVE')}
-                    className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-50"
+                    className="rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-semibold text-foreground disabled:opacity-50"
                   >
                     Restore account
                   </button>

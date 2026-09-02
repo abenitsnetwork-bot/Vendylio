@@ -150,7 +150,7 @@ export default function AdminUsersPage() {
         </select>
         <button
           type="submit"
-          className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground"
+          className="rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-semibold text-foreground"
         >
           Search
         </button>

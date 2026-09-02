@@ -82,7 +82,7 @@ function OrderRow({
           type="button"
           disabled={busy}
           onClick={onAction}
-          className="flex-shrink-0 rounded-lg bg-accent px-4 py-2 text-xs font-semibold text-accent-foreground disabled:opacity-50"
+          className="flex-shrink-0 rounded-lg border border-border bg-secondary px-4 py-2 text-xs font-semibold text-foreground disabled:opacity-50"
         >
           {actionLabel}
         </button>

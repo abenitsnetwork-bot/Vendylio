@@ -17,7 +17,7 @@ export function ProUpgradeCard({ title, children }: { title: string; children: R
       <p className="mb-4 text-sm text-muted-foreground">{children}</p>
       <Link
         href="/dashboard/billing"
-        className="inline-flex items-center gap-1.5 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground"
+        className="inline-flex items-center gap-1.5 rounded-md border border-border bg-secondary px-4 py-2 text-sm font-semibold text-foreground"
       >
         Upgrade to Pro
         <Icon i="arrow-right" size={15} />

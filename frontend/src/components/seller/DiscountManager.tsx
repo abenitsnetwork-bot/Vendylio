@@ -264,7 +264,7 @@ export function DiscountManager() {
         <button
           type="button"
           onClick={() => setCreating(true)}
-          className="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground"
+          className="rounded-lg border border-border bg-secondary px-5 py-2.5 text-sm font-semibold text-foreground"
         >
           + New promo code
         </button>

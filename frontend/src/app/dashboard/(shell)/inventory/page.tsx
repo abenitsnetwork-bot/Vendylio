@@ -214,7 +214,7 @@ export default function InventoryPage() {
                   onClick={() => setFilter(f.value)}
                   className={`rounded-full border px-4 py-1.5 text-xs font-semibold ${
                     filter === f.value
-                      ? 'border-accent bg-accent text-accent-foreground'
+                      ? 'border-panel bg-panel text-panel-foreground'
                       : 'border-border bg-card text-foreground hover:bg-secondary'
                   }`}
                 >
@@ -232,7 +232,7 @@ export default function InventoryPage() {
               <button
                 type="button"
                 onClick={() => setBulkOpen(true)}
-                className="rounded-md bg-accent px-4 py-1.5 text-xs font-semibold text-accent-foreground"
+                className="rounded-md border border-border bg-secondary px-4 py-1.5 text-xs font-semibold text-foreground"
               >
                 Adjust selection
               </button>

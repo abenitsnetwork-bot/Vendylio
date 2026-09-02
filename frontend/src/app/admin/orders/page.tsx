@@ -146,7 +146,7 @@ function AdminOrdersInner() {
             onClick={() => setStatus(s)}
             className={`rounded-full border px-4 py-1.5 text-xs font-semibold ${
               status === s
-                ? 'border-accent bg-accent text-accent-foreground'
+                ? 'border-panel bg-panel text-panel-foreground'
                 : 'border-border bg-card text-foreground hover:bg-secondary'
             }`}
           >

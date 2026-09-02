@@ -4,9 +4,10 @@ import { cn } from '@/lib/utils';
 type Variant = 'primary' | 'accent' | 'outline' | 'dark';
 
 const VARIANT_CLASSES: Record<Variant, string> = {
-  // The default call-to-action is the vivid brand coral. `accent` is kept as
-  // an explicit alias; `dark` is the escape hatch for the rare near-black button.
-  primary: 'bg-accent text-accent-foreground hover:opacity-90',
+  // The default call-to-action is soft sage (`--color-secondary`) with a
+  // border for definition. `accent` keeps the brand coral for the rare spot
+  // that wants it; `dark` is the near-black escape hatch.
+  primary: 'bg-secondary text-foreground border border-border hover:bg-border',
   accent: 'bg-accent text-accent-foreground hover:opacity-90',
   outline: 'bg-card text-foreground border border-border hover:bg-secondary',
   dark: 'bg-foreground text-background hover:opacity-90',

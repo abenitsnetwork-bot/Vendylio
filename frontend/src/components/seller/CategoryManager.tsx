@@ -286,7 +286,7 @@ export function CategoryManager() {
           type="button"
           onClick={onAdd}
           disabled={adding || !newName.trim()}
-          className="flex-shrink-0 whitespace-nowrap rounded-lg bg-accent px-5 text-sm font-semibold text-accent-foreground disabled:opacity-50"
+          className="flex-shrink-0 whitespace-nowrap rounded-lg border border-border bg-secondary px-5 text-sm font-semibold text-foreground disabled:opacity-50"
         >
           Add
         </button>

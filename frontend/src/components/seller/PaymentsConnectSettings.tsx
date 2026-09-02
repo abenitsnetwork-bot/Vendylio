@@ -79,7 +79,7 @@ export function PaymentsConnectSettings() {
             <div
               className={`mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full ${
                 status.stripeOnboardingStatus === 'ACTIVE'
-                  ? 'bg-accent text-accent-foreground'
+                  ? 'bg-panel text-panel-foreground'
                   : status.stripeOnboardingStatus === 'RESTRICTED'
                     ? 'bg-red-100 text-red-600'
                     : 'bg-secondary text-muted-foreground'
@@ -105,7 +105,7 @@ export function PaymentsConnectSettings() {
               type="button"
               onClick={onConnect}
               disabled={connecting}
-              className="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground disabled:opacity-50"
+              className="rounded-lg border border-border bg-secondary px-5 py-2.5 text-sm font-semibold text-foreground disabled:opacity-50"
             >
               {connecting
                 ? 'Redirecting…'
