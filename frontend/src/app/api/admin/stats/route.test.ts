@@ -80,14 +80,15 @@ describe('GET /api/admin/stats', () => {
     expect(prismaMock.store.count).toHaveBeenCalledWith({ where: { published: true } });
   });
 
-  it('scopes GMV and platform revenue to PAID orders only', async () => {
+  it('scopes GMV and platform revenue to every paid order (PAID + fulfilled)', async () => {
     await GET(makeGet());
+    const paidStatuses = { in: ['PAID', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED'] };
     expect(prismaMock.order.aggregate).toHaveBeenCalledWith({
-      where: { status: 'PAID' },
+      where: { status: paidStatuses },
       _sum: { amount: true },
     });
     expect(prismaMock.order.aggregate).toHaveBeenCalledWith({
-      where: { status: 'PAID' },
+      where: { status: paidStatuses },
       _sum: { commissionAmount: true },
     });
   });

@@ -17,6 +17,7 @@ import { requireAdmin } from '@/lib/server/middleware';
 import { prisma } from '@/lib/server/prisma';
 import { enforceAdminRateLimit } from '@/lib/server/middleware/rate-limit-by-userid';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
+import { PAID_ORDER_STATUSES } from '@/lib/server/orders/paidStatuses';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WINDOW_DAYS = 30;
@@ -93,7 +94,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         where: { status: 'FAILED', createdAt: { gte: prevPeriodStart, lt: periodStart } },
       }),
       prisma.order.findMany({
-        where: { status: 'PAID', paidAt: { gte: spanStart } },
+        // "Paid" = reached PAID and possibly moved on through fulfillment — an
+        // exact status:'PAID' match dropped every fulfilled sale from GMV.
+        where: { status: { in: [...PAID_ORDER_STATUSES] }, paidAt: { gte: spanStart } },
         select: { amount: true, commissionAmount: true, paidAt: true, provider: true },
       }),
       prisma.customer.findMany({

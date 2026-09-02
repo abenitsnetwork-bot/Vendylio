@@ -86,7 +86,8 @@ describe('GET /api/admin/analytics', () => {
     await GET(makeGet());
     const orderArgs = prismaMock.order.findMany.mock.calls[0]?.[0];
     expect(orderArgs?.where).toMatchObject({
-      status: 'PAID',
+      // Every order that reached PAID counts — not just ones still sitting in PAID.
+      status: { in: ['PAID', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED'] },
       paidAt: { gte: new Date('2026-01-01T00:00:00.000Z') },
     });
     const customerArgs = prismaMock.customer.findMany.mock.calls[0]?.[0];

@@ -23,6 +23,7 @@ import { requireAdmin } from '@/lib/server/middleware';
 import { prisma } from '@/lib/server/prisma';
 import { enforceAdminRateLimit } from '@/lib/server/middleware/rate-limit-by-userid';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
+import { PAID_ORDER_STATUSES } from '@/lib/server/orders/paidStatuses';
 
 function startOfUtcDay(now: Date): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -50,8 +51,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       prisma.organization.count(),
       prisma.store.count({ where: { published: true } }),
       prisma.order.count({ where: { createdAt: { gte: startOfUtcDay(now) } } }),
-      prisma.order.aggregate({ where: { status: 'PAID' }, _sum: { amount: true } }),
-      prisma.order.aggregate({ where: { status: 'PAID' }, _sum: { commissionAmount: true } }),
+      prisma.order.aggregate({
+        where: { status: { in: [...PAID_ORDER_STATUSES] } },
+        _sum: { amount: true },
+      }),
+      prisma.order.aggregate({
+        where: { status: { in: [...PAID_ORDER_STATUSES] } },
+        _sum: { commissionAmount: true },
+      }),
       prisma.delivery.count({ where: { status: 'REQUESTED' } }),
       prisma.order.count({ where: { status: 'FAILED' } }),
     ]);

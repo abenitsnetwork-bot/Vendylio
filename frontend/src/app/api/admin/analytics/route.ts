@@ -19,6 +19,7 @@ import { requireAdmin } from '@/lib/server/middleware';
 import { prisma } from '@/lib/server/prisma';
 import { enforceAdminRateLimit } from '@/lib/server/middleware/rate-limit-by-userid';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
+import { PAID_ORDER_STATUSES } from '@/lib/server/orders/paidStatuses';
 
 const MONTHS_BACK = 6;
 
@@ -73,7 +74,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     const [paidOrders, customers] = await Promise.all([
       prisma.order.findMany({
-        where: { status: 'PAID', paidAt: { gte: windowStart } },
+        // Any order that reached PAID — including ones since advanced to
+        // PREPARING/READY/OUT_FOR_DELIVERY/DELIVERED — is a real sale.
+        where: { status: { in: [...PAID_ORDER_STATUSES] }, paidAt: { gte: windowStart } },
         select: { amount: true, paidAt: true, lineItems: true },
       }),
       prisma.customer.findMany({

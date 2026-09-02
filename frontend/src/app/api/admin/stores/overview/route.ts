@@ -21,6 +21,7 @@ import { enforceAdminRateLimit } from '@/lib/server/middleware/rate-limit-by-use
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 import { getStoreOpenState } from '@/lib/server/store/availability';
 import { startOfStoreMonth } from '@/lib/server/store/timezoneWindow';
+import { PAID_ORDER_STATUSES } from '@/lib/server/orders/paidStatuses';
 
 const PREVIEW_LIMIT = 12;
 
@@ -83,18 +84,24 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           template: true,
           _count: { select: { products: true } },
           reviews: { where: { visible: true }, select: { rating: true } },
-          orders: { where: { status: 'PAID' }, select: { amount: true } },
+          orders: {
+            where: { status: { in: [...PAID_ORDER_STATUSES] } },
+            select: { amount: true },
+          },
         },
       }),
       prisma.order.count(),
       prisma.review.aggregate({ where: { visible: true }, _avg: { rating: true } }),
       prisma.order.aggregate({
-        where: { status: 'PAID', createdAt: { gte: thisMonthStart } },
+        where: {
+          status: { in: [...PAID_ORDER_STATUSES] },
+          createdAt: { gte: thisMonthStart },
+        },
         _sum: { amount: true },
       }),
       prisma.order.aggregate({
         where: {
-          status: 'PAID',
+          status: { in: [...PAID_ORDER_STATUSES] },
           createdAt: { gte: prevMonthStart, lt: thisMonthStart },
         },
         _sum: { amount: true },
