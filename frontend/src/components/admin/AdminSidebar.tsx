@@ -27,6 +27,7 @@ const NAV_ITEMS: NavItem[] = [
 // api/admin/me/route.ts — gated purely on role here, same as the
 // last-SUPERADMIN guard elsewhere in the back office).
 const SUPERADMIN_NAV_ITEMS: NavItem[] = [
+  { href: '/admin/reports', label: 'Reports', icon: 'bar-chart-3' },
   { href: '/admin/site-content', label: 'Site Content', icon: 'image' },
   { href: '/admin/settings', label: 'Settings', icon: 'settings' },
 ];
