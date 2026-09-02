@@ -3,24 +3,42 @@ import { NextResponse, type NextRequest } from 'next/server';
 // Next 16 Proxy (formerly `middleware.ts` — renamed, same behaviour). Lives at
 // src/ because app/ is under src/; a root-level file is silently ignored.
 //
-// Silent-refresh gate for protected pages.
+// Two jobs:
 //
-// The (15-min) access cookie can expire while a (7-day) refresh cookie is
-// still valid — typically when a tab sat unfocused or the laptop slept. The
-// (authed) layout calling /api/auth/me would 401 and the user would be kicked
-// to /login. This proxy catches that case BEFORE the page renders and
-// bounces the request through /api/auth/refresh-and-return, which mints fresh
-// cookies and 302s back to the original URL — invisible to the user.
+// 1. Silent-refresh gate for protected pages.
 //
-// Protected paths are configured via AUTH_PROTECTED_PREFIXES (comma-separated,
-// e.g. "/dashboard,/account"). Empty by default — the API surface is the only
-// thing shipped, so out-of-the-box this proxy is a no-op.
+//    The (15-min) access cookie can expire while a (7-day) refresh cookie is
+//    still valid — typically when a tab sat unfocused or the laptop slept. The
+//    (authed) layout calling /api/auth/me would 401 and the user would be
+//    kicked to /login. This proxy catches that case BEFORE the page renders
+//    and bounces the request through /api/auth/refresh-and-return, which mints
+//    fresh cookies and 302s back to the original URL — invisible to the user.
 //
-// Phase 4b — custom storefront domains. A request whose Host is NOT one of
-// our own hosts is a merchant's connected domain (shop.brand.com): we rewrite
-// the storefront paths to /s/<host>/… so the same [slug] route renders it
-// (getPublicStore resolves slug-OR-customDomain). The page reads the injected
-// `x-vendylio-domain` header to emit root-relative links + the right canonical.
+//    Protected paths are configured via AUTH_PROTECTED_PREFIXES (comma-
+//    separated, e.g. "/dashboard,/account"). Empty by default — the API
+//    surface is the only thing shipped, so out-of-the-box this proxy is a
+//    no-op for auth.
+//
+// 2. Custom storefront domains (Phase 4b). A request whose Host is NOT one of
+//    our own hosts is a merchant's connected domain (shop.brand.com): we
+//    rewrite the storefront paths to /s/<host>/… so the same [slug] route
+//    renders it (getPublicStore resolves slug-OR-customDomain). The page reads
+//    the injected `x-vendylio-domain` header to emit root-relative links + the
+//    right canonical.
+//
+// 3. Content-Security-Policy — phase 2 (enforcing, nonce-based). CSP phase 1
+//    shipped a static `Content-Security-Policy-Report-Only` header from
+//    next.config.ts (still emitted — the two run in parallel during the
+//    transition). Phase 2 promotes it to the enforcing `Content-Security-
+//    Policy` header with a per-request nonce on `script-src` (drops
+//    `'unsafe-inline'`). A nonce must be minted per request and threaded into
+//    the render, so the header has to move here (per-request) — a static CDN
+//    header cannot carry a fresh nonce. Next.js reads the nonce out of the
+//    `Content-Security-Policy` REQUEST header we set below and auto-applies it
+//    to every framework/bundle/inline <script> it emits. Pages that read this
+//    nonce are forced to dynamic rendering (see `export const dynamic` in
+//    src/app/layout.tsx) — Next cannot inject a nonce into a prerendered page.
+//    See frontend/docs/security/csp.md.
 //
 // Edge runtime: no DB, no bcrypt, no Prisma. We only inspect cookies/headers
 // and build redirects/rewrites.
@@ -29,6 +47,46 @@ const COOKIE_PREFIX = process.env.COOKIE_PREFIX || 'app';
 const ACCESS_COOKIE = `${COOKIE_PREFIX}-token`;
 const REFRESH_COOKIE = `${COOKIE_PREFIX}-refresh`;
 const LOGIN_PATH = process.env.AUTH_LOGIN_PATH || '/login';
+
+// ── Content-Security-Policy (enforcing, phase 2) ─────────────────────────────
+// Mirrors the non-script directives of next.config.ts `cspReportOnly`. The one
+// real change is `script-src`: `'unsafe-inline'` is replaced by a per-request
+// `'nonce-…'` + `'strict-dynamic'` (a nonce'd bootstrap script is trusted to
+// load the rest of the bundle graph; browsers that support `'strict-dynamic'`
+// ignore the host allowlist, older ones fall back to it). The hCaptcha host
+// entries stay for that fallback. `'unsafe-eval'` is added in dev only (React's
+// dev runtime needs it; production React/Next never eval).
+//
+// `style-src` keeps `'unsafe-inline'` on purpose: Next/font + Tailwind inject
+// inline <style> and style= attributes, style-based attacks are far lower
+// severity, and nonce-ing every style attribute is not feasible. Standard
+// practice.
+function buildCsp(nonce: string): string {
+  const isDev = process.env.NODE_ENV === 'development';
+  const scriptSrc = [
+    "'self'",
+    `'nonce-${nonce}'`,
+    "'strict-dynamic'",
+    'https://js.hcaptcha.com',
+    'https://*.hcaptcha.com',
+    ...(isDev ? ["'unsafe-eval'"] : []),
+  ].join(' ');
+
+  return [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    `script-src ${scriptSrc}`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https://res.cloudinary.com",
+    "font-src 'self' data:",
+    "connect-src 'self' https://*.hcaptcha.com https://*.sentry.io https://*.ingest.sentry.io",
+    'frame-src https://*.hcaptcha.com',
+    "form-action 'self'",
+    'report-uri /api/csp-report',
+  ].join('; ');
+}
 
 function appHost(): string {
   try {
@@ -66,7 +124,7 @@ function isStorefrontPath(pathname: string): boolean {
   );
 }
 
-function rewriteCustomDomain(req: NextRequest): NextResponse | null {
+function rewriteCustomDomain(req: NextRequest, reqHeaders: Headers): NextResponse | null {
   const host = req.headers.get('host');
   if (!host || isOwnHost(host)) return null;
 
@@ -76,14 +134,14 @@ function rewriteCustomDomain(req: NextRequest): NextResponse | null {
   if (!isStorefrontPath(pathname)) {
     // Not a storefront path on a custom domain — leave it alone (no dashboard
     // via a merchant domain). Skip the auth guards below too.
-    return NextResponse.next();
+    return NextResponse.next({ request: { headers: reqHeaders } });
   }
 
   const url = req.nextUrl.clone();
   url.pathname = `/s/${bare}${pathname === '/' ? '' : pathname}`;
   url.search = search;
 
-  const headers = new Headers(req.headers);
+  const headers = new Headers(reqHeaders);
   headers.set('x-vendylio-domain', bare);
   return NextResponse.rewrite(url, { request: { headers } });
 }
@@ -98,9 +156,11 @@ function isAdminPath(pathname: string): boolean {
 // the surface undiscoverable to visitors with no session at all. A
 // logged-in admin whose short-lived access cookie has expired is bounced
 // through the same silent-refresh path as any other protected page.
-function guardAdmin(req: NextRequest): NextResponse | null {
+function guardAdmin(req: NextRequest, reqHeaders: Headers): NextResponse | null {
   if (!isAdminPath(req.nextUrl.pathname)) return null;
-  if (req.cookies.get(ACCESS_COOKIE)?.value) return NextResponse.next();
+  if (req.cookies.get(ACCESS_COOKIE)?.value) {
+    return NextResponse.next({ request: { headers: reqHeaders } });
+  }
 
   const { pathname, search } = req.nextUrl;
   if (req.cookies.get(REFRESH_COOKIE)?.value) {
@@ -122,18 +182,38 @@ function isAuthedPath(pathname: string): boolean {
 }
 
 export function proxy(req: NextRequest): NextResponse {
-  const domainRewrite = rewriteCustomDomain(req);
-  if (domainRewrite) return domainRewrite;
+  // Mint a fresh nonce per request and stage it on the request headers so the
+  // downstream RSC render can read it (`headers().get('x-nonce')`) and Next can
+  // parse it out of the `Content-Security-Policy` request header to auto-nonce
+  // its own <script> tags.
+  const nonce = crypto.randomUUID().replace(/-/g, '');
+  const csp = buildCsp(nonce);
+  const reqHeaders = new Headers(req.headers);
+  reqHeaders.set('x-nonce', nonce);
+  reqHeaders.set('Content-Security-Policy', csp);
 
-  const adminGuard = guardAdmin(req);
-  if (adminGuard) return adminGuard;
+  // Attach the enforcing CSP to whatever response we ultimately return. The
+  // static `Content-Security-Policy-Report-Only` from next.config.ts is
+  // emitted alongside it (both run during the transition).
+  const finalize = (res: NextResponse): NextResponse => {
+    res.headers.set('Content-Security-Policy', csp);
+    return res;
+  };
 
-  if (AUTHED_PREFIXES.length === 0) return NextResponse.next();
+  const domainRewrite = rewriteCustomDomain(req, reqHeaders);
+  if (domainRewrite) return finalize(domainRewrite);
+
+  const adminGuard = guardAdmin(req, reqHeaders);
+  if (adminGuard) return finalize(adminGuard);
+
+  const pass = () => finalize(NextResponse.next({ request: { headers: reqHeaders } }));
+
+  if (AUTHED_PREFIXES.length === 0) return pass();
 
   const { pathname, search } = req.nextUrl;
-  if (!isAuthedPath(pathname)) return NextResponse.next();
+  if (!isAuthedPath(pathname)) return pass();
 
-  if (req.cookies.get(ACCESS_COOKIE)?.value) return NextResponse.next();
+  if (req.cookies.get(ACCESS_COOKIE)?.value) return pass();
 
   const target = pathname + search;
 
@@ -141,13 +221,13 @@ export function proxy(req: NextRequest): NextResponse {
     const url = req.nextUrl.clone();
     url.pathname = LOGIN_PATH;
     url.search = `?next=${encodeURIComponent(target)}`;
-    return NextResponse.redirect(url, 303);
+    return finalize(NextResponse.redirect(url, 303));
   }
 
   const url = req.nextUrl.clone();
   url.pathname = '/api/auth/refresh-and-return';
   url.search = `?next=${encodeURIComponent(target)}`;
-  return NextResponse.redirect(url, 303);
+  return finalize(NextResponse.redirect(url, 303));
 }
 
 export const config = {

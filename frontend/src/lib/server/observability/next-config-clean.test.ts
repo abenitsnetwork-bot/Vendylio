@@ -8,6 +8,8 @@ import { resolve } from 'node:path';
 
 // From frontend/src/lib/server/observability/ → frontend/next.config.ts is 4 levels up.
 const NEXT_CONFIG = resolve(__dirname, '../../../../next.config.ts');
+// frontend/src/proxy.ts is 3 levels up.
+const PROXY = resolve(__dirname, '../../../proxy.ts');
 
 describe('next.config.ts is clean of deprecated config (OPS-05)', () => {
   const src = readFileSync(NEXT_CONFIG, 'utf8');
@@ -25,13 +27,31 @@ describe('next.config.ts is clean of deprecated config (OPS-05)', () => {
     expect(src).not.toMatch(/experimental[^}]*instrumentation/i);
   });
 
-  // UX-01 (Prompt #15) — CSP is in phase 1: Report-Only. Promoting it to the
-  // enforcing header must be a deliberate change (needs nonce-based script-src
-  // first), so lock the current state.
-  it('ships CSP as Report-Only, not yet enforcing', () => {
+  // UX-01 (Prompt #15) — CSP phase 1 was Report-Only in next.config.ts.
+  // Phase 2 (this branch) promoted it to the enforcing `Content-Security-Policy`
+  // header with a per-request nonce, which lives in src/proxy.ts (a nonce can't
+  // ride a static CDN header). next.config.ts KEEPS emitting the Report-Only
+  // header during the transition — the two run in parallel until the enforcing
+  // policy has been observed clean, then Report-Only is removed in a follow-up.
+  it('still ships the Report-Only header from next.config.ts (transition)', () => {
     expect(src).toContain('Content-Security-Policy-Report-Only');
     expect(src).toMatch(/report-uri \/api\/csp-report/);
-    // No bare enforcing header yet.
+    // The enforcing header is NOT in next.config.ts — it must carry a nonce, so
+    // it is built per-request in proxy.ts instead.
     expect(src).not.toMatch(/key:\s*['"]Content-Security-Policy['"]/);
+  });
+
+  it('proxy.ts builds the enforcing CSP with a per-request nonce', () => {
+    const proxySrc = readFileSync(PROXY, 'utf8');
+    // Enforcing header (not Report-Only) set on the response.
+    expect(proxySrc).toMatch(/set\(\s*['"]Content-Security-Policy['"]/);
+    // Nonce-based, strict-dynamic script-src — 'unsafe-inline' is gone.
+    expect(proxySrc).toContain("'strict-dynamic'");
+    expect(proxySrc).toMatch(/nonce-\$\{nonce\}/);
+    expect(proxySrc).toMatch(/script-src \$\{scriptSrc\}/);
+    // The nonce is staged on the request headers for Next's auto-injection.
+    expect(proxySrc).toMatch(/set\(\s*['"]x-nonce['"]/);
+    // report-uri kept on the enforcing policy too.
+    expect(proxySrc).toMatch(/report-uri \/api\/csp-report/);
   });
 });

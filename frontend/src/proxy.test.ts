@@ -88,6 +88,41 @@ describe('custom domain rewrite (Phase 4b)', () => {
   });
 });
 
+describe('Content-Security-Policy (phase 2 — enforcing, nonce)', () => {
+  const csp = (res: Response) => res.headers.get('Content-Security-Policy') ?? '';
+  const nonceOf = (res: Response) => /'nonce-([0-9a-f]+)'/.exec(csp(res))?.[1] ?? null;
+
+  it('sets an enforcing CSP on a plain pass-through', () => {
+    const res = proxy(request('/'));
+    expect(csp(res)).toContain("script-src 'self'");
+    expect(csp(res)).toContain("'strict-dynamic'");
+    expect(csp(res)).toMatch(/'nonce-[0-9a-f]{16,}'/);
+  });
+
+  it("drops 'unsafe-inline' from script-src", () => {
+    const scriptSrc = /script-src ([^;]+)/.exec(csp(proxy(request('/'))))?.[1] ?? '';
+    expect(scriptSrc).not.toContain("'unsafe-inline'");
+  });
+
+  it('mints a fresh nonce per request', () => {
+    const a = nonceOf(proxy(request('/')));
+    const b = nonceOf(proxy(request('/')));
+    expect(a).toBeTruthy();
+    expect(b).toBeTruthy();
+    expect(a).not.toBe(b);
+  });
+
+  it('sets the CSP on the admin 404, the silent-refresh redirect, and a custom-domain rewrite', () => {
+    expect(csp(proxy(request('/admin')))).toContain('script-src');
+    expect(csp(proxy(request('/admin/orders', { [REFRESH]: 'rjwt' })))).toContain('script-src');
+    expect(csp(proxy(request('/', {}, 'shop.brand.com')))).toContain('script-src');
+  });
+
+  it('keeps the report-uri on the enforcing policy', () => {
+    expect(csp(proxy(request('/')))).toContain('report-uri /api/csp-report');
+  });
+});
+
 describe('custom domain rewrite — own apex + www (regression)', () => {
   const orig = process.env.APP_URL;
   afterEach(() => {

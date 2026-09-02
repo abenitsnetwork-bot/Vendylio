@@ -21,6 +21,16 @@ const fraunces = Fraunces({
   display: 'swap',
 });
 
+// CSP phase 2 (enforcing, nonce-based — see src/proxy.ts + docs/security/csp.md).
+// A per-request nonce can only be injected into a page that is rendered per
+// request. Setting `dynamic` on the root layout opts the whole app out of
+// static prerendering so every page's <script> tags receive the nonce; without
+// it, prerendered pages (login, pricing, dashboard shells, …) would ship
+// nonce-less scripts that the enforcing `script-src` blocks. These pages are
+// all lightweight (auth-gated or low-traffic marketing) and the high-traffic
+// storefront routes were already dynamic, so the cost is marginal.
+export const dynamic = 'force-dynamic';
+
 // metadataBase lets every page's relative `alternates.canonical` and
 // `openGraph` URLs resolve to absolute ones (storefront pages rely on this).
 export const metadata: Metadata = {
