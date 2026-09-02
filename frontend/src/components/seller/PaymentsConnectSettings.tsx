@@ -65,7 +65,7 @@ export function PaymentsConnectSettings() {
   }
 
   return (
-    <Card className="p-8">
+    <Card className="p-5 sm:p-8">
       <h2 className="mb-6 border-b border-border pb-6 font-headings text-lg font-bold text-foreground">
         Stripe Connect
       </h2>

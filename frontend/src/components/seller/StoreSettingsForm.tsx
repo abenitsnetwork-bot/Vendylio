@@ -169,7 +169,7 @@ export function StoreSettingsForm({
 
   return (
     <form onSubmit={onSubmit} className="space-y-8">
-      <Card className="p-8">
+      <Card className="p-5 sm:p-8">
         <div className="mb-6 flex items-center gap-3 border-b border-border pb-6">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-secondary">
             <span className="text-sm">🏬</span>
@@ -252,7 +252,7 @@ export function StoreSettingsForm({
         </div>
       </Card>
 
-      <Card className="p-8">
+      <Card className="p-5 sm:p-8">
         <div className="mb-6 border-b border-border pb-6">
           <h2 className="font-headings text-lg font-bold text-foreground">
             Storefront Hero & Promo
@@ -287,7 +287,7 @@ export function StoreSettingsForm({
         </div>
       </Card>
 
-      <Card className="p-8">
+      <Card className="p-5 sm:p-8">
         <div className="mb-6 border-b border-border pb-6">
           <h2 className="font-headings text-lg font-bold text-foreground">
             Manual Payment Methods
@@ -333,7 +333,7 @@ export function StoreSettingsForm({
         </div>
       </Card>
 
-      <Card className="p-8">
+      <Card className="p-5 sm:p-8">
         <div className="mb-6 border-b border-border pb-6">
           <h2 className="font-headings text-lg font-bold text-foreground">Storefront Template</h2>
         </div>
@@ -356,7 +356,7 @@ export function StoreSettingsForm({
         </div>
       </Card>
 
-      <Card className="p-8">
+      <Card className="p-5 sm:p-8">
         <div className="mb-6 border-b border-border pb-6">
           <h2 className="font-headings text-lg font-bold text-foreground">Preview & Share</h2>
           <p className="mt-1 text-sm text-muted-foreground">

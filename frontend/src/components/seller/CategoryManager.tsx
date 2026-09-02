@@ -133,7 +133,7 @@ export function CategoryManager() {
   }
 
   return (
-    <Card className="p-8">
+    <Card className="p-5 sm:p-8">
       <div className="mb-6 border-b border-border pb-6">
         <h2 className="font-headings text-lg font-bold text-foreground">Product Categories</h2>
         <p className="mt-1 text-sm text-muted-foreground">

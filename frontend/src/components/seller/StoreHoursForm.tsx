@@ -120,7 +120,7 @@ export function StoreHoursForm({
 
   return (
     <form onSubmit={onSubmit} className="space-y-8">
-      <Card className="p-8">
+      <Card className="p-5 sm:p-8">
         <h2 className="mb-1 font-headings text-lg font-bold text-foreground">Accepting orders</h2>
         <p className="mb-5 text-sm text-muted-foreground">
           Pause to stop taking new orders immediately — your storefront stays visible, but customers
@@ -159,7 +159,7 @@ export function StoreHoursForm({
         )}
       </Card>
 
-      <Card className="p-8">
+      <Card className="p-5 sm:p-8">
         <h2 className="mb-1 font-headings text-lg font-bold text-foreground">Opening hours</h2>
         <p className="mb-5 text-sm text-muted-foreground">
           Shown on your storefront as “currently open / closed”. This does <strong>not</strong>{' '}

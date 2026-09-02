@@ -97,7 +97,7 @@ function SettingsTabs() {
           await logout();
         }}
       />
-      <div className="px-4 py-12 lg:px-14">
+      <div className="px-4 py-8 lg:px-14 lg:py-12">
         <div className="mx-auto max-w-4xl">
           <div className="mb-8">
             <Link
@@ -118,21 +118,23 @@ function SettingsTabs() {
             </p>
           </div>
 
-          <div className="mb-8 flex gap-2 border-b border-border">
-            {TABS.map((tab) => (
-              <button
-                key={tab.value}
-                type="button"
-                onClick={() => setTab(tab.value)}
-                className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-semibold ${
-                  activeTab === tab.value
-                    ? 'border-accent text-accent'
-                    : 'border-transparent text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+          <div className="mb-8 -mx-4 overflow-x-auto border-b border-border px-4 lg:mx-0 lg:px-0">
+            <div className="flex w-max gap-2">
+              {TABS.map((tab) => (
+                <button
+                  key={tab.value}
+                  type="button"
+                  onClick={() => setTab(tab.value)}
+                  className={`-mb-px whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-semibold ${
+                    activeTab === tab.value
+                      ? 'border-accent text-accent'
+                      : 'border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}

@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { api } from '@/lib/api';
 import { useUser } from '@/contexts/AuthContext';
+import { MobileNavDrawer, type MobileNavItem } from '@/components/nav/MobileNav';
 
 interface NavItem {
   href: string;
@@ -29,14 +30,13 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard/resources', label: 'Help & Resources', icon: 'life-buoy' },
 ];
 
-// Mobile keeps only the highest-traffic destinations in the fixed bottom
-// bar — the full label list doesn't fit a phone width. Everything is still
-// one tap away from the desktop sidebar or the Dashboard home's own cards.
+// Mobile keeps only the four highest-traffic destinations in the fixed
+// bottom bar — more than that and the labels collide on a phone. Everything
+// else is one tap away via the "Menu" drawer (opened from the header).
 const MOBILE_NAV_ITEMS: NavItem[] = [
   NAV_ITEMS.find((i) => i.href === '/dashboard')!,
   NAV_ITEMS.find((i) => i.href === '/dashboard/orders')!,
   NAV_ITEMS.find((i) => i.href === '/dashboard/products')!,
-  NAV_ITEMS.find((i) => i.href === '/dashboard/inventory')!,
   NAV_ITEMS.find((i) => i.href === '/dashboard/settings')!,
 ];
 
@@ -75,8 +75,32 @@ export function SellerSidebar() {
 
   if (!user) return null;
 
+  const drawerItems: MobileNavItem[] = NAV_ITEMS.map((item) => {
+    const badge = badgeFor(item.href);
+    return badge > 0 ? { ...item, badge } : item;
+  });
+
   return (
     <>
+      {/* Full nav — the "Menu" drawer (phone only, opened from the header) */}
+      <MobileNavDrawer
+        items={drawerItems}
+        homeHref="/dashboard"
+        footer={
+          storeSlug ? (
+            <a
+              href={`/s/${storeSlug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary"
+            >
+              <Icon i="store" size={18} />
+              View Store ↗
+            </a>
+          ) : undefined
+        }
+      />
+
       {/* Desktop sidebar */}
       <nav
         aria-label="Seller navigation"

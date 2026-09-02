@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { AccountMenu } from '@/components/seller/AccountMenu';
 import { NotificationBell } from '@/components/seller/NotificationBell';
+import { MobileNavTrigger } from '@/components/nav/MobileNav';
 
 /** Shared header for authenticated /dashboard/* pages — logo, notifications,
  * and the account dropdown (profile, settings, billing, security, sign out). */
@@ -29,9 +30,12 @@ export function SellerHeader({
 
   return (
     <header className="flex items-center justify-between border-b border-border bg-card px-4 py-4 lg:px-14">
-      <Link href="/dashboard" className="flex items-center">
-        <img src="/logo.png" alt="Vendylio" className="h-9 w-auto" />
-      </Link>
+      <div className="flex items-center gap-1.5">
+        <MobileNavTrigger className="-ml-2" />
+        <Link href="/dashboard" className="flex items-center">
+          <img src="/logo.png" alt="Vendylio" className="h-9 w-auto" />
+        </Link>
+      </div>
       <div className="flex items-center gap-6">
         <NotificationBell />
         <div ref={ref} className="relative">

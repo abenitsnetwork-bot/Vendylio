@@ -3,6 +3,7 @@
 import { SellerSidebar } from '@/components/seller/SellerSidebar';
 import { ForcePasswordChange } from '@/components/auth/ForcePasswordChange';
 import { UpgradeModalHost } from '@/components/seller/UpgradeModalHost';
+import { MobileNavProvider } from '@/components/nav/MobileNav';
 
 // Phase 9 — persistent nav shell for the day-to-day seller pages (Dashboard,
 // Orders, Products, Customers, Reviews, Delivery, Settings, Billing,
@@ -16,11 +17,13 @@ import { UpgradeModalHost } from '@/components/seller/UpgradeModalHost';
 // nav around whatever the page renders, it does not centralize the header.
 export default function DashboardShellLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-background">
-      <ForcePasswordChange />
-      <UpgradeModalHost />
-      <SellerSidebar />
-      <div className="pb-16 lg:pb-0 lg:pl-56">{children}</div>
-    </div>
+    <MobileNavProvider>
+      <div className="min-h-screen bg-background">
+        <ForcePasswordChange />
+        <UpgradeModalHost />
+        <SellerSidebar />
+        <div className="pb-16 lg:pb-0 lg:pl-56">{children}</div>
+      </div>
+    </MobileNavProvider>
   );
 }

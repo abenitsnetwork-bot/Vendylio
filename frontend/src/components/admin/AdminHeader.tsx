@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Icon } from '@/components/ui/Icon';
+import { MobileNavTrigger } from '@/components/nav/MobileNav';
 import type { AdminInfo } from '@/contexts/AdminContext';
 
 export function AdminHeader({ admin }: { admin: AdminInfo }) {
@@ -11,11 +12,15 @@ export function AdminHeader({ admin }: { admin: AdminInfo }) {
 
   return (
     <header className="flex items-center justify-between border-b border-border bg-card px-4 py-4 lg:px-8">
-      <p className="text-sm text-muted-foreground">
-        Signed in as <span className="font-medium text-foreground">{admin.email}</span>
-      </p>
-      <div className="flex items-center gap-3">
-        <span className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-accent">
+      <div className="flex min-w-0 items-center gap-2">
+        <MobileNavTrigger className="-ml-2" />
+        <p className="truncate text-sm text-muted-foreground">
+          <span className="hidden sm:inline">Signed in as </span>
+          <span className="font-medium text-foreground">{admin.email}</span>
+        </p>
+      </div>
+      <div className="flex flex-shrink-0 items-center gap-3">
+        <span className="hidden rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-accent sm:inline">
           {admin.role}
         </span>
         <button

@@ -82,7 +82,7 @@ export function AccountSecurityForm({ user }: { user: User }) {
 
   return (
     <div className="flex flex-col gap-8">
-      <Card className="p-8">
+      <Card className="p-5 sm:p-8">
         <h2 className="mb-2 border-b border-border pb-6 font-headings text-lg font-bold text-foreground">
           {hasPassword ? 'Changer le mot de passe' : 'Définir un mot de passe'}
         </h2>
@@ -142,7 +142,7 @@ export function AccountSecurityForm({ user }: { user: User }) {
         </form>
       </Card>
 
-      <Card className="p-8">
+      <Card className="p-5 sm:p-8">
         <h2 className="mb-6 border-b border-border pb-6 font-headings text-lg font-bold text-foreground">
           Comptes liés
         </h2>

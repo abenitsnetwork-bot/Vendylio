@@ -6,6 +6,7 @@ import { AdminProvider, useAdminAuth, type AdminInfo } from '@/contexts/AdminCon
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
 import { AdminHeader } from '@/components/admin/AdminHeader';
 import { ForcePasswordChange } from '@/components/auth/ForcePasswordChange';
+import { MobileNavProvider } from '@/components/nav/MobileNav';
 
 // The admin layout (a server component) has already verified this request
 // belongs to an ADMIN/SUPERADMIN — it calls `notFound()` otherwise. So this
@@ -26,26 +27,28 @@ function Chrome({ serverAdmin, children }: { serverAdmin: AdminInfo; children: R
   }, [error, router]);
 
   return (
-    <div className="min-h-screen bg-background">
-      <ForcePasswordChange />
-      <AdminSidebar />
-      <div className="pb-16 lg:pb-0 lg:pl-56">
-        <AdminHeader admin={shown} />
-        {error === 'NETWORK' && (
-          <div className="flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800 lg:px-8">
-            <span>Couldn&apos;t refresh admin permissions.</span>
-            <button
-              type="button"
-              onClick={() => void refresh()}
-              className="font-semibold underline"
-            >
-              Retry
-            </button>
-          </div>
-        )}
-        {children}
+    <MobileNavProvider>
+      <div className="min-h-screen bg-background">
+        <ForcePasswordChange />
+        <AdminSidebar />
+        <div className="pb-16 lg:pb-0 lg:pl-56">
+          <AdminHeader admin={shown} />
+          {error === 'NETWORK' && (
+            <div className="flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800 lg:px-8">
+              <span>Couldn&apos;t refresh admin permissions.</span>
+              <button
+                type="button"
+                onClick={() => void refresh()}
+                className="font-semibold underline"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          {children}
+        </div>
       </div>
-    </div>
+    </MobileNavProvider>
   );
 }
 
