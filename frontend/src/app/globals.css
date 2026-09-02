@@ -31,3 +31,36 @@
   --font-body: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-headings: var(--font-fraunces), ui-serif, Georgia, serif;
 }
+
+/* "How it works" — a glowing orb that rides the connector line, station to
+   station (01→02→03→04), then loops. Node centres of the 4-col grid sit at
+   12.5 / 37.5 / 62.5 / 87.5 %. */
+@keyframes hiw-orb {
+  0% {
+    left: 12.5%;
+    opacity: 0;
+  }
+  5% {
+    opacity: 1;
+  }
+  28% {
+    left: 37.5%;
+  }
+  36% {
+    left: 37.5%;
+  }
+  58% {
+    left: 62.5%;
+  }
+  66% {
+    left: 62.5%;
+  }
+  95% {
+    left: 87.5%;
+    opacity: 1;
+  }
+  100% {
+    left: 87.5%;
+    opacity: 0;
+  }
+}

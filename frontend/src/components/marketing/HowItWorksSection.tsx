@@ -38,6 +38,7 @@ const STEPS: { num: string; icon: IconName; title: string; desc: string; chip: s
 export function HowItWorksSection() {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
+  const [motionOk, setMotionOk] = useState(false);
 
   useEffect(() => {
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -45,6 +46,7 @@ export function HowItWorksSection() {
       setVisible(true);
       return;
     }
+    setMotionOk(true);
     const el = ref.current;
     if (!el) return;
     const obs = new IntersectionObserver(
@@ -91,6 +93,20 @@ export function HowItWorksSection() {
             transition: 'transform 900ms cubic-bezier(0.4, 0, 0.2, 1)',
           }}
         />
+
+        {/* Glowing orb riding the line: 01 → 02 → 03 → 04, on a loop */}
+        {visible && motionOk && (
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute top-[1.15rem] z-10 hidden h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white lg:block"
+            style={{
+              boxShadow:
+                '0 0 16px 5px rgba(45, 212, 191, 0.85), 0 0 6px 2px rgba(255, 255, 255, 0.95)',
+              animation: 'hiw-orb 4600ms cubic-bezier(0.55, 0, 0.45, 1) infinite',
+              animationDelay: '700ms',
+            }}
+          />
+        )}
 
         <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
           {STEPS.map((step, i) => (
