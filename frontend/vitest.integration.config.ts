@@ -18,6 +18,11 @@ export default defineConfig({
   test: {
     include: ['src/test-integration/**/*.itest.ts'],
     environment: 'node',
+    // Prisma's query engine + vitest worker THREADS deadlock (the worker's IPC
+    // channel closes mid-run → "Channel closed"). A single forked child process
+    // runs Prisma cleanly and keeps the one-DB-connection guarantee.
+    pool: 'forks',
+    poolOptions: { forks: { singleFork: true } },
     // One real connection to one real database — the whole point is to exercise
     // the pool + advisory locks + Serializable isolation the way production
     // does. Parallel files racing on the same tables would be non-deterministic.
@@ -26,6 +31,9 @@ export default defineConfig({
     // vitest.setup.ts first — sets JWT_SECRET / ENCRYPTION_KEY before any
     // module imports @/lib/server/auth (which throws at import on a weak secret).
     setupFiles: ['./vitest.setup.ts', './src/test-integration/setup.ts'],
+    // `prisma migrate deploy` runs here, in the main process — execFileSync from
+    // inside a worker deadlocks on Windows.
+    globalSetup: ['./src/test-integration/global-setup.ts'],
     // Using THIS config is the opt-in. `pnpm test` uses vitest.config.ts and
     // only globs *.test.ts, so these never run there or in CI.
     env: { RUN_INTEGRATION: '1' },

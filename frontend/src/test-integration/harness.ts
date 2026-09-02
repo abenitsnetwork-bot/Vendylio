@@ -8,41 +8,10 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/server/prisma';
 import { createAccessToken, COOKIE_NAME } from '@/lib/server/auth';
 import { truncateAll } from './db';
+import { cookieJar, resetCookieJar } from './cookie-jar';
 
 export { prisma };
-
-// ── Cookie jar (backs the next/headers mock in setup.ts) ────────────────────
-interface JarEntry {
-  name: string;
-  value: string;
-  options?: Record<string, unknown>;
-}
-const jar = new Map<string, JarEntry>();
-
-export function cookieJar() {
-  return {
-    get(name: string): { name: string; value: string } | undefined {
-      const e = jar.get(name);
-      return e ? { name: e.name, value: e.value } : undefined;
-    },
-    set(name: string, value: string, options?: Record<string, unknown>): void {
-      jar.set(name, { name, value, ...(options ? { options } : {}) });
-    },
-    delete(name: string): void {
-      jar.delete(name);
-    },
-    has(name: string): boolean {
-      return jar.has(name);
-    },
-    getAll(): Array<{ name: string; value: string }> {
-      return [...jar.values()].map((e) => ({ name: e.name, value: e.value }));
-    },
-  };
-}
-
-export function resetCookieJar(): void {
-  jar.clear();
-}
+export { cookieJar, resetCookieJar };
 
 /** Put a signed access cookie for `user` into the jar (skips the login route). */
 export async function authAs(user: { id: string; email: string }): Promise<void> {
@@ -51,7 +20,7 @@ export async function authAs(user: { id: string; email: string }): Promise<void>
 }
 
 export function logout(): void {
-  jar.delete(COOKIE_NAME);
+  cookieJar().delete(COOKIE_NAME);
 }
 
 // ── Request builders ───────────────────────────────────────────────────────

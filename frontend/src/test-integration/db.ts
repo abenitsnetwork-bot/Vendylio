@@ -1,9 +1,9 @@
 // frontend/src/test-integration/db.ts — real-database plumbing for the C1 harness.
 //
-// Resolves the test database URL, runs migrations once, and truncates every
-// table between tests. NEVER touches the dev/prod database — resolveTestDbUrl()
-// refuses a URL that looks like the one in .env / .env.local.
-import { execFileSync } from 'node:child_process';
+// Resolves the test database URL and truncates every table between tests
+// (`prisma migrate deploy` itself runs in global-setup.ts). NEVER touches the
+// dev/prod database — resolveTestDbUrl() refuses a URL that looks like the one
+// in .env / .env.local.
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 
@@ -64,18 +64,22 @@ export function resolveTestDbUrl(): string {
   return url;
 }
 
-let migrated = false;
-
-/** `prisma migrate deploy` against the test database — once per process. */
-export function ensureMigrated(testDbUrl: string): void {
-  if (migrated) return;
-  execFileSync('pnpm', ['exec', 'prisma', 'migrate', 'deploy'], {
-    cwd: FRONTEND_ROOT,
-    stdio: 'inherit',
-    env: { ...process.env, DATABASE_URL: testDbUrl, DIRECT_URL: testDbUrl },
-    shell: process.platform === 'win32',
-  });
-  migrated = true;
+/**
+ * Neon's pooled (pgbouncer) endpoint can't run migrations — Prisma takes a
+ * session-level advisory lock that pgbouncer's transaction pooling breaks, so
+ * `migrate deploy` hangs. Derive the DIRECT endpoint (drop `-pooler` + the
+ * pgbouncer query params) for migrations; the app itself keeps the pooled URL
+ * so the P2028 regression test sees a real connection_limit=1 pool.
+ */
+export function toDirectUrl(url: string): string {
+  return url
+    .replace('-pooler.', '.')
+    .replace(/[?&]pgbouncer=true/g, '')
+    .replace(/[?&]connection_limit=\d+/g, '')
+    .replace(/[?&]pool_timeout=\d+/g, '')
+    .replace(/\?&/, '?')
+    .replace(/&&/g, '&')
+    .replace(/[?&]$/, '');
 }
 
 /**

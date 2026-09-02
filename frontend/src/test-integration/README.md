@@ -20,10 +20,18 @@ pnpm --filter frontend test:integration
 ```
 
 Keep `connection_limit=1` in the URL — that's what makes the P2028 regression
-test (`withdrawal-race.itest.ts`) meaningful.
+test (`withdrawal-race.itest.ts`) meaningful. Use the **pooled** endpoint
+(`…-pooler…`); `global-setup.ts` derives the direct endpoint for
+`prisma migrate deploy` on its own (pgbouncer can't run migrations).
 
-`setup.ts` runs `prisma migrate deploy` against the test database on the first
-`beforeAll`, so a fresh/empty branch is fine.
+`global-setup.ts` runs `prisma migrate deploy` once before the suite, so a
+fresh/empty branch is fine. The whole suite runs in a single forked process
+(`pool: 'forks'`) — Prisma's engine + vitest worker threads deadlock. Expect
+~2 min against a cloud branch (every route call is a real round-trip).
+
+The suite also pins its own withdrawal-guard config (min amount 1, no PIN) in
+`setup.ts` so it doesn't inherit a `.env` with `WITHDRAWAL_MIN_AMOUNT` /
+`WITHDRAWAL_REQUIRE_PIN` set.
 
 ## Guards
 

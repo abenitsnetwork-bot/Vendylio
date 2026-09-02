@@ -78,13 +78,13 @@ describe('C1 — concurrent withdrawal race', () => {
     const [a, b] = await Promise.all([requestWithdrawal(4000), requestWithdrawal(4000)]);
     const statuses = [a.status, b.status].sort();
 
-    // One 201; the other is INSUFFICIENT_BALANCE (400) or, on a rare
+    // One 201; the other is INSUFFICIENT_BALANCE (422) or, on a rare
     // serialization abort, TRANSIENT_CONFLICT (409).
     expect(statuses).toContain(201);
     expect(statuses.filter((s) => s === 201)).toHaveLength(1);
     const loser = a.status === 201 ? b : a;
-    expect([400, 409]).toContain(loser.status);
-    if (loser.status === 400) {
+    expect([422, 409]).toContain(loser.status);
+    if (loser.status === 422) {
       expect((await readJson(loser)).code).toBe('INSUFFICIENT_BALANCE');
     }
 
@@ -100,7 +100,7 @@ describe('C1 — concurrent withdrawal race', () => {
 
     // $30 already reserved of $50 — a $30 follow-up must fail.
     const second = await requestWithdrawal(3000);
-    expect(second.status).toBe(400);
+    expect(second.status).toBe(422);
     expect((await readJson(second)).code).toBe('INSUFFICIENT_BALANCE');
 
     expect(await prisma.withdrawal.count({ where: { userId: owner.id } })).toBe(1);
