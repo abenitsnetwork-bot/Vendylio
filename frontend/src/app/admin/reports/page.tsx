@@ -5,7 +5,7 @@ import { api, ApiError } from '@/lib/api';
 import { useAdminAuth } from '@/contexts/AdminContext';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { KpiTile } from '@/components/admin/dashboard/KpiTile';
-import { formatCell } from '@/lib/server/reports/format';
+import { ReportPreviewModal } from '@/components/admin/ReportPreviewModal';
 import type { ReportData } from '@/lib/server/reports/types';
 
 interface ReportMeta {
@@ -92,7 +92,7 @@ export default function AdminReportsPage() {
   const [report, setReport] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [rowQuery, setRowQuery] = useState('');
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [lastPreview, setLastPreview] = useState<string | null>(null);
 
   const meta = cat?.reports.find((r) => r.type === selected) ?? null;
@@ -129,12 +129,12 @@ export default function AdminReportsPage() {
       setLoading(true);
       setError(null);
       setReport(null);
-      setRowQuery('');
       const qs = new URLSearchParams(query);
       qs.set('format', 'preview');
       api<ReportData>(`/api/admin/reports/${t}?${qs.toString()}`)
         .then((r) => {
           setReport(r);
+          setPreviewOpen(true);
           const stamp = new Date().toLocaleString('en-US', {
             month: 'short',
             day: 'numeric',
@@ -183,18 +183,6 @@ export default function AdminReportsPage() {
       : storeId
         ? (cat?.stores.find((s) => s.id === storeId)?.name ?? 'One store')
         : 'All stores';
-
-  const filteredRows = report
-    ? rowQuery.trim()
-      ? report.rows.filter((row) =>
-          report.columns.some((c) =>
-            String(row[c.key] ?? '')
-              .toLowerCase()
-              .includes(rowQuery.trim().toLowerCase()),
-          ),
-        )
-      : report.rows
-    : [];
 
   return (
     <div className="px-4 py-8 font-body lg:px-8">
@@ -245,6 +233,7 @@ export default function AdminReportsPage() {
                 onClick={() => {
                   setSelected(r.type);
                   setReport(null);
+                  setPreviewOpen(false);
                   setError(null);
                 }}
                 className={`group flex flex-col rounded-lg border p-4 text-left transition ${
@@ -351,142 +340,57 @@ export default function AdminReportsPage() {
             </div>
           </div>
 
-          {report && (
-            <div className="space-y-4 border-t border-border pt-4">
-              {/* result header */}
-              <div className="flex flex-wrap items-center gap-3">
-                <div>
-                  <h3 className="font-headings text-base font-bold text-foreground">
-                    {report.title}
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    {report.period ? report.period.label : 'Point-in-time snapshot'} ·{' '}
-                    {report.rows.length.toLocaleString('en-US')} rows
-                  </p>
-                </div>
-                <div className="ml-auto flex items-center gap-2">
-                  <div className="relative">
-                    <Icon
-                      i="search"
-                      size={13}
-                      className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-                    />
-                    <input
-                      value={rowQuery}
-                      onChange={(e) => setRowQuery(e.target.value)}
-                      placeholder="Filter rows…"
-                      className="w-40 rounded-lg border border-border bg-input py-1.5 pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground"
-                    />
-                  </div>
-                  <a
-                    href={exportHref('csv')}
-                    className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-secondary"
-                  >
-                    <Icon i="download" size={13} />
-                    CSV
-                  </a>
-                  <a
-                    href={exportHref('pdf')}
-                    className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-secondary"
-                  >
-                    <Icon i="download" size={13} />
-                    PDF
-                  </a>
-                </div>
+          {report && !previewOpen && (
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-secondary/30 px-4 py-3">
+              <Icon i="check-circle" size={16} className="text-green-600" />
+              <div className="mr-auto">
+                <p className="text-sm font-semibold text-foreground">{report.title} — ready</p>
+                <p className="text-xs text-muted-foreground">
+                  {report.period ? report.period.label : 'Snapshot'} ·{' '}
+                  {report.rows.length.toLocaleString('en-US')} rows
+                </p>
               </div>
-
-              {/* KPI cards */}
-              {report.kpis.length > 0 && (
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-                  {report.kpis.map((k) => (
-                    <div
-                      key={k.label}
-                      className="rounded-lg border border-border bg-secondary/30 p-3"
-                    >
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        {k.label}
-                      </p>
-                      <p className="mt-1 font-headings text-lg font-bold text-foreground">
-                        {k.value}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* table */}
-              <div className="overflow-x-auto rounded-lg border border-border">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border bg-secondary/40 text-left text-xs text-muted-foreground">
-                      {report.columns.map((c) => (
-                        <th
-                          key={c.key}
-                          className={`whitespace-nowrap px-3 py-2 font-semibold ${
-                            c.format && c.format !== 'text' && c.format !== 'date'
-                              ? 'text-right'
-                              : ''
-                          }`}
-                        >
-                          {c.label}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredRows.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={report.columns.length}
-                          className="px-3 py-10 text-center text-muted-foreground"
-                        >
-                          {report.rows.length === 0
-                            ? 'No data for this period.'
-                            : 'No rows match your filter.'}
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredRows.map((row, i) => (
-                        <tr
-                          key={i}
-                          className="border-b border-border last:border-b-0 odd:bg-card even:bg-secondary/20 hover:bg-accent/[0.04]"
-                        >
-                          {report.columns.map((c) => (
-                            <td
-                              key={c.key}
-                              className={`whitespace-nowrap px-3 py-2 text-foreground ${
-                                c.format && c.format !== 'text' && c.format !== 'date'
-                                  ? 'text-right tabular-nums'
-                                  : ''
-                              }`}
-                            >
-                              {formatCell(row[c.key] ?? null, c.format)}
-                            </td>
-                          ))}
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {report.notes && report.notes.length > 0 && (
-                <ul className="space-y-1 text-xs text-muted-foreground">
-                  {report.notes.map((n, i) => (
-                    <li key={i}>• {n}</li>
-                  ))}
-                </ul>
-              )}
+              <button
+                type="button"
+                onClick={() => setPreviewOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-white hover:brightness-95"
+              >
+                <Icon i="eye" size={13} />
+                Open preview
+              </button>
+              <a
+                href={exportHref('csv')}
+                className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-secondary"
+              >
+                <Icon i="download" size={13} />
+                CSV
+              </a>
+              <a
+                href={exportHref('pdf')}
+                className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-secondary"
+              >
+                <Icon i="download" size={13} />
+                PDF
+              </a>
             </div>
           )}
 
           {!report && !loading && (
             <p className="border-t border-border pt-4 text-sm text-muted-foreground">
-              Set the period{meta.usesStoreFilter ? ' and store' : ''}, then hit Preview to build
-              the report. Export to CSV or PDF once it&apos;s ready.
+              Set the period{meta.usesStoreFilter ? ' and store' : ''}, then hit Preview — it opens
+              a print-ready view you can print or export to CSV / PDF.
             </p>
           )}
         </section>
+      )}
+
+      {report && previewOpen && (
+        <ReportPreviewModal
+          report={report}
+          csvHref={exportHref('csv')}
+          pdfHref={exportHref('pdf')}
+          onClose={() => setPreviewOpen(false)}
+        />
       )}
 
       {!meta && (
