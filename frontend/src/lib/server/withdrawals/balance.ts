@@ -59,10 +59,12 @@ export function createDefaultBalanceComputer(prisma: PrismaClient): BalanceCompu
   return async function computeBalance(userId: string, tx?: TxClient): Promise<number> {
     const client: PrismaClient | TxClient = tx ?? prisma;
 
-    // Store identity is stable (doesn't change mid-withdrawal), so this read
-    // is safe to run outside the caller's transaction even when `tx` is set —
-    // only the financial aggregates below need the transactional snapshot.
-    const store = await resolveOwnStore(userId);
+    // Store identity is stable (doesn't change mid-withdrawal), but this read
+    // MUST reuse the caller's `tx` connection when one is open: DATABASE_URL
+    // runs `connection_limit=1` on Neon, so issuing it on the standalone
+    // `prisma` client while the withdrawals Serializable tx holds the only
+    // pool connection deadlocks until the tx times out (P2028).
+    const store = await resolveOwnStore(userId, tx);
 
     const [orders, withdrawals] = await Promise.all([
       store

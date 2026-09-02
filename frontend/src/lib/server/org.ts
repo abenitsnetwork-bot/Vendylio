@@ -9,9 +9,22 @@
 import 'server-only';
 import { prisma } from '@/lib/server/prisma';
 import type { Store } from '@prisma/client';
+import type { TxClient } from '@/lib/server/withdrawals/lock';
 
-export async function resolveOwnStore(userId: string): Promise<Store | null> {
-  const membership = await prisma.organizationMember.findFirst({ where: { userId } });
+/**
+ * `client` lets a caller already inside an interactive transaction reuse that
+ * transaction's connection. Passing the standalone `prisma` while a
+ * `$transaction` holds the pool (DATABASE_URL runs `connection_limit=1` on
+ * Neon) deadlocks the second query until the tx times out — so
+ * `balance.ts` (which runs inside the withdrawals Serializable tx) passes `tx`
+ * here. Plain route handlers omit it and hit the base client as before.
+ */
+export async function resolveOwnStore(
+  userId: string,
+  client: Pick<typeof prisma, 'organizationMember' | 'store'> | TxClient = prisma,
+): Promise<Store | null> {
+  const db = client as typeof prisma;
+  const membership = await db.organizationMember.findFirst({ where: { userId } });
   if (!membership) return null;
-  return prisma.store.findUnique({ where: { organizationId: membership.organizationId } });
+  return db.store.findUnique({ where: { organizationId: membership.organizationId } });
 }
