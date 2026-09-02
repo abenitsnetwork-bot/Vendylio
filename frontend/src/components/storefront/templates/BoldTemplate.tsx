@@ -90,69 +90,67 @@ export function BoldTemplate({
                   {sectionIcon(section) && <span aria-hidden="true">{sectionIcon(section)}</span>}
                   {sectionTitle(section)}
                 </h2>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+                <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-4 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
                   {section.products.map((product) => {
                     const hasVariants = product.variants.length > 0;
                     const addable = toAddableProduct(product, product.variants[0]?.id ?? null);
                     const soldOut = !hasVariants && addable.quantity <= 0;
+                    const productHref = `${store.linkBase}/products/${product.id}`;
                     return (
                       <div key={product.id} className="flex flex-col">
-                        <Link
-                          href={`${store.linkBase}/products/${product.id}`}
-                          className="relative mb-3 block overflow-hidden rounded-xl"
-                        >
-                          {product.imageUrl ? (
-                            <StorefrontImage
-                              src={product.imageUrl}
-                              alt={product.name}
-                              displayWidth={400}
-                              sizes="(min-width: 768px) 33vw, 50vw"
-                              className="aspect-square w-full object-cover"
-                            />
-                          ) : (
-                            <ImagePlaceholder icon="package" className="aspect-square w-full" />
-                          )}
-                          {soldOut && (
+                        {/* Control overlaid on the image (sibling of the link —
+                            no nested <a>) so cards stay compact at 4 per row. */}
+                        <div className="relative mb-2 sm:mb-3">
+                          <Link href={productHref} className="block overflow-hidden rounded-xl">
+                            {product.imageUrl ? (
+                              <StorefrontImage
+                                src={product.imageUrl}
+                                alt={product.name}
+                                displayWidth={400}
+                                sizes="(min-width: 1024px) 25vw, 25vw"
+                                className="aspect-square w-full object-cover"
+                              />
+                            ) : (
+                              <ImagePlaceholder icon="package" className="aspect-square w-full" />
+                            )}
+                          </Link>
+                          {soldOut ? (
                             <span className="absolute right-2 top-2 rounded bg-foreground px-2 py-1 text-[10px] font-semibold text-background">
                               Sold out
                             </span>
-                          )}
-                        </Link>
-                        <Link href={`${store.linkBase}/products/${product.id}`}>
-                          <p className="mb-1 line-clamp-2 font-headings text-base font-bold text-foreground hover:text-primary">
-                            {product.name}
-                          </p>
-                        </Link>
-                        {product.description && (
-                          <p className="mb-2 line-clamp-2 text-xs text-muted-foreground">
-                            {product.description}
-                          </p>
-                        )}
-                        <div className="mt-auto flex items-end justify-between gap-2 pt-1">
-                          <PriceTag
-                            cents={addable.priceCents}
-                            unit={product.unit}
-                            className="font-headings text-xl font-bold text-foreground"
-                          />
-                          {hasVariants ? (
+                          ) : hasVariants ? (
                             <Link
-                              href={`${store.linkBase}/products/${product.id}`}
-                              className="flex-shrink-0 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-foreground"
+                              href={productHref}
+                              className="absolute bottom-2 right-2 rounded-full bg-card/95 px-2.5 py-1 text-[10px] font-semibold text-foreground shadow-sm ring-1 ring-border"
                             >
                               Options
                             </Link>
                           ) : (
                             <button
                               type="button"
-                              disabled={soldOut}
                               onClick={() => addItem(addable)}
-                              aria-label={soldOut ? 'Sold out' : `Add ${product.name} to cart`}
-                              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                              aria-label={`Add ${product.name} to cart`}
+                              className="absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md sm:h-10 sm:w-10"
                             >
-                              <Icon i="plus" size={20} />
+                              <Icon i="plus" size={18} />
                             </button>
                           )}
                         </div>
+                        <Link href={productHref}>
+                          <p className="mb-1 line-clamp-2 font-headings text-[11px] font-bold leading-tight text-foreground hover:text-primary sm:text-base sm:leading-snug">
+                            {product.name}
+                          </p>
+                        </Link>
+                        {product.description && (
+                          <p className="mb-2 line-clamp-2 text-xs text-muted-foreground max-sm:hidden">
+                            {product.description}
+                          </p>
+                        )}
+                        <PriceTag
+                          cents={addable.priceCents}
+                          unit={product.unit}
+                          className="mt-auto font-headings text-xs font-bold text-foreground sm:text-xl"
+                        />
                       </div>
                     );
                   })}

@@ -64,73 +64,72 @@ export function ModernTemplate({
                   {sectionIcon(section) && <span aria-hidden="true">{sectionIcon(section)}</span>}
                   {sectionTitle(section)}
                 </h2>
-                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7">
+                <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-4 sm:gap-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7">
                   {section.products.map((product) => {
                     const hasVariants = product.variants.length > 0;
                     const addable = toAddableProduct(product, product.variants[0]?.id ?? null);
                     const soldOut = !hasVariants && addable.quantity <= 0;
+                    const productHref = `${store.linkBase}/products/${product.id}`;
                     return (
                       <div
                         key={product.id}
                         className="flex flex-col overflow-hidden rounded-lg border border-border bg-card"
                       >
-                        <Link
-                          href={`${store.linkBase}/products/${product.id}`}
-                          className="relative block"
-                        >
-                          {product.imageUrl ? (
-                            <StorefrontImage
-                              src={product.imageUrl}
-                              alt={product.name}
-                              displayWidth={400}
-                              sizes="(min-width: 768px) 33vw, 50vw"
-                              className="aspect-square w-full object-cover"
-                            />
-                          ) : (
-                            <ImagePlaceholder icon="package" className="aspect-square w-full" />
-                          )}
-                          {soldOut && (
-                            <span className="absolute right-2 top-2 rounded bg-foreground px-1.5 py-0.5 text-[10px] font-semibold text-background">
+                        {/* The add / options control sits over the image as a
+                            sibling of the link (an <a> can't nest inside an <a>)
+                            so the card stays compact at 4 columns on phones. */}
+                        <div className="relative">
+                          <Link href={productHref} className="block">
+                            {product.imageUrl ? (
+                              <StorefrontImage
+                                src={product.imageUrl}
+                                alt={product.name}
+                                displayWidth={400}
+                                sizes="(min-width: 1024px) 20vw, 25vw"
+                                className="aspect-square w-full object-cover"
+                              />
+                            ) : (
+                              <ImagePlaceholder icon="package" className="aspect-square w-full" />
+                            )}
+                          </Link>
+                          {soldOut ? (
+                            <span className="absolute right-1.5 top-1.5 rounded bg-foreground px-1.5 py-0.5 text-[10px] font-semibold text-background">
                               Sold out
                             </span>
+                          ) : hasVariants ? (
+                            <Link
+                              href={productHref}
+                              className="absolute bottom-1.5 right-1.5 rounded-full bg-card/95 px-2 py-1 text-[10px] font-semibold text-foreground shadow-sm ring-1 ring-border hover:bg-card"
+                            >
+                              Options
+                            </Link>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => addItem(addable)}
+                              aria-label={`Add ${product.name} to cart`}
+                              className="absolute bottom-1.5 right-1.5 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md sm:h-9 sm:w-9"
+                            >
+                              <Icon i="plus" size={16} />
+                            </button>
                           )}
-                        </Link>
-                        <div className="flex flex-1 flex-col p-2.5">
-                          <Link href={`${store.linkBase}/products/${product.id}`}>
-                            <p className="line-clamp-2 font-headings text-xs font-semibold leading-snug text-foreground hover:text-primary sm:text-sm">
+                        </div>
+                        <div className="flex flex-1 flex-col p-1.5 sm:p-2.5">
+                          <Link href={productHref}>
+                            <p className="line-clamp-2 font-headings text-[11px] font-semibold leading-tight text-foreground hover:text-primary sm:text-sm sm:leading-snug">
                               {product.name}
                             </p>
                           </Link>
                           {!soldOut && !hasVariants && addable.quantity <= 5 && (
-                            <p className="mt-0.5 text-[10px] font-medium text-amber-600">
+                            <p className="mt-0.5 text-[9px] font-medium text-amber-600 sm:text-[10px]">
                               Only {formatQuantityWithUnit(addable.quantity, product.unit)} left
                             </p>
                           )}
-                          <div className="mt-auto flex items-center justify-between gap-1.5 pt-2">
-                            <PriceTag
-                              cents={addable.priceCents}
-                              unit={product.unit}
-                              className="font-headings text-sm font-bold text-foreground sm:text-base"
-                            />
-                            {hasVariants ? (
-                              <Link
-                                href={`${store.linkBase}/products/${product.id}`}
-                                className="flex-shrink-0 rounded-full border border-border px-2.5 py-1 text-[11px] font-semibold text-foreground hover:bg-secondary"
-                              >
-                                Options
-                              </Link>
-                            ) : (
-                              <button
-                                type="button"
-                                disabled={soldOut}
-                                onClick={() => addItem(addable)}
-                                aria-label={soldOut ? 'Sold out' : `Add ${product.name} to cart`}
-                                className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                              >
-                                <Icon i="plus" size={16} />
-                              </button>
-                            )}
-                          </div>
+                          <PriceTag
+                            cents={addable.priceCents}
+                            unit={product.unit}
+                            className="mt-auto pt-1 font-headings text-xs font-bold text-foreground sm:text-base"
+                          />
                         </div>
                       </div>
                     );
