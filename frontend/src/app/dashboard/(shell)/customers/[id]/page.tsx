@@ -61,7 +61,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
         <div className="mx-auto max-w-3xl">
           <Link
             href="/dashboard/customers"
-            className="mb-6 flex items-center gap-2 text-sm font-medium text-primary"
+            className="mb-6 flex items-center gap-2 text-sm font-medium text-accent"
           >
             <Icon i="arrow-left" size={16} />
             Back to Customers
@@ -122,7 +122,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                       <Link
                         key={order.id}
                         href={`/dashboard/orders/${order.id}`}
-                        className="flex items-center justify-between gap-4 rounded-lg border border-border p-4 hover:border-primary"
+                        className="flex items-center justify-between gap-4 rounded-lg border border-border p-4 hover:border-accent"
                       >
                         <div className="min-w-0">
                           <p className="text-xs font-medium text-muted-foreground">

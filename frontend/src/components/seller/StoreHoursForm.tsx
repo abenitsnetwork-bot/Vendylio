@@ -234,7 +234,7 @@ export function StoreHoursForm({
           {submitting ? 'Saving…' : 'Save changes'}
         </Button>
         {saved && (
-          <span className="text-sm font-medium text-primary" role="status">
+          <span className="text-sm font-medium text-accent" role="status">
             Changes saved
           </span>
         )}

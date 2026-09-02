@@ -66,7 +66,7 @@ function OrderRow({
         </p>
         <Link
           href={`/dashboard/orders/${order.id}`}
-          className="truncate text-sm font-semibold text-foreground hover:text-primary"
+          className="truncate text-sm font-semibold text-foreground hover:text-accent"
         >
           {order.customerName ?? 'Guest'}
         </Link>
@@ -82,7 +82,7 @@ function OrderRow({
           type="button"
           disabled={busy}
           onClick={onAction}
-          className="flex-shrink-0 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+          className="flex-shrink-0 rounded-lg bg-accent px-4 py-2 text-xs font-semibold text-accent-foreground disabled:opacity-50"
         >
           {actionLabel}
         </button>
@@ -99,7 +99,7 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
       aria-checked={on}
       onClick={() => onChange(!on)}
       className={`relative h-6 w-11 flex-shrink-0 rounded-full transition-colors ${
-        on ? 'bg-primary' : 'bg-border'
+        on ? 'bg-accent' : 'bg-border'
       }`}
     >
       <span
@@ -258,7 +258,7 @@ export default function DeliveryPage() {
         <div className="mx-auto max-w-3xl">
           <Link
             href="/dashboard"
-            className="mb-6 flex items-center gap-2 text-sm font-medium text-primary"
+            className="mb-6 flex items-center gap-2 text-sm font-medium text-accent"
           >
             <Icon i="arrow-left" size={16} />
             Back to Dashboard
@@ -300,7 +300,7 @@ export default function DeliveryPage() {
                       <button
                         type="button"
                         onClick={() => testConnection('UBER_DIRECT')}
-                        className="font-medium text-primary underline"
+                        className="font-medium text-accent underline"
                       >
                         Test connection
                       </button>
@@ -330,7 +330,7 @@ export default function DeliveryPage() {
                       <button
                         type="button"
                         onClick={() => testConnection('DOORDASH')}
-                        className="font-medium text-primary underline"
+                        className="font-medium text-accent underline"
                       >
                         Test connection
                       </button>

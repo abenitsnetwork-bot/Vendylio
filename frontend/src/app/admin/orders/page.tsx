@@ -131,7 +131,7 @@ function AdminOrdersInner() {
         {activeStore && (
           <a
             href={`/admin/stores/${activeStore.id}`}
-            className="ml-3 text-xs font-semibold text-primary"
+            className="ml-3 text-xs font-semibold text-accent"
           >
             Open {activeStore.name} →
           </a>
@@ -146,7 +146,7 @@ function AdminOrdersInner() {
             onClick={() => setStatus(s)}
             className={`rounded-full border px-4 py-1.5 text-xs font-semibold ${
               status === s
-                ? 'border-primary bg-primary text-primary-foreground'
+                ? 'border-accent bg-accent text-accent-foreground'
                 : 'border-border bg-card text-foreground hover:bg-secondary'
             }`}
           >

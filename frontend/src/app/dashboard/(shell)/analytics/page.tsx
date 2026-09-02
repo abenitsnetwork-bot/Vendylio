@@ -111,7 +111,7 @@ export default function AnalyticsPage() {
           <div className="mb-8">
             <Link
               href="/dashboard"
-              className="mb-6 flex items-center gap-2 text-sm font-medium text-primary"
+              className="mb-6 flex items-center gap-2 text-sm font-medium text-accent"
             >
               <Icon i="arrow-left" size={16} />
               Back to Dashboard
@@ -146,7 +146,7 @@ export default function AnalyticsPage() {
                     onClick={() => setRange(r)}
                     className={`rounded-md px-3 py-1.5 text-sm font-medium ${
                       range === r
-                        ? 'bg-primary text-primary-foreground'
+                        ? 'bg-accent text-accent-foreground'
                         : 'border border-border text-muted-foreground hover:bg-secondary'
                     }`}
                   >

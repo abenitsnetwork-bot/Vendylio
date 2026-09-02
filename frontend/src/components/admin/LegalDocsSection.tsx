@@ -100,7 +100,7 @@ export function LegalDocsSection() {
             onClick={() => setSlug(s)}
             className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${
               s === slug
-                ? 'bg-primary text-primary-foreground'
+                ? 'bg-accent text-accent-foreground'
                 : 'border border-border text-muted-foreground hover:bg-secondary'
             }`}
           >
@@ -125,14 +125,14 @@ export function LegalDocsSection() {
               href={`/${slug}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="font-medium text-primary underline"
+              className="font-medium text-accent underline"
             >
               View public page ↗
             </a>
             <button
               type="button"
               onClick={() => setPreview((p) => !p)}
-              className="ml-auto font-medium text-primary"
+              className="ml-auto font-medium text-accent"
             >
               {preview ? 'Edit text' : 'Preview'}
             </button>
@@ -140,7 +140,7 @@ export function LegalDocsSection() {
 
           {preview ? (
             <div className="rounded-lg border border-border bg-background p-6">
-              <div className="space-y-6 text-sm leading-relaxed text-foreground [&_a]:text-primary [&_a]:underline [&_h2]:mb-2 [&_h2]:mt-6 [&_h2]:font-headings [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-foreground [&_li]:text-muted-foreground [&_p]:text-muted-foreground [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-6">
+              <div className="space-y-6 text-sm leading-relaxed text-foreground [&_a]:text-accent [&_a]:underline [&_h2]:mb-2 [&_h2]:mt-6 [&_h2]:font-headings [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-foreground [&_li]:text-muted-foreground [&_p]:text-muted-foreground [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-6">
                 <LegalMarkdown source={body} />
               </div>
             </div>

@@ -9,7 +9,7 @@ export function ProUpgradeCard({ title, children }: { title: string; children: R
   return (
     <div className="rounded-xl border border-border bg-secondary/40 p-6">
       <div className="mb-3 flex items-center gap-2">
-        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-accent">
           <Icon i="lock" size={16} />
         </span>
         <p className="font-headings text-lg font-bold text-foreground">{title}</p>
@@ -17,7 +17,7 @@ export function ProUpgradeCard({ title, children }: { title: string; children: R
       <p className="mb-4 text-sm text-muted-foreground">{children}</p>
       <Link
         href="/dashboard/billing"
-        className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+        className="inline-flex items-center gap-1.5 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground"
       >
         Upgrade to Pro
         <Icon i="arrow-right" size={15} />

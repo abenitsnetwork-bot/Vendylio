@@ -35,14 +35,14 @@ export function GuideLayout({
       <div className="mb-12">
         <Link
           href="/dashboard/resources"
-          className="mb-6 flex items-center gap-2 text-sm font-medium text-primary"
+          className="mb-6 flex items-center gap-2 text-sm font-medium text-accent"
         >
           <Icon i="arrow-left" size={16} />
           Back to Resources
         </Link>
 
         <div className="mb-8">
-          <span className="mb-4 inline-block rounded bg-secondary px-3 py-1 text-xs font-semibold text-primary">
+          <span className="mb-4 inline-block rounded bg-secondary px-3 py-1 text-xs font-semibold text-accent">
             {category}
           </span>
           <h1
@@ -73,7 +73,7 @@ export function GuideLayout({
       <div className="space-y-12">
         {steps.map((step) => (
           <div key={step.number} className="flex items-start gap-6">
-            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-primary text-lg font-bold text-primary-foreground">
+            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-accent text-lg font-bold text-accent-foreground">
               {step.number}
             </div>
             <div className="flex-1 pt-1">
@@ -86,7 +86,7 @@ export function GuideLayout({
                 <ul className="space-y-2">
                   {step.tips.map((tip) => (
                     <li key={tip} className="flex gap-2 text-sm text-muted-foreground">
-                      <Icon i="check" size={16} className="mt-0.5 flex-shrink-0 text-primary" />
+                      <Icon i="check" size={16} className="mt-0.5 flex-shrink-0 text-accent" />
                       <span>{tip}</span>
                     </li>
                   ))}
@@ -119,7 +119,7 @@ export function GuideLayout({
         <p className="mb-4 text-muted-foreground">Ready to get started?</p>
         <Link
           href={ctaHref}
-          className="inline-block rounded-lg bg-primary px-8 py-3 font-semibold text-primary-foreground"
+          className="inline-block rounded-lg bg-accent px-8 py-3 font-semibold text-accent-foreground"
         >
           {ctaText}
         </Link>

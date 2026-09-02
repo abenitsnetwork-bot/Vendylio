@@ -133,7 +133,7 @@ export default function TeamPage() {
           <div className="mb-8">
             <Link
               href="/dashboard"
-              className="mb-6 flex items-center gap-2 text-sm font-medium text-primary"
+              className="mb-6 flex items-center gap-2 text-sm font-medium text-accent"
             >
               <Icon i="arrow-left" size={16} />
               Back to Dashboard
@@ -278,7 +278,7 @@ export default function TeamPage() {
                     <button
                       type="submit"
                       disabled={busy}
-                      className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                      className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-50"
                     >
                       {busy ? 'Sending…' : 'Send invite'}
                     </button>

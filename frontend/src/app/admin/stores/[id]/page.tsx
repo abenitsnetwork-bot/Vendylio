@@ -114,7 +114,7 @@ export default function AdminStoreDetailPage({ params }: { params: Promise<{ id:
       <div className="mx-auto max-w-2xl">
         <Link
           href="/admin/stores"
-          className="mb-6 flex items-center gap-2 text-sm font-medium text-primary"
+          className="mb-6 flex items-center gap-2 text-sm font-medium text-accent"
         >
           <Icon i="arrow-left" size={16} />
           Back to Stores
@@ -137,7 +137,7 @@ export default function AdminStoreDetailPage({ params }: { params: Promise<{ id:
                   href={`/s/${store.slug}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-sm text-muted-foreground hover:text-primary"
+                  className="text-sm text-muted-foreground hover:text-accent"
                 >
                   /s/{store.slug}
                 </a>
@@ -167,7 +167,7 @@ export default function AdminStoreDetailPage({ params }: { params: Promise<{ id:
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Orders</p>
                   <Link
                     href={`/admin/orders?storeId=${store.id}`}
-                    className="font-semibold text-primary hover:underline"
+                    className="font-semibold text-accent hover:underline"
                   >
                     {store.orderCount} →
                   </Link>
@@ -209,7 +209,7 @@ export default function AdminStoreDetailPage({ params }: { params: Promise<{ id:
                 className={`rounded-lg border px-4 py-2 text-sm font-semibold disabled:opacity-50 ${
                   store.published
                     ? 'border-red-200 text-red-600 hover:bg-red-50'
-                    : 'border-primary text-primary hover:bg-secondary'
+                    : 'border-accent text-accent hover:bg-secondary'
                 }`}
               >
                 {busy ? 'Saving…' : store.published ? 'Deactivate store' : 'Activate store'}
@@ -226,11 +226,11 @@ export default function AdminStoreDetailPage({ params }: { params: Promise<{ id:
                         <div className="flex flex-wrap items-center gap-1.5">
                           <Link
                             href={`/admin/users/${m.id}`}
-                            className="text-sm font-semibold text-foreground hover:text-primary"
+                            className="text-sm font-semibold text-foreground hover:text-accent"
                           >
                             {m.name ?? m.email}
                           </Link>
-                          <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] font-semibold text-primary">
+                          <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] font-semibold text-accent">
                             {m.isOwner ? 'Owner' : m.orgRole}
                           </span>
                           {m.appRole !== 'USER' && (

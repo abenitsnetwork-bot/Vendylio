@@ -60,7 +60,7 @@ export function ShareStoreModal({ storeUrl, onClose }: { storeUrl: string; onClo
           <button
             type="button"
             onClick={() => copyLink('main')}
-            className="flex-shrink-0 rounded bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground"
+            className="flex-shrink-0 rounded bg-accent px-3 py-2 text-xs font-semibold text-accent-foreground"
           >
             {copied === 'main' ? 'Copied!' : 'Copy'}
           </button>

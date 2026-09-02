@@ -156,7 +156,7 @@ export function AccountSecurityForm({ user }: { user: User }) {
             </span>
           </div>
           {googleLinked ? (
-            <span className="rounded-full bg-secondary px-3 py-1 text-xs font-medium text-primary">
+            <span className="rounded-full bg-secondary px-3 py-1 text-xs font-medium text-accent">
               Lié
             </span>
           ) : (

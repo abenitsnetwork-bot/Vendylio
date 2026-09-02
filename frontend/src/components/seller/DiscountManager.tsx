@@ -118,7 +118,7 @@ function DiscountForm({
   return (
     <form
       onSubmit={onSubmit}
-      className="space-y-4 rounded-lg border border-primary bg-secondary p-4"
+      className="space-y-4 rounded-lg border border-accent bg-secondary p-4"
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Code" htmlFor="d-code">
@@ -264,7 +264,7 @@ export function DiscountManager() {
         <button
           type="button"
           onClick={() => setCreating(true)}
-          className="rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground"
+          className="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground"
         >
           + New promo code
         </button>
@@ -275,7 +275,7 @@ export function DiscountManager() {
           <p className="font-semibold text-foreground">Promo codes are a Pro feature</p>
           <p className="mt-1 text-muted-foreground">
             Offer free delivery with a code your customers enter at checkout.{' '}
-            <a href="/dashboard/billing" className="font-medium text-primary">
+            <a href="/dashboard/billing" className="font-medium text-accent">
               Upgrade to Pro
             </a>
             .
@@ -349,7 +349,7 @@ export function DiscountManager() {
                       className={`rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${
                         d.active
                           ? 'border-border text-muted-foreground hover:bg-secondary'
-                          : 'border-primary text-primary hover:bg-secondary'
+                          : 'border-accent text-accent hover:bg-secondary'
                       }`}
                     >
                       {d.active ? 'Turn off' : 'Turn on'}

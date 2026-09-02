@@ -156,7 +156,7 @@ export default function AdminWithdrawalsPage() {
             onClick={() => setStatus(s)}
             className={`rounded-full border px-4 py-1.5 text-xs font-semibold ${
               status === s
-                ? 'border-primary bg-primary text-primary-foreground'
+                ? 'border-accent bg-accent text-accent-foreground'
                 : 'border-border bg-card text-foreground hover:bg-secondary'
             }`}
           >
@@ -211,7 +211,7 @@ export default function AdminWithdrawalsPage() {
                       type="button"
                       disabled={busyId === w.id}
                       onClick={() => sendTransfer(w.id)}
-                      className="flex-shrink-0 rounded-lg border border-primary bg-white px-3 py-1.5 text-xs font-semibold text-primary disabled:opacity-50"
+                      className="flex-shrink-0 rounded-lg border border-accent bg-white px-3 py-1.5 text-xs font-semibold text-accent disabled:opacity-50"
                     >
                       Send transfer
                     </button>

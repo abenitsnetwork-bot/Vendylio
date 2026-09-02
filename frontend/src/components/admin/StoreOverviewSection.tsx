@@ -141,7 +141,7 @@ export function StoreOverviewSection() {
   return (
     <div>
       <div className="mb-4 flex justify-end">
-        <Link href="/admin/stores" className="text-xs font-semibold text-primary">
+        <Link href="/admin/stores" className="text-xs font-semibold text-accent">
           Manage all stores →
         </Link>
       </div>
@@ -264,7 +264,7 @@ export function StoreOverviewSection() {
                     </a>
                     <Link
                       href={`/admin/stores/${s.id}`}
-                      className="flex-1 rounded-lg border border-primary py-2 text-center text-xs font-semibold text-primary hover:bg-secondary"
+                      className="flex-1 rounded-lg border border-accent py-2 text-center text-xs font-semibold text-accent hover:bg-secondary"
                     >
                       Manage
                     </Link>

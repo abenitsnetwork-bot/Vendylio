@@ -97,7 +97,7 @@ export default function GuideLaunchingYourStorePage() {
           extraContent={
             <div className="my-12 rounded-lg border border-border bg-secondary p-8">
               <h3 className="mb-4 flex items-center gap-2 font-headings text-lg font-bold text-foreground">
-                <Icon i="lightbulb" size={20} className="text-primary" />
+                <Icon i="lightbulb" size={20} className="text-accent" />
                 Draft, live, paused — which is which
               </h3>
               <ul className="space-y-3 text-sm text-muted-foreground">

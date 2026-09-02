@@ -38,7 +38,7 @@ export function SellerHeader({
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-sm font-semibold text-accent-foreground"
             aria-label="Account menu"
             aria-expanded={open}
           >

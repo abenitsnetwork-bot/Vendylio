@@ -161,7 +161,7 @@ export default function ProductsPage() {
             <div>
               <Link
                 href="/dashboard"
-                className="mb-6 flex items-center gap-2 text-sm font-medium text-primary"
+                className="mb-6 flex items-center gap-2 text-sm font-medium text-accent"
               >
                 <Icon i="arrow-left" size={16} />
                 Back to Dashboard
@@ -178,7 +178,7 @@ export default function ProductsPage() {
             </div>
             <Link
               href="/dashboard/products/new"
-              className="inline-block whitespace-nowrap rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground"
+              className="inline-block whitespace-nowrap rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground"
             >
               Add Product
             </Link>
@@ -214,7 +214,7 @@ export default function ProductsPage() {
                   onClick={() => setStatus(f.value)}
                   className={`rounded-full border px-4 py-1.5 text-xs font-semibold ${
                     status === f.value
-                      ? 'border-primary bg-primary text-primary-foreground'
+                      ? 'border-accent bg-accent text-accent-foreground'
                       : 'border-border bg-card text-foreground hover:bg-secondary'
                   }`}
                 >
@@ -236,7 +236,7 @@ export default function ProductsPage() {
                   onClick={() => chooseView(v.mode)}
                   className={`flex h-8 w-8 items-center justify-center rounded-md ${
                     view === v.mode
-                      ? 'bg-primary text-primary-foreground'
+                      ? 'bg-accent text-accent-foreground'
                       : 'text-muted-foreground hover:bg-secondary'
                   }`}
                 >
@@ -252,7 +252,7 @@ export default function ProductsPage() {
               <button
                 type="button"
                 onClick={() => setReloadKey((k) => k + 1)}
-                className="text-sm font-medium text-primary"
+                className="text-sm font-medium text-accent"
               >
                 Try again
               </button>
@@ -275,7 +275,7 @@ export default function ProductsPage() {
                   setCategoryId('');
                   setStatus('');
                 }}
-                className="text-sm font-medium text-primary"
+                className="text-sm font-medium text-accent"
               >
                 Clear filters
               </button>
@@ -298,7 +298,7 @@ export default function ProductsPage() {
               </p>
               <Link
                 href="/dashboard/products/new"
-                className="inline-block rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground"
+                className="inline-block rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground"
               >
                 + Add Your First Product
               </Link>
@@ -321,7 +321,7 @@ export default function ProductsPage() {
                         <Link
                           key={product.id}
                           href={`/dashboard/products/${product.id}/edit`}
-                          className="overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-primary"
+                          className="overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-accent"
                         >
                           <div className="relative">
                             {product.imageUrl ? (

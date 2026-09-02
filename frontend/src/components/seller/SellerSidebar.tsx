@@ -94,14 +94,14 @@ export function SellerSidebar() {
                 href={item.href}
                 className={`mx-3 mb-1 flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium ${
                   isActive(pathname, item.href)
-                    ? 'bg-secondary text-primary'
+                    ? 'bg-accent/10 font-semibold text-accent'
                     : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
                 }`}
               >
                 <Icon i={item.icon} size={18} />
                 <span className="flex-1">{item.label}</span>
                 {badge > 0 && (
-                  <span className="rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-bold text-primary-foreground">
+                  <span className="rounded-full bg-accent px-1.5 py-0.5 text-[11px] font-bold text-accent-foreground">
                     {badge}
                   </span>
                 )}
@@ -134,12 +134,12 @@ export function SellerSidebar() {
               key={item.href}
               href={item.href}
               className={`relative flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-medium ${
-                isActive(pathname, item.href) ? 'text-primary' : 'text-muted-foreground'
+                isActive(pathname, item.href) ? 'text-accent' : 'text-muted-foreground'
               }`}
             >
               <Icon i={item.icon} size={20} />
               {badge > 0 && (
-                <span className="absolute right-1/2 top-1 ml-3 translate-x-4 rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
+                <span className="absolute right-1/2 top-1 ml-3 translate-x-4 rounded-full bg-accent px-1 text-[10px] font-bold text-accent-foreground">
                   {badge}
                 </span>
               )}

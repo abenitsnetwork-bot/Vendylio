@@ -233,7 +233,7 @@ export function ProductForm(props: CreateProps | EditProps) {
             type="button"
             onClick={onGenerateDescription}
             disabled={generatingDescription}
-            className="mt-2 text-xs font-medium text-primary disabled:opacity-50"
+            className="mt-2 text-xs font-medium text-accent disabled:opacity-50"
           >
             {generatingDescription ? 'Generating…' : '✨ Generate with AI'}
           </button>
@@ -254,7 +254,7 @@ export function ProductForm(props: CreateProps | EditProps) {
                 className={cn(
                   'rounded-lg border px-3 py-2 text-center text-xs',
                   unit === u.value
-                    ? 'border-primary bg-secondary font-medium text-foreground'
+                    ? 'border-accent bg-secondary font-medium text-foreground'
                     : 'border-border text-muted-foreground',
                 )}
               >
@@ -339,7 +339,7 @@ export function ProductForm(props: CreateProps | EditProps) {
           </select>
           <p className="mt-1.5 text-xs text-muted-foreground">
             Manage your categories in{' '}
-            <a href="/dashboard/settings?tab=categories" className="text-primary">
+            <a href="/dashboard/settings?tab=categories" className="text-accent">
               Store Settings
             </a>
             .
@@ -374,7 +374,7 @@ export function ProductForm(props: CreateProps | EditProps) {
                 className={cn(
                   'rounded-lg border px-4 py-3 text-left',
                   status === 'ACTIVE'
-                    ? 'border-primary bg-secondary'
+                    ? 'border-accent bg-secondary'
                     : 'border-border text-muted-foreground',
                 )}
               >
@@ -387,7 +387,7 @@ export function ProductForm(props: CreateProps | EditProps) {
                 className={cn(
                   'rounded-lg border px-4 py-3 text-left',
                   status === 'ARCHIVED'
-                    ? 'border-primary bg-secondary'
+                    ? 'border-accent bg-secondary'
                     : 'border-border text-muted-foreground',
                 )}
               >

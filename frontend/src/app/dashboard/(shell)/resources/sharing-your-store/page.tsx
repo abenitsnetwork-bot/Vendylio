@@ -97,7 +97,7 @@ export default function GuideSharingYourStorePage() {
           extraContent={
             <div className="my-12 rounded-lg border border-border p-8">
               <h3 className="mb-4 flex items-center gap-2 font-headings text-lg font-bold text-foreground">
-                <Icon i="alert-circle" size={20} className="text-primary" />
+                <Icon i="alert-circle" size={20} className="text-accent" />
                 Common mistakes
               </h3>
               <ul className="space-y-3">
@@ -108,7 +108,7 @@ export default function GuideSharingYourStorePage() {
                   'Adding contacts to a WhatsApp group without asking — use a broadcast list.',
                 ].map((m) => (
                   <li key={m} className="flex gap-3">
-                    <span className="text-lg font-bold text-primary">✕</span>
+                    <span className="text-lg font-bold text-accent">✕</span>
                     <span className="text-muted-foreground">{m}</span>
                   </li>
                 ))}

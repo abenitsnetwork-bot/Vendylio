@@ -139,7 +139,7 @@ export function CustomDomainSettings({ storeSlug }: { storeSlug: string | null }
           <button
             type="submit"
             disabled={busy}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+            className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-50"
           >
             {busy ? 'Connecting…' : 'Connect domain'}
           </button>
@@ -197,11 +197,7 @@ export function CustomDomainSettings({ storeSlug }: { storeSlug: string | null }
                   </tbody>
                 </table>
               </div>
-              <button
-                type="button"
-                onClick={load}
-                className="mt-3 text-xs font-medium text-primary"
-              >
+              <button type="button" onClick={load} className="mt-3 text-xs font-medium text-accent">
                 Check now
               </button>
             </>
@@ -212,7 +208,7 @@ export function CustomDomainSettings({ storeSlug }: { storeSlug: string | null }
               href={`https://${data.customDomain}`}
               target="_blank"
               rel="noreferrer"
-              className="text-xs font-medium text-primary"
+              className="text-xs font-medium text-accent"
             >
               Open {data.customDomain} ↗
             </a>

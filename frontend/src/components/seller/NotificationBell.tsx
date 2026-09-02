@@ -116,7 +116,7 @@ export function NotificationBell() {
       >
         <Icon i="bell" size={18} />
         {unread > 0 && (
-          <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
+          <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-accent-foreground">
             {unread > 9 ? '9+' : unread}
           </span>
         )}
@@ -130,7 +130,7 @@ export function NotificationBell() {
               <button
                 type="button"
                 onClick={markAllRead}
-                className="text-xs font-medium text-primary hover:underline"
+                className="text-xs font-medium text-accent hover:underline"
               >
                 Mark all read
               </button>
@@ -164,7 +164,7 @@ export function NotificationBell() {
                   >
                     <span
                       className={`mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${
-                        n.readAt ? 'bg-transparent' : 'bg-primary'
+                        n.readAt ? 'bg-transparent' : 'bg-accent'
                       }`}
                       aria-hidden="true"
                     />

@@ -59,10 +59,10 @@ export default function ResourcesCenterPage() {
               <Link
                 key={action.href}
                 href={action.href}
-                className="flex flex-col items-start gap-3 rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary"
+                className="flex flex-col items-start gap-3 rounded-xl border border-border bg-card p-4 transition-colors hover:border-accent"
               >
                 <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-secondary">
-                  <Icon i={action.icon} size={18} className="text-primary" />
+                  <Icon i={action.icon} size={18} className="text-accent" />
                 </span>
                 <span className="text-sm font-semibold text-foreground">{action.label}</span>
               </Link>
@@ -78,7 +78,7 @@ export default function ResourcesCenterPage() {
                 <Card key={cat.key} className="p-6">
                   <div className="mb-5 flex items-start gap-4 border-b border-border pb-5">
                     <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg bg-secondary">
-                      <Icon i={cat.icon} size={22} className="text-primary" />
+                      <Icon i={cat.icon} size={22} className="text-accent" />
                     </div>
                     <div>
                       <h2 className="font-headings text-lg font-bold text-foreground">{cat.key}</h2>

@@ -41,7 +41,7 @@ export function AccountMenu({
     <div className="w-64 rounded-lg border border-border bg-card py-2 shadow-lg">
       <div className="border-b border-border px-4 py-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary font-bold text-primary-foreground">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent font-bold text-accent-foreground">
             {userName.charAt(0).toUpperCase()}
           </div>
           <div className="flex-1 overflow-hidden">

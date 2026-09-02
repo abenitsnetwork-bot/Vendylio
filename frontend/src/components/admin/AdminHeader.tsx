@@ -15,7 +15,7 @@ export function AdminHeader({ admin }: { admin: AdminInfo }) {
         Signed in as <span className="font-medium text-foreground">{admin.email}</span>
       </p>
       <div className="flex items-center gap-3">
-        <span className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-primary">
+        <span className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-accent">
           {admin.role}
         </span>
         <button

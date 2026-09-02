@@ -58,7 +58,7 @@ export default function TestimonialPage() {
         <div className="mx-auto max-w-xl">
           <Link
             href="/dashboard"
-            className="mb-6 flex items-center gap-2 text-sm font-medium text-primary"
+            className="mb-6 flex items-center gap-2 text-sm font-medium text-accent"
           >
             <Icon i="arrow-left" size={16} />
             Back to Dashboard
@@ -76,7 +76,7 @@ export default function TestimonialPage() {
 
           {done ? (
             <Card className="p-8 text-center">
-              <Icon i="check-circle" size={32} className="mx-auto mb-3 text-primary" />
+              <Icon i="check-circle" size={32} className="mx-auto mb-3 text-accent" />
               <p className="mb-1 font-headings text-lg font-bold text-foreground">Thank you!</p>
               <p className="text-sm text-muted-foreground">
                 Your testimonial is with our team. If we feature it, you&apos;ll see it on the

@@ -102,7 +102,7 @@ function SettingsTabs() {
           <div className="mb-8">
             <Link
               href="/dashboard"
-              className="mb-6 flex items-center gap-2 text-sm font-medium text-primary"
+              className="mb-6 flex items-center gap-2 text-sm font-medium text-accent"
             >
               <Icon i="arrow-left" size={16} />
               Back to Dashboard
@@ -126,7 +126,7 @@ function SettingsTabs() {
                 onClick={() => setTab(tab.value)}
                 className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-semibold ${
                   activeTab === tab.value
-                    ? 'border-primary text-primary'
+                    ? 'border-accent text-accent'
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >

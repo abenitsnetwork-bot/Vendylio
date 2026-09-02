@@ -345,7 +345,7 @@ export function StoreSettingsForm({
               onClick={() => setTemplate(t.value)}
               className={cn(
                 'rounded-lg border p-4 text-left',
-                template === t.value ? 'border-primary bg-secondary' : 'border-border',
+                template === t.value ? 'border-accent bg-secondary' : 'border-border',
               )}
             >
               <TemplatePreview template={t.value} />
@@ -377,7 +377,7 @@ export function StoreSettingsForm({
               href={`/s/${store.slug}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground"
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground"
             >
               <Icon i="store" size={16} />
               View My Store

@@ -68,7 +68,7 @@ export default function CustomersPage() {
           <div className="mb-10">
             <Link
               href="/dashboard"
-              className="mb-6 flex items-center gap-2 text-sm font-medium text-primary"
+              className="mb-6 flex items-center gap-2 text-sm font-medium text-accent"
             >
               <Icon i="arrow-left" size={16} />
               Back to Dashboard

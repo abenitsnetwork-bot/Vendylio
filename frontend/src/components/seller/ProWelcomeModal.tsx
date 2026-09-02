@@ -60,7 +60,7 @@ export function ProWelcomeModal() {
       <button
         type="button"
         onClick={() => setOpen(false)}
-        className="mt-6 w-full rounded-full bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90"
+        className="mt-6 w-full rounded-full bg-accent px-5 py-3 text-sm font-semibold text-accent-foreground hover:opacity-90"
       >
         Let&apos;s go
       </button>

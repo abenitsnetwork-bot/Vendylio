@@ -91,7 +91,7 @@ export function BulkAdjustModal({
                   onClick={() => setMode(m)}
                   className={`rounded-lg border px-3 py-2 text-xs font-semibold capitalize ${
                     mode === m
-                      ? 'border-primary bg-secondary text-foreground'
+                      ? 'border-accent bg-secondary text-foreground'
                       : 'border-border text-muted-foreground'
                   }`}
                 >
@@ -150,7 +150,7 @@ export function BulkAdjustModal({
               type="button"
               onClick={onSubmit}
               disabled={submitting}
-              className="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+              className="rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-50"
             >
               {submitting ? 'Applying…' : 'Apply'}
             </button>

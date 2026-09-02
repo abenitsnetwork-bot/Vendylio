@@ -189,7 +189,7 @@ export function WithdrawalRequestForm({
             onClick={() => setMethod(m)}
             className={`flex-1 rounded-lg border px-4 py-2 text-sm font-medium ${
               method === m
-                ? 'border-primary bg-secondary text-foreground'
+                ? 'border-accent bg-secondary text-foreground'
                 : 'border-border text-muted-foreground'
             }`}
           >

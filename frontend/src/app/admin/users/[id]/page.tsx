@@ -118,7 +118,7 @@ export default function AdminUserDetailPage({ params }: { params: Promise<{ id: 
       <div className="mx-auto max-w-2xl">
         <Link
           href="/admin/users"
-          className="mb-6 flex items-center gap-2 text-sm font-medium text-primary"
+          className="mb-6 flex items-center gap-2 text-sm font-medium text-accent"
         >
           <Icon i="arrow-left" size={16} />
           Back to Users
@@ -178,7 +178,7 @@ export default function AdminUserDetailPage({ params }: { params: Promise<{ id: 
                   type="button"
                   disabled={busy}
                   onClick={resendVerification}
-                  className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                  className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-50"
                 >
                   Resend verification email
                 </button>
@@ -197,7 +197,7 @@ export default function AdminUserDetailPage({ params }: { params: Promise<{ id: 
                       onClick={() => changeRole(r)}
                       className={`rounded-lg border px-4 py-2 text-sm font-semibold disabled:opacity-40 ${
                         r === user.role
-                          ? 'border-primary bg-secondary text-primary'
+                          ? 'border-accent bg-secondary text-accent'
                           : 'border-border text-foreground hover:bg-secondary'
                       }`}
                     >
@@ -226,7 +226,7 @@ export default function AdminUserDetailPage({ params }: { params: Promise<{ id: 
                     type="button"
                     disabled={busy}
                     onClick={() => changeStatus('ACTIVE')}
-                    className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                    className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-50"
                   >
                     Restore account
                   </button>

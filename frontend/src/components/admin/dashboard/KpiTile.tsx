@@ -51,7 +51,7 @@ export function KpiTile({
       <div className="mb-2 flex items-center gap-2">
         <span
           className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md ${
-            accent ? 'bg-accent/10 text-accent' : 'bg-primary/10 text-primary'
+            accent ? 'bg-accent/10 text-accent' : 'bg-secondary text-muted-foreground'
           }`}
         >
           <Icon i={icon} size={13} />

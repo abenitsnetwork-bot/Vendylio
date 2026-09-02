@@ -215,7 +215,7 @@ export function CategoryManager() {
                       setEditingId(cat.id);
                       setEditingName(cat.name);
                     }}
-                    className="text-left text-sm font-semibold text-foreground hover:text-primary"
+                    className="text-left text-sm font-semibold text-foreground hover:text-accent"
                   >
                     {cat.name}
                   </button>
@@ -286,7 +286,7 @@ export function CategoryManager() {
           type="button"
           onClick={onAdd}
           disabled={adding || !newName.trim()}
-          className="flex-shrink-0 whitespace-nowrap rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+          className="flex-shrink-0 whitespace-nowrap rounded-lg bg-accent px-5 text-sm font-semibold text-accent-foreground disabled:opacity-50"
         >
           Add
         </button>

@@ -97,7 +97,7 @@ export default function GuideDeliveryPage() {
             <>
               <div className="my-12 rounded-lg border border-border p-8">
                 <h3 className="mb-4 flex items-center gap-2 font-headings text-lg font-bold text-foreground">
-                  <Icon i="lightbulb" size={20} className="text-primary" />
+                  <Icon i="lightbulb" size={20} className="text-accent" />
                   Pro Tips for Success
                 </h3>
                 <ul className="space-y-3">
@@ -111,7 +111,7 @@ export default function GuideDeliveryPage() {
                       <Icon
                         i="arrow-right"
                         size={16}
-                        className="mt-0.5 flex-shrink-0 text-primary"
+                        className="mt-0.5 flex-shrink-0 text-accent"
                       />
                       <span className="text-muted-foreground">{tip}</span>
                     </li>
@@ -121,7 +121,7 @@ export default function GuideDeliveryPage() {
 
               <div className="mb-12 rounded-lg border border-border bg-secondary p-8">
                 <h3 className="mb-4 flex items-center gap-2 font-headings text-lg font-bold text-foreground">
-                  <Icon i="alert-circle" size={20} className="text-primary" />
+                  <Icon i="alert-circle" size={20} className="text-accent" />
                   Common Mistakes to Avoid
                 </h3>
                 <ul className="space-y-3">
@@ -132,7 +132,7 @@ export default function GuideDeliveryPage() {
                     'Not communicating delivery policies clearly to customers.',
                   ].map((mistake) => (
                     <li key={mistake} className="flex gap-3">
-                      <span className="text-lg font-bold text-primary">✕</span>
+                      <span className="text-lg font-bold text-accent">✕</span>
                       <span className="text-muted-foreground">{mistake}</span>
                     </li>
                   ))}

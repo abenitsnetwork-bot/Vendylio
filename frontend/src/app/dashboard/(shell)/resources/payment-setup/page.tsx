@@ -146,7 +146,7 @@ export default function GuidePaymentSetupPage() {
                 </p>
               </div>
 
-              <div className="mb-12 rounded-lg bg-primary p-8 text-primary-foreground">
+              <div className="mb-12 rounded-lg bg-accent p-8 text-accent-foreground">
                 <div className="flex gap-3">
                   <Icon i="shield" size={24} className="flex-shrink-0" />
                   <div>

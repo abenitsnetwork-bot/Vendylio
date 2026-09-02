@@ -247,7 +247,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         <div className="mx-auto max-w-3xl">
           <Link
             href="/dashboard/orders"
-            className="mb-6 flex items-center gap-2 text-sm font-medium text-primary"
+            className="mb-6 flex items-center gap-2 text-sm font-medium text-accent"
           >
             <Icon i="arrow-left" size={16} />
             Back to Orders
@@ -295,7 +295,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                       type="button"
                       disabled={updating}
                       onClick={confirmPayment}
-                      className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                      className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-50"
                     >
                       {updating ? 'Confirming…' : "I've Received This Payment"}
                     </button>
@@ -335,7 +335,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         className={
                           action.danger
                             ? 'rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 disabled:opacity-50'
-                            : 'rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50'
+                            : 'rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-50'
                         }
                       >
                         {action.label}
@@ -403,7 +403,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                       href={delivery.trackingUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mt-3 inline-block text-sm font-medium text-primary underline"
+                      className="mt-3 inline-block text-sm font-medium text-accent underline"
                     >
                       Open courier tracking
                     </a>
@@ -416,7 +416,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                           type="button"
                           disabled={updating}
                           onClick={retryDelivery}
-                          className="rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+                          className="rounded-lg bg-accent px-4 py-2 text-xs font-semibold text-accent-foreground disabled:opacity-50"
                         >
                           {delivery.state === 'FAILED' ? 'Retry delivery' : 'Dispatch now'}
                         </button>
@@ -457,7 +457,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         type="button"
                         disabled={updating}
                         onClick={() => advance('DELIVERED')}
-                        className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                        className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-50"
                       >
                         Mark Picked Up
                       </button>
@@ -466,7 +466,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         type="button"
                         disabled={updating}
                         onClick={requestDelivery}
-                        className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                        className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-50"
                       >
                         Request Delivery
                       </button>
@@ -484,7 +484,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                       {delivery.trackingUrl && (
                         <>
                           {' — '}
-                          <a href={delivery.trackingUrl} className="text-primary underline">
+                          <a href={delivery.trackingUrl} className="text-accent underline">
                             Track
                           </a>
                         </>
@@ -501,7 +501,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         type="button"
                         disabled={updating}
                         onClick={delivery ? markDelivered : () => advance('DELIVERED')}
-                        className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                        className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-50"
                       >
                         Mark Delivered
                       </button>

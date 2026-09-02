@@ -42,13 +42,13 @@ function SetupBanner({
   return (
     <Link
       href={href}
-      className="mb-6 flex items-center justify-between gap-4 rounded-xl border border-primary bg-secondary p-5 hover:opacity-90"
+      className="mb-6 flex items-center justify-between gap-4 rounded-xl border border-accent/40 bg-accent/5 p-5 hover:opacity-90"
     >
       <div>
         <p className="text-sm font-semibold text-foreground">{title}</p>
         <p className="text-xs text-muted-foreground">{subtitle}</p>
       </div>
-      <span className="flex flex-shrink-0 items-center gap-1 text-sm font-semibold text-primary">
+      <span className="flex flex-shrink-0 items-center gap-1 text-sm font-semibold text-accent">
         {cta} <Icon i="arrow-right" size={14} />
       </span>
     </Link>
@@ -119,7 +119,7 @@ export default function DashboardPage() {
         <button
           type="button"
           onClick={() => setRetryCount((c) => c + 1)}
-          className="text-sm font-medium text-primary"
+          className="text-sm font-medium text-accent"
         >
           Try again
         </button>

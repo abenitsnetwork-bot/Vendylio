@@ -195,7 +195,7 @@ export default function BillingPayoutsPage() {
           <div className="mb-12">
             <Link
               href="/dashboard"
-              className="mb-6 flex items-center gap-2 text-sm font-medium text-primary"
+              className="mb-6 flex items-center gap-2 text-sm font-medium text-accent"
             >
               <Icon i="arrow-left" size={16} />
               Back to Dashboard
@@ -218,7 +218,7 @@ export default function BillingPayoutsPage() {
             </h2>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li className="flex gap-2">
-                <Icon i="credit-card" size={16} className="mt-0.5 flex-shrink-0 text-primary" />
+                <Icon i="credit-card" size={16} className="mt-0.5 flex-shrink-0 text-accent" />
                 <span>
                   <strong className="text-foreground">Card payments</strong>{' '}
                   {stripe?.stripeOnboardingStatus === 'ACTIVE' ? (
@@ -230,7 +230,7 @@ export default function BillingPayoutsPage() {
                   ) : (
                     <>
                       are held by Vendylio until you request a withdrawal below. Connect Stripe in{' '}
-                      <Link href="/onboarding/payments" className="font-medium text-primary">
+                      <Link href="/onboarding/payments" className="font-medium text-accent">
                         payment settings
                       </Link>{' '}
                       to get paid automatically instead.
@@ -239,7 +239,7 @@ export default function BillingPayoutsPage() {
                 </span>
               </li>
               <li className="flex gap-2">
-                <Icon i="smartphone" size={16} className="mt-0.5 flex-shrink-0 text-primary" />
+                <Icon i="smartphone" size={16} className="mt-0.5 flex-shrink-0 text-accent" />
                 <span>
                   <strong className="text-foreground">Cash App &amp; Zelle payments</strong> go
                   directly to you — you confirm receipt yourself on the order. Vendylio&apos;s
@@ -249,7 +249,7 @@ export default function BillingPayoutsPage() {
                 </span>
               </li>
               <li className="flex gap-2">
-                <Icon i="clock" size={16} className="mt-0.5 flex-shrink-0 text-primary" />
+                <Icon i="clock" size={16} className="mt-0.5 flex-shrink-0 text-accent" />
                 <span>
                   Manual withdrawals (the balance below) are reviewed and paid out by the Vendylio
                   team. There are no withdrawal fees.
@@ -333,7 +333,7 @@ export default function BillingPayoutsPage() {
                             onClick={() => setInterval(iv)}
                             className={`px-3 py-1.5 ${
                               interval === iv
-                                ? 'bg-primary text-primary-foreground'
+                                ? 'bg-accent text-accent-foreground'
                                 : 'text-muted-foreground'
                             }`}
                           >
@@ -346,7 +346,7 @@ export default function BillingPayoutsPage() {
                       type="button"
                       onClick={onUpgrade}
                       disabled={planBusy}
-                      className="rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                      className="rounded-lg bg-accent px-6 py-3 text-sm font-semibold text-accent-foreground disabled:opacity-50"
                     >
                       {planBusy ? 'Opening…' : 'Upgrade to Pro'}
                     </button>
@@ -377,7 +377,7 @@ export default function BillingPayoutsPage() {
                   href="/pricing"
                   target="_blank"
                   rel="noreferrer"
-                  className="text-center text-xs font-medium text-primary sm:text-right"
+                  className="text-center text-xs font-medium text-accent sm:text-right"
                 >
                   Compare plans
                 </a>

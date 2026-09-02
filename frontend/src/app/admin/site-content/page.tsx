@@ -288,7 +288,7 @@ function TestimonialRow({
           type="button"
           disabled={busy}
           onClick={() => setEditing(true)}
-          className="text-xs font-medium text-primary disabled:opacity-50"
+          className="text-xs font-medium text-accent disabled:opacity-50"
         >
           Edit
         </button>
@@ -296,7 +296,7 @@ function TestimonialRow({
           type="button"
           disabled={busy}
           onClick={() => void patch({ visible: !t.visible })}
-          className="text-xs font-medium text-primary disabled:opacity-50"
+          className="text-xs font-medium text-accent disabled:opacity-50"
         >
           {t.visible ? 'Hide' : 'Show'}
         </button>

@@ -31,7 +31,7 @@ export default function AddProductPage() {
             <div className="mx-auto mb-10 max-w-3xl">
               <Link
                 href="/dashboard"
-                className="mb-6 flex items-center gap-2 text-sm font-medium text-primary"
+                className="mb-6 flex items-center gap-2 text-sm font-medium text-accent"
               >
                 <Icon i="arrow-left" size={16} />
                 Back to Dashboard

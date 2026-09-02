@@ -100,7 +100,7 @@ function OrdersPageInner() {
           <div className="mb-10">
             <Link
               href="/dashboard"
-              className="mb-6 flex items-center gap-2 text-sm font-medium text-primary"
+              className="mb-6 flex items-center gap-2 text-sm font-medium text-accent"
             >
               <Icon i="arrow-left" size={16} />
               Back to Dashboard
@@ -122,7 +122,7 @@ function OrdersPageInner() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by order number, customer name or email"
-              className="w-full rounded-lg border border-border bg-card px-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+              className="w-full rounded-lg border border-border bg-card px-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none"
             />
           </div>
 
@@ -134,7 +134,7 @@ function OrdersPageInner() {
                 onClick={() => setStatus(f.value)}
                 className={`rounded-full border px-4 py-1.5 text-xs font-semibold ${
                   status === f.value
-                    ? 'border-primary bg-primary text-primary-foreground'
+                    ? 'border-accent bg-accent text-accent-foreground'
                     : 'border-border bg-card text-foreground hover:bg-secondary'
                 }`}
               >

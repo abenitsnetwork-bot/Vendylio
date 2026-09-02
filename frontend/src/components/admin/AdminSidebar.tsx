@@ -59,7 +59,7 @@ export function AdminSidebar() {
               href={item.href}
               className={`mx-3 mb-1 flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium ${
                 isActive(pathname, item.href)
-                  ? 'bg-secondary text-primary'
+                  ? 'bg-accent/10 font-semibold text-accent'
                   : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
               }`}
             >
@@ -86,7 +86,7 @@ export function AdminSidebar() {
             key={item.href}
             href={item.href}
             className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-medium ${
-              isActive(pathname, item.href) ? 'text-primary' : 'text-muted-foreground'
+              isActive(pathname, item.href) ? 'text-accent' : 'text-muted-foreground'
             }`}
           >
             <Icon i={item.icon} size={20} />

@@ -52,7 +52,7 @@ export function DowngradeDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+            className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground"
           >
             Keep Pro
           </button>

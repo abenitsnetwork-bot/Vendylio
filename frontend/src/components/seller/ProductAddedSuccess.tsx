@@ -48,7 +48,7 @@ export function ProductAddedSuccess({
         <div className="space-y-4">
           {NEXT_STEPS.map((step, i) => (
             <div key={step.title} className="flex items-start gap-3">
-              <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-bold text-primary">
+              <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-bold text-accent">
                 {i + 1}
               </div>
               <div>

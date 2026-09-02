@@ -179,7 +179,7 @@ export default function AdminStoresPage() {
         </select>
         <button
           type="submit"
-          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+          className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground"
         >
           Search
         </button>
@@ -203,7 +203,7 @@ export default function AdminStoresPage() {
               >
                 <Link
                   href={`/admin/stores/${s.id}`}
-                  className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1 text-sm hover:text-primary"
+                  className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1 text-sm hover:text-accent"
                 >
                   <span className="font-semibold text-foreground">{s.name}</span>
                   <span className="text-muted-foreground">›</span>
@@ -230,7 +230,7 @@ export default function AdminStoresPage() {
                     className={`rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${
                       s.published
                         ? 'border-red-200 text-red-600 hover:bg-red-50'
-                        : 'border-primary text-primary hover:bg-secondary'
+                        : 'border-accent text-accent hover:bg-secondary'
                     }`}
                   >
                     {busyId === s.id ? 'Saving…' : s.published ? 'Deactivate' : 'Activate'}
