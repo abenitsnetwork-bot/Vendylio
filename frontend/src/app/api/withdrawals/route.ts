@@ -390,11 +390,17 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         processedAt: true,
         completedAt: true,
         failureReason: true,
+        // Payout statement, generated post-completion (best-effort). `null`
+        // until the operator closes the withdrawal out.
+        statement: { select: { id: true } },
       },
     });
 
     const hasMore = rows.length > limit;
-    const items = hasMore ? rows.slice(0, limit) : rows;
+    const items = (hasMore ? rows.slice(0, limit) : rows).map(({ statement, ...w }) => ({
+      ...w,
+      statementId: statement?.id ?? null,
+    }));
     const last = items[items.length - 1];
     const nextCursor =
       hasMore && last ? encodeCursor({ createdAt: last.requestedAt, id: last.id }) : null;

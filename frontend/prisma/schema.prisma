@@ -811,17 +811,18 @@ model Store {
   createdAt                    DateTime     @default(now())
   updatedAt                    DateTime     @updatedAt
 
-  products          Product[]
-  orders            Order[]
-  customers         Customer[]
-  reviews           Review[]
-  categories        Category[]
-  stockMovements    StockMovement[]
-  discounts         Discount[]
-  quotes            Quote[]
-  commissionCharges CommissionCharge[]
-  storefrontDayStats StorefrontDayStat[]
-  productViewDayStats ProductViewDayStat[]
+  products             Product[]
+  orders               Order[]
+  customers            Customer[]
+  reviews              Review[]
+  categories           Category[]
+  stockMovements       StockMovement[]
+  discounts            Discount[]
+  quotes               Quote[]
+  commissionCharges    CommissionCharge[]
+  storefrontDayStats   StorefrontDayStat[]
+  productViewDayStats  ProductViewDayStat[]
+  withdrawalStatements WithdrawalStatement[]
 }
 
 // Phase D — seller-managed promo codes. V1 ships one mechanism:
@@ -1010,9 +1011,38 @@ model Withdrawal {
   // receive `amount - commissionSettledCents`.
   commissionSettledCents Int @default(0)
 
+  statement WithdrawalStatement?
+
   @@index([userId, requestedAt])
   @@index([status, requestedAt])
   @@index([provider, providerPayoutId])
+}
+
+// Per-payout statement. Generated best-effort, post-commit, when an operator
+// marks a Withdrawal COMPLETED (or a BANK send-transfer succeeds). `data` is
+// a FROZEN snapshot of the period breakdown — sales grouped by payment
+// method, refunds, and the commission line-items withheld from this payout —
+// so the PDF stays reproducible even if an order is refunded afterwards. The
+// PDF itself is never stored: GET /api/statements/[id]/pdf re-renders it from
+// `data` on demand (deterministic). `periodFrom` chains from the previous
+// statement's `periodTo` (or the store's createdAt for the first one), so
+// consecutive statements tile the timeline with no gap or overlap.
+model WithdrawalStatement {
+  id                   String     @id @default(cuid())
+  withdrawalId         String     @unique
+  withdrawal           Withdrawal @relation(fields: [withdrawalId], references: [id], onDelete: Cascade)
+  storeId              String
+  store                Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  periodFrom           DateTime
+  periodTo             DateTime
+  currency             String     @default("USD")
+  data                 Json
+  grossSalesCents      Int
+  totalDeductionsCents Int
+  netPayableCents      Int
+  createdAt            DateTime   @default(now())
+
+  @@index([storeId, createdAt])
 }
 
 // ───────────────────────────────────────────────────────────────────────

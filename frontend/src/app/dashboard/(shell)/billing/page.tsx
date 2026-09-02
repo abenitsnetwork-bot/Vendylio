@@ -23,6 +23,8 @@ interface WithdrawalItem {
   destination: { method?: string; cashtag?: string; contact?: string };
   requestedAt: string;
   completedAt: string | null;
+  // Payout statement (PDF), generated once the operator closes the payout.
+  statementId?: string | null;
 }
 
 interface StripeStatus {
@@ -464,7 +466,7 @@ export default function BillingPayoutsPage() {
                 {items.map((w) => (
                   <div
                     key={w.id}
-                    className="flex items-center justify-between rounded-lg border border-border p-4"
+                    className="flex flex-wrap items-center justify-between gap-y-2 rounded-lg border border-border p-4"
                   >
                     <div className="flex-1">
                       <p className="text-sm font-semibold text-foreground">
@@ -473,6 +475,15 @@ export default function BillingPayoutsPage() {
                       <p className="text-xs text-muted-foreground">
                         {new Date(w.requestedAt).toLocaleString()}
                       </p>
+                      {w.statementId && (
+                        <a
+                          href={`/api/statements/${w.statementId}/pdf`}
+                          className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
+                        >
+                          <Icon i="download" size={12} />
+                          Payout statement (PDF)
+                        </a>
+                      )}
                     </div>
                     <div className="text-right">
                       <p className="text-base font-bold text-foreground">

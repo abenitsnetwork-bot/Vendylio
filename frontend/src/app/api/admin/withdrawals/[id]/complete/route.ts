@@ -11,7 +11,7 @@
 export const runtime = 'nodejs';
 
 import 'server-only';
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse, after, type NextRequest } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { verifyCsrf } from '@/lib/server/auth';
@@ -21,6 +21,7 @@ import { logAdminAction } from '@/lib/server/admin/audit';
 import { enforceAdminRateLimit } from '@/lib/server/middleware/rate-limit-by-userid';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 import { lockUserTx } from '@/lib/server/withdrawals/lock';
+import { generateStatementForWithdrawal } from '@/lib/server/statements/generate';
 
 const Body = z.object({
   note: z.string().max(500).optional(),
@@ -120,6 +121,10 @@ export async function POST(
         { status: 409 },
       );
     }
+    // Post-response: build + persist this payout's statement (best-effort,
+    // idempotent). Never blocks or fails the completion.
+    after(() => generateStatementForWithdrawal(id));
+
     return NextResponse.json({ withdrawal: result.withdrawal }, { status: 200 });
   });
 }

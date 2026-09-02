@@ -54,6 +54,10 @@ const config: NextConfig = {
   // into .next/standalone — required by the Docker runtime image (frontend/Dockerfile).
   // Has no impact on `next dev` / `next start` workflows.
   output: 'standalone',
+  // pdfkit ships its font metrics (.afm) as data files it reads via fs at
+  // runtime; bundling it breaks those reads. Keep it external so it loads
+  // from node_modules. Used only by the payout-statement PDF route.
+  serverExternalPackages: ['pdfkit'],
   async headers() {
     return [
       {

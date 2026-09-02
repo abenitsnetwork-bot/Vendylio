@@ -19,6 +19,14 @@ vi.mock('@/lib/server/middleware/rate-limit-by-userid', () => ({
 vi.mock('@/lib/server/admin/audit', () => ({
   logAdminAction: vi.fn(),
 }));
+// `after()` throws outside a real request scope — run its callback inline.
+vi.mock('next/server', async (orig) => {
+  const actual = await orig<typeof import('next/server')>();
+  return { ...actual, after: (fn: () => unknown) => void fn() };
+});
+vi.mock('@/lib/server/statements/generate', () => ({
+  generateStatementForWithdrawal: vi.fn(),
+}));
 
 import { requireSuperadmin } from '@/lib/server/middleware';
 import { enforceAdminRateLimit } from '@/lib/server/middleware/rate-limit-by-userid';

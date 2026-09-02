@@ -20,7 +20,7 @@
 export const runtime = 'nodejs';
 
 import 'server-only';
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse, after, type NextRequest } from 'next/server';
 import { Prisma } from '@prisma/client';
 import Stripe from 'stripe';
 import { verifyCsrf } from '@/lib/server/auth';
@@ -31,6 +31,7 @@ import { enforceAdminRateLimit } from '@/lib/server/middleware/rate-limit-by-use
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 import { lockUserTx } from '@/lib/server/withdrawals/lock';
 import { resolveOwnStore } from '@/lib/server/org';
+import { generateStatementForWithdrawal } from '@/lib/server/statements/generate';
 import {
   createConnectTransfer,
   StripeConnectUnconfiguredError,
@@ -204,6 +205,10 @@ export async function POST(
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
+
+    // Post-response: build + persist this payout's statement (best-effort,
+    // idempotent). Never blocks or fails the transfer.
+    after(() => generateStatementForWithdrawal(id));
 
     return NextResponse.json({ withdrawal: updated, transferId }, { status: 200 });
   });
