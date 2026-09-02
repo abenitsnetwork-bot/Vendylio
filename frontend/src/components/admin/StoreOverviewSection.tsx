@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Icon } from '@/components/ui/Icon';
+import { PlanBadge } from '@/components/PlanBadge';
 import { formatUsdPerUnit } from '@/lib/productUnits';
 
 interface OverviewStore {
@@ -16,6 +17,7 @@ interface OverviewStore {
   address: string | null;
   template: string;
   published: boolean;
+  plan: string;
   ordersPaused: boolean;
   acceptingOrders: boolean;
   isOpen: boolean;
@@ -36,6 +38,7 @@ interface Overview {
     inactiveStores: number;
     openStores: number;
     closedStores: number;
+    proStores: number;
     totalSalesCents: number;
     totalOrders: number;
     salesGrowthPct: number | null;
@@ -149,12 +152,13 @@ export function StoreOverviewSection() {
       {data && (
         <>
           <Card className="mb-4 p-5">
-            <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
+            <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
               <CountTile label="Total Stores" value={data.summary.totalStores} />
               <CountTile label="Active" value={data.summary.activeStores} tone="green" />
               <CountTile label="Inactive" value={data.summary.inactiveStores} />
               <CountTile label="Open Now" value={data.summary.openStores} tone="green" />
               <CountTile label="Closed" value={data.summary.closedStores} tone="red" />
+              <CountTile label="Pro" value={data.summary.proStores} tone="green" />
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border pt-4 sm:grid-cols-4 lg:grid-cols-5">
               <SecondaryStat label="Total Sales" value={usd(data.summary.totalSalesCents)} />
@@ -202,7 +206,10 @@ export function StoreOverviewSection() {
                         <Rating store={s} />
                       </div>
                     </div>
-                    <StatusPill store={s} />
+                    <div className="flex flex-shrink-0 flex-col items-end gap-1.5">
+                      <StatusPill store={s} />
+                      <PlanBadge plan={s.plan} />
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">

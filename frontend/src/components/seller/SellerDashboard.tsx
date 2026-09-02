@@ -8,6 +8,29 @@ import { Modal } from '@/components/ui/Modal';
 import { SellerHeader } from '@/components/seller/SellerHeader';
 import { ShareStoreModal } from '@/components/seller/ShareStoreModal';
 import { formatOrderNumber } from '@/lib/orderNumber';
+import { usePlan } from '@/lib/usePlan';
+
+function PlanButton() {
+  const { isPro, loading } = usePlan();
+  if (loading) return null;
+  return (
+    <Link
+      href="/dashboard/billing"
+      className={`inline-flex flex-shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
+        isPro
+          ? 'bg-green-100 text-green-700 hover:bg-green-200'
+          : 'bg-accent/10 text-accent hover:bg-accent/20'
+      }`}
+    >
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${isPro ? 'bg-green-600' : 'bg-accent'}`}
+        aria-hidden="true"
+      />
+      {isPro ? 'Pro plan' : 'Free plan · Upgrade to Pro'}
+      <Icon i="arrow-right" size={12} />
+    </Link>
+  );
+}
 
 export interface DashboardStore {
   id: string;
@@ -130,12 +153,15 @@ export function SellerDashboard({
           </div>
         )}
         <div className="mb-10">
-          <h1
-            className="mb-2 font-headings font-bold text-foreground"
-            style={{ fontSize: 'clamp(24px, 4vw, 32px)', letterSpacing: '-0.8px' }}
-          >
-            Welcome, {greetingName}!
-          </h1>
+          <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
+            <h1
+              className="font-headings font-bold text-foreground"
+              style={{ fontSize: 'clamp(24px, 4vw, 32px)', letterSpacing: '-0.8px' }}
+            >
+              Welcome, {greetingName}!
+            </h1>
+            <PlanButton />
+          </div>
           <Link
             href="/dashboard/settings?tab=hours"
             className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"

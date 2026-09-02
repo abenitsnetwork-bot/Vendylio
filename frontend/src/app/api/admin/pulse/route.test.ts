@@ -1,7 +1,10 @@
 // GET /api/admin/pulse — dashboard KPI deltas + 30-day daily series + queue health.
 import { prismaMock } from '@/test-utils/prisma-mock';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { NextRequest, NextResponse } from 'next/server';
+
+// `groupBy` has an overloaded generic type mockDeep can't narrow — cast it.
+const groupByMock = (m: unknown) => m as unknown as Mock;
 
 vi.mock('@/lib/server/middleware', () => ({ requireAdmin: vi.fn() }));
 vi.mock('@/lib/server/middleware/rate-limit-by-userid', () => ({ enforceAdminRateLimit: vi.fn() }));
@@ -35,6 +38,10 @@ beforeEach(() => {
   prismaMock.withdrawal.count.mockResolvedValue(0);
   prismaMock.order.findMany.mockResolvedValue([] as never);
   prismaMock.customer.findMany.mockResolvedValue([] as never);
+  prismaMock.store.findMany.mockResolvedValue([] as never);
+  groupByMock(prismaMock.store.groupBy).mockResolvedValue([] as never);
+  groupByMock(prismaMock.commissionCharge.groupBy).mockResolvedValue([] as never);
+  groupByMock(prismaMock.storefrontDayStat.groupBy).mockResolvedValue([] as never);
 });
 
 describe('GET /api/admin/pulse', () => {
@@ -80,6 +87,18 @@ describe('GET /api/admin/pulse', () => {
     expect(body.daily).toHaveLength(30);
     expect(body.daily[0]).toMatchObject({ gmvCents: 0, orderCount: 0, newCustomers: 0 });
     expect(body.revenueMix).toEqual([]);
+    expect(body.planMix).toEqual({ free: 0, pro: 0 });
+    expect(body.subscriptions).toEqual({
+      activePro: 0,
+      monthly: 0,
+      annual: 0,
+      pastDue: 0,
+      comped: 0,
+      mrrCents: 0,
+    });
+    expect(body.commission).toEqual({ owedCents: 0, invoicedCents: 0 });
+    expect(body.traffic).toEqual({ visitors30d: 0, storeViews30d: 0 });
+    expect(body.daily[0]).toMatchObject({ visitors: 0, storeViews: 0 });
     expect(body.queue).toEqual({
       outboxPending: 0,
       outboxFailed: 0,
@@ -130,6 +149,47 @@ describe('GET /api/admin/pulse', () => {
       { method: 'Cash App', gmvCents: 5000, orderCount: 1 },
       { method: 'Zelle', gmvCents: 3000, orderCount: 1 },
     ]);
+  });
+
+  it('computes plan mix, MRR and commission owed from live subscription state', async () => {
+    groupByMock(prismaMock.store.groupBy).mockResolvedValueOnce([
+      { plan: 'FREE', _count: { _all: 7 } },
+      { plan: 'PRO', _count: { _all: 3 } },
+    ] as never);
+    prismaMock.store.findMany.mockResolvedValueOnce([
+      { subscriptionStatus: 'ACTIVE', planSource: 'SUBSCRIPTION', subscriptionInterval: 'month' },
+      { subscriptionStatus: 'ACTIVE', planSource: 'SUBSCRIPTION', subscriptionInterval: 'year' },
+      { subscriptionStatus: null, planSource: 'COMP', subscriptionInterval: null },
+    ] as never);
+    groupByMock(prismaMock.commissionCharge.groupBy).mockResolvedValueOnce([
+      { status: 'OWED', _sum: { amountCents: 4200 } },
+      { status: 'INVOICED', _sum: { amountCents: 1000 } },
+    ] as never);
+
+    const body = await (await GET(makeGet())).json();
+
+    expect(body.planMix).toEqual({ free: 7, pro: 3 });
+    expect(body.subscriptions).toMatchObject({
+      activePro: 2,
+      monthly: 1,
+      annual: 1,
+      comped: 1,
+      // 2900 (monthly) + round(29000/12) (annual)
+      mrrCents: 2900 + Math.round(29000 / 12),
+    });
+    expect(body.commission).toEqual({ owedCents: 4200, invoicedCents: 1000 });
+  });
+
+  it('fills the daily visitor series from StorefrontDayStat', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    groupByMock(prismaMock.storefrontDayStat.groupBy).mockResolvedValueOnce([
+      { day: new Date(`${today}T00:00:00.000Z`), _sum: { storeViews: 40, visitors: 12 } },
+    ] as never);
+
+    const body = await (await GET(makeGet())).json();
+
+    expect(body.traffic).toEqual({ visitors30d: 12, storeViews30d: 40 });
+    expect(body.daily[body.daily.length - 1]).toMatchObject({ visitors: 12, storeViews: 40 });
   });
 
   it('surfaces queue health counts and scopes in-flight deliveries to REQUESTED', async () => {

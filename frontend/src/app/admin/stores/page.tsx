@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
 import { Icon } from '@/components/ui/Icon';
+import { PlanBadge } from '@/components/PlanBadge';
 import { useAdminAuth } from '@/contexts/AdminContext';
 
 interface AdminStore {
@@ -26,10 +27,18 @@ const PUBLISHED_LABELS: Record<string, string> = {
   false: 'Inactive',
 };
 
+const PLAN_FILTERS = ['', 'FREE', 'PRO'];
+const PLAN_LABELS: Record<string, string> = {
+  '': 'All plans',
+  FREE: 'Free',
+  PRO: 'Pro',
+};
+
 export default function AdminStoresPage() {
   const { admin } = useAdminAuth();
   const [q, setQ] = useState('');
   const [published, setPublished] = useState('');
+  const [plan, setPlan] = useState('');
   const [stores, setStores] = useState<AdminStore[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -41,11 +50,12 @@ export default function AdminStoresPage() {
       const params = new URLSearchParams({
         ...(q ? { q } : {}),
         ...(published ? { published } : {}),
+        ...(plan ? { plan } : {}),
         ...extra,
       });
       return params.toString();
     },
-    [q, published],
+    [q, published, plan],
   );
 
   const load = useCallback(() => {
@@ -155,6 +165,18 @@ export default function AdminStoresPage() {
             </option>
           ))}
         </select>
+        <select
+          value={plan}
+          onChange={(e) => setPlan(e.target.value)}
+          className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground"
+          aria-label="Filter by plan"
+        >
+          {PLAN_FILTERS.map((p) => (
+            <option key={p} value={p}>
+              {PLAN_LABELS[p]}
+            </option>
+          ))}
+        </select>
         <button
           type="submit"
           className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
@@ -187,8 +209,9 @@ export default function AdminStoresPage() {
                   <span className="text-muted-foreground">›</span>
                   <span className="truncate text-xs text-muted-foreground">{s.ownerEmail}</span>
                   <span className="text-muted-foreground">›</span>
+                  <PlanBadge plan={s.plan} />
                   <span className="text-xs font-medium text-muted-foreground">
-                    {s.plan} · {s.productCount} products · {s.orderCount} orders
+                    {s.productCount} products · {s.orderCount} orders
                   </span>
                 </Link>
 

@@ -21,6 +21,12 @@ import { makeRequestContext, withRequestContext } from '@/lib/server/observabili
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WINDOW_DAYS = 30;
 
+// Vendylio's own Pro pricing (see /pricing). Used only to turn the live
+// subscription counts into an MRR figure — not stored, not fabricated data.
+const PRO_MONTHLY_CENTS = 2900;
+const PRO_ANNUAL_CENTS = 29000;
+const ACTIVE_SUB_STATUSES = ['ACTIVE', 'TRIALING'];
+
 /** UTC calendar-day key, e.g. "2026-09-01". */
 function dayKey(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -70,6 +76,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       emailPending,
       emailFailed,
       withdrawalsPending,
+      storeGroups,
+      proStores,
+      commissionGroups,
+      dayStats,
     ] = await Promise.all([
       prisma.organization.count(),
       prisma.organization.count({ where: { createdAt: { gte: periodStart } } }),
@@ -95,7 +105,70 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       prisma.emailJob.count({ where: { status: 'PENDING' } }),
       prisma.emailJob.count({ where: { status: { in: ['FAILED', 'DEAD'] } } }),
       prisma.withdrawal.count({ where: { status: { in: ['PENDING', 'PROCESSING'] } } }),
+      prisma.store.groupBy({ by: ['plan'], _count: { _all: true } }),
+      prisma.store.findMany({
+        where: { plan: 'PRO' },
+        select: { subscriptionStatus: true, planSource: true, subscriptionInterval: true },
+      }),
+      prisma.commissionCharge.groupBy({
+        by: ['status'],
+        where: { status: { in: ['OWED', 'INVOICED'] } },
+        _sum: { amountCents: true },
+      }),
+      prisma.storefrontDayStat.groupBy({
+        by: ['day'],
+        where: {
+          day: {
+            gte: new Date(
+              `${dayKey(new Date(now.getTime() - (WINDOW_DAYS - 1) * DAY_MS))}T00:00:00.000Z`,
+            ),
+          },
+        },
+        _sum: { storeViews: true, visitors: true },
+      }),
     ]);
+
+    // ── Plan mix + subscription / billing health ────────────────────────────
+    const planMix = { free: 0, pro: 0 };
+    for (const g of storeGroups) {
+      if (g.plan === 'PRO') planMix.pro += g._count._all;
+      else planMix.free += g._count._all;
+    }
+    const subscriptions = {
+      activePro: 0,
+      monthly: 0,
+      annual: 0,
+      pastDue: 0,
+      comped: 0,
+      mrrCents: 0,
+    };
+    for (const s of proStores) {
+      if (s.planSource === 'COMP') {
+        subscriptions.comped += 1;
+        continue;
+      }
+      if (s.subscriptionStatus === 'PAST_DUE') subscriptions.pastDue += 1;
+      if (s.subscriptionStatus && ACTIVE_SUB_STATUSES.includes(s.subscriptionStatus)) {
+        subscriptions.activePro += 1;
+        if (s.subscriptionInterval === 'year') {
+          subscriptions.annual += 1;
+          subscriptions.mrrCents += Math.round(PRO_ANNUAL_CENTS / 12);
+        } else {
+          subscriptions.monthly += 1;
+          subscriptions.mrrCents += PRO_MONTHLY_CENTS;
+        }
+      }
+    }
+    const commission = {
+      owedCents: commissionGroups.find((g) => g.status === 'OWED')?._sum.amountCents ?? 0,
+      invoicedCents: commissionGroups.find((g) => g.status === 'INVOICED')?._sum.amountCents ?? 0,
+    };
+    const dayStatByKey = new Map(
+      dayStats.map((r) => [
+        dayKey(new Date(r.day)),
+        { storeViews: r._sum.storeViews ?? 0, visitors: r._sum.visitors ?? 0 },
+      ]),
+    );
 
     // ── Daily buckets (last 30 UTC days, oldest first) ───────────────────────
     const days: string[] = [];
@@ -105,9 +178,21 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const daily = new Map(
       days.map((d) => [
         d,
-        { date: d, gmvCents: 0, orderCount: 0, newCustomers: 0, revenueCents: 0 },
+        {
+          date: d,
+          gmvCents: 0,
+          orderCount: 0,
+          newCustomers: 0,
+          revenueCents: 0,
+          visitors: dayStatByKey.get(d)?.visitors ?? 0,
+          storeViews: dayStatByKey.get(d)?.storeViews ?? 0,
+        },
       ]),
     );
+    const traffic = {
+      visitors30d: [...dayStatByKey.values()].reduce((s, v) => s + v.visitors, 0),
+      storeViews30d: [...dayStatByKey.values()].reduce((s, v) => s + v.storeViews, 0),
+    };
 
     // ── Split the 60-day reads into this-period / prev-period + fill daily ───
     let gmvCur = 0;
@@ -166,6 +251,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       orderCount: number;
       newCustomers: number;
       revenueCents: number;
+      visitors: number;
+      storeViews: number;
     };
     const spark = (pick: (b: Bucket) => number) => days.map((d) => pick(daily.get(d)!));
 
@@ -202,6 +289,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           },
         },
         revenueMix,
+        planMix,
+        subscriptions,
+        commission,
+        traffic,
         daily: days.map((d) => daily.get(d)!),
         queue: {
           outboxPending,

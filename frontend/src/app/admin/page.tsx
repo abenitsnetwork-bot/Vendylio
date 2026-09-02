@@ -1,7 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { api, ApiError } from '@/lib/api';
 import { formatUsdPerUnit } from '@/lib/productUnits';
 import { StatusBadge, formatUsd } from '@/components/seller/OrdersTable';
@@ -42,7 +52,25 @@ interface Pulse {
     failedPayments: KpiSeries;
   };
   revenueMix: { method: string; gmvCents: number; orderCount: number }[];
-  daily: { date: string; gmvCents: number; orderCount: number; newCustomers: number }[];
+  planMix: { free: number; pro: number };
+  subscriptions: {
+    activePro: number;
+    monthly: number;
+    annual: number;
+    pastDue: number;
+    comped: number;
+    mrrCents: number;
+  };
+  commission: { owedCents: number; invoicedCents: number };
+  traffic: { visitors30d: number; storeViews30d: number };
+  daily: {
+    date: string;
+    gmvCents: number;
+    orderCount: number;
+    newCustomers: number;
+    visitors: number;
+    storeViews: number;
+  }[];
   queue: QueueSnapshot;
 }
 
@@ -222,6 +250,70 @@ export default function AdminDashboardPage() {
                 centerLabel={`total · ${period}`}
                 formatMoney={usd}
               />
+
+              {/* Plan mix + recurring revenue — the Free/Pro business story */}
+              {pulse && (
+                <div className="mt-4 space-y-3 border-t border-border pt-4">
+                  <div>
+                    <div className="mb-1 flex items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      <span>Plan mix</span>
+                      <span className="text-foreground">
+                        {pulse.planMix.pro} Pro · {pulse.planMix.free} Free
+                      </span>
+                    </div>
+                    <div className="flex h-2 overflow-hidden rounded-full bg-secondary">
+                      {(() => {
+                        const total = pulse.planMix.pro + pulse.planMix.free || 1;
+                        return (
+                          <>
+                            <div
+                              className="bg-green-500"
+                              style={{ width: `${(pulse.planMix.pro / total) * 100}%` }}
+                            />
+                            <div
+                              className="bg-accent"
+                              style={{ width: `${(pulse.planMix.free / total) * 100}%` }}
+                            />
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                        MRR
+                      </p>
+                      <p className="font-headings text-lg font-bold text-foreground">
+                        {usdCompact(pulse.subscriptions.mrrCents)}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {pulse.subscriptions.monthly}m · {pulse.subscriptions.annual}y
+                        {pulse.subscriptions.comped ? ` · ${pulse.subscriptions.comped} comp` : ''}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                        Commission owed
+                      </p>
+                      <p className="font-headings text-lg font-bold text-foreground">
+                        {usd(pulse.commission.owedCents)}
+                      </p>
+                      {pulse.commission.invoicedCents > 0 && (
+                        <p className="text-[11px] text-muted-foreground">
+                          {usd(pulse.commission.invoicedCents)} invoiced
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  {pulse.subscriptions.pastDue > 0 && (
+                    <p className="text-[11px] font-semibold text-red-600">
+                      {pulse.subscriptions.pastDue} subscription
+                      {pulse.subscriptions.pastDue > 1 ? 's' : ''} past due
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Right — the trend combo */}
@@ -237,6 +329,41 @@ export default function AdminDashboardPage() {
                 </p>
               ) : (
                 <TrendComboChart data={trendData} formatMoney={usd} height={240} />
+              )}
+
+              {/* Storefront traffic — the platform is alive even with no orders */}
+              {pulse && (
+                <div className="mt-4 border-t border-border pt-3">
+                  <div className="mb-1 flex items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    <span>Storefront visitors · 30d</span>
+                    <span className="text-foreground">
+                      {count(pulse.traffic.visitors30d)} visitors ·{' '}
+                      {count(pulse.traffic.storeViews30d)} views
+                    </span>
+                  </div>
+                  <div style={{ height: 64 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart
+                        data={pulse.daily.map((d) => ({
+                          label: dayLabel(d.date),
+                          visitors: d.visitors,
+                        }))}
+                        margin={{ top: 4, right: 0, bottom: 0, left: 0 }}
+                      >
+                        <Tooltip contentStyle={TOOLTIP_STYLE} />
+                        <Area
+                          type="monotone"
+                          dataKey="visitors"
+                          name="Visitors"
+                          stroke={CHART_ACCENT}
+                          fill={CHART_ACCENT}
+                          fillOpacity={0.15}
+                          strokeWidth={1.5}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
               )}
             </div>
           </div>

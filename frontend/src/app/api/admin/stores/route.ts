@@ -53,6 +53,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const limit = clampLimit(url.searchParams.get('limit'));
     const q = (url.searchParams.get('q') ?? '').slice(0, Q_MAX).trim();
     const publishedParam = url.searchParams.get('published');
+    const planParam = url.searchParams.get('plan');
     const cursor = decodeCursor(url.searchParams.get('cursor'));
 
     const where: Prisma.StoreWhereInput = {
@@ -66,6 +67,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         : {}),
       ...(publishedParam === 'true' ? { published: true } : {}),
       ...(publishedParam === 'false' ? { published: false } : {}),
+      ...(planParam === 'FREE' || planParam === 'PRO' ? { plan: planParam } : {}),
       ...cursorWhere(cursor),
     };
 
