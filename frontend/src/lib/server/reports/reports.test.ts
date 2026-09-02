@@ -26,6 +26,13 @@ beforeEach(() => {
   prismaMock.store.findUnique.mockResolvedValue(null as never);
   prismaMock.organizationMember.findMany.mockResolvedValue([] as never);
   groupByMock(prismaMock.storefrontDayStat.groupBy).mockResolvedValue([]);
+  // Lot 2 builders
+  prismaMock.delivery.findMany.mockResolvedValue([] as never);
+  prismaMock.orderStatusEvent.findMany.mockResolvedValue([] as never);
+  prismaMock.product.findMany.mockResolvedValue([] as never);
+  prismaMock.adminAction.findMany.mockResolvedValue([] as never);
+  prismaMock.businessLead.findMany.mockResolvedValue([] as never);
+  prismaMock.user.findMany.mockResolvedValue([] as never);
 });
 
 describe('report registry', () => {
@@ -120,6 +127,88 @@ describe('commission-receivables aging', () => {
       invoiced: 200,
     });
     expect(r.kpis.find((k) => k.label === 'Owed 90+ days')?.value).toBe('$3.00');
+  });
+});
+
+describe('orders report', () => {
+  it('splits paid vs abandoned and totals gross paid', async () => {
+    prismaMock.order.findMany.mockResolvedValue([
+      {
+        orderNumber: 1,
+        createdAt: new Date('2026-08-02T00:00:00Z'),
+        storeId: 's1',
+        status: 'DELIVERED',
+        provider: 'stripe_platform',
+        fulfillmentMethod: 'DELIVERY',
+        subtotalCents: 1000,
+        deliveryFeeCents: 300,
+        discountCents: 0,
+        amount: 1300,
+      },
+      {
+        orderNumber: 2,
+        createdAt: new Date('2026-08-03T00:00:00Z'),
+        storeId: 's1',
+        status: 'PENDING',
+        provider: 'stripe_platform',
+        fulfillmentMethod: 'PICKUP',
+        subtotalCents: 500,
+        deliveryFeeCents: 0,
+        discountCents: 0,
+        amount: 500,
+      },
+      {
+        orderNumber: 3,
+        createdAt: new Date('2026-08-04T00:00:00Z'),
+        storeId: 's1',
+        status: 'EXPIRED',
+        provider: 'cashapp_manual',
+        fulfillmentMethod: 'DELIVERY',
+        subtotalCents: 800,
+        deliveryFeeCents: 200,
+        discountCents: 0,
+        amount: 1000,
+      },
+    ] as never);
+    prismaMock.store.findMany.mockResolvedValue([{ id: 's1', name: 'Shop One' }] as never);
+
+    const r = await REPORTS.orders.build(ARGS);
+    expect(r.rows).toHaveLength(3);
+    expect(r.kpis.find((k) => k.label === 'Paid')?.value).toBe('1');
+    expect(r.kpis.find((k) => k.label === 'Gross paid')?.value).toBe('$13.00');
+    expect(r.kpis.find((k) => k.label === 'Abandoned / failed')?.value).toBe('2');
+  });
+});
+
+describe('onboarding funnel', () => {
+  it('counts each step against the created cohort', async () => {
+    prismaMock.store.findMany.mockResolvedValue([
+      {
+        id: 'a',
+        createdAt: new Date('2026-08-02T00:00:00Z'),
+        published: true,
+        publishedAt: new Date('2026-08-04T00:00:00Z'),
+        stripeOnboardingStatus: 'ACTIVE',
+        cashAppCashtag: null,
+        zelleContact: null,
+      },
+      {
+        id: 'b',
+        createdAt: new Date('2026-08-05T00:00:00Z'),
+        published: false,
+        publishedAt: null,
+        stripeOnboardingStatus: 'NOT_STARTED',
+        cashAppCashtag: null,
+        zelleContact: null,
+      },
+    ] as never);
+    prismaMock.product.findMany.mockResolvedValue([{ storeId: 'a' }] as never);
+    prismaMock.order.findMany.mockResolvedValue([{ storeId: 'a' }] as never);
+
+    const r = await REPORTS['onboarding-funnel'].build(ARGS);
+    expect(r.rows[0]).toMatchObject({ step: 'Created a store', stores: 2 });
+    expect(r.rows.find((x) => x.step === 'Published the storefront')).toMatchObject({ stores: 1 });
+    expect(r.kpis.find((k) => k.label === 'Activation rate')?.value).toBe('50.0%');
   });
 });
 

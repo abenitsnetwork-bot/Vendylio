@@ -10,7 +10,16 @@ export type ReportType =
   | 'payouts'
   | 'commission-receivables'
   | 'gmv-sales'
-  | 'store-performance';
+  | 'store-performance'
+  | 'orders'
+  | 'deliveries'
+  | 'refunds'
+  | 'onboarding-funnel'
+  | 'storefront-traffic'
+  | 'business-waitlist'
+  | 'admin-activity'
+  | 'seller-tax-summary'
+  | 'suspended-accounts';
 
 export type ColumnFormat = 'text' | 'usd' | 'number' | 'percent' | 'date';
 

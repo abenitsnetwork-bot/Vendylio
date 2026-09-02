@@ -5,6 +5,15 @@ import { buildPayouts } from './builders/payouts';
 import { buildCommissionReceivables } from './builders/commissionReceivables';
 import { buildGmvSales } from './builders/gmvSales';
 import { buildStorePerformance } from './builders/storePerformance';
+import { buildOrders } from './builders/orders';
+import { buildDeliveries } from './builders/deliveries';
+import { buildRefunds } from './builders/refunds';
+import { buildOnboardingFunnel } from './builders/onboardingFunnel';
+import { buildStorefrontTraffic } from './builders/storefrontTraffic';
+import { buildBusinessWaitlist } from './builders/businessWaitlist';
+import { buildAdminActivity } from './builders/adminActivity';
+import { buildSellerTaxSummary } from './builders/sellerTaxSummary';
+import { buildSuspendedAccounts } from './builders/suspendedAccounts';
 
 export const REPORTS: Record<ReportType, ReportDef> = {
   'platform-revenue': {
@@ -51,6 +60,85 @@ export const REPORTS: Record<ReportType, ReportDef> = {
     usesDateRange: true,
     usesStoreFilter: true,
     build: buildStorePerformance,
+  },
+  orders: {
+    type: 'orders',
+    label: 'Orders',
+    description:
+      'Every checkout created in the period — store, status, payment method, totals — paid or not.',
+    usesDateRange: true,
+    usesStoreFilter: true,
+    build: buildOrders,
+  },
+  deliveries: {
+    type: 'deliveries',
+    label: 'Deliveries',
+    description:
+      'Every delivery created in the period — provider, final state, fee charged vs provider cost.',
+    usesDateRange: true,
+    usesStoreFilter: true,
+    build: buildDeliveries,
+  },
+  refunds: {
+    type: 'refunds',
+    label: 'Refunds',
+    description:
+      'Orders refunded in the period, by the date the refund was issued — amount and commission reversed.',
+    usesDateRange: true,
+    usesStoreFilter: true,
+    build: buildRefunds,
+  },
+  'onboarding-funnel': {
+    type: 'onboarding-funnel',
+    label: 'Onboarding funnel',
+    description:
+      'How far each cohort of newly created stores got — product, payments, publish, first order.',
+    usesDateRange: true,
+    usesStoreFilter: false,
+    build: buildOnboardingFunnel,
+  },
+  'storefront-traffic': {
+    type: 'storefront-traffic',
+    label: 'Storefront traffic',
+    description:
+      'Views, unique visitors and product views by store, with a conversion rate for the window.',
+    usesDateRange: true,
+    usesStoreFilter: true,
+    build: buildStorefrontTraffic,
+  },
+  'business-waitlist': {
+    type: 'business-waitlist',
+    label: 'Business waitlist',
+    description: 'Everyone on the "Business" tier waitlist from the pricing page (snapshot).',
+    usesDateRange: false,
+    usesStoreFilter: false,
+    build: buildBusinessWaitlist,
+  },
+  'admin-activity': {
+    type: 'admin-activity',
+    label: 'Admin activity',
+    description:
+      'Back-office actions in the period, rolled up per admin and action type with counts.',
+    usesDateRange: true,
+    usesStoreFilter: false,
+    build: buildAdminActivity,
+  },
+  'seller-tax-summary': {
+    type: 'seller-tax-summary',
+    label: 'Seller tax summary (1099-K)',
+    description:
+      'Per-store card payment volume processed by Vendylio — the basis for a 1099-K. Excludes Cash App / Zelle.',
+    usesDateRange: true,
+    usesStoreFilter: true,
+    build: buildSellerTaxSummary,
+  },
+  'suspended-accounts': {
+    type: 'suspended-accounts',
+    label: 'Suspended accounts',
+    description: 'Every currently suspended user account, with the store they run (snapshot).',
+    usesDateRange: false,
+    usesStoreFilter: false,
+    build: buildSuspendedAccounts,
   },
 };
 
