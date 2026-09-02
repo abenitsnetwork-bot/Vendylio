@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect } from 'vitest';
 import { NextRequest } from 'next/server';
 // proxy.ts lives at src/ (Next 16 requires the Proxy file inside src/ when
 // app/ is under src/ — a root-level file is silently ignored).
@@ -85,5 +85,31 @@ describe('custom domain rewrite (Phase 4b)', () => {
   it('leaves our own hosts alone', () => {
     expect(rewriteTarget(proxy(request('/', {}, 'localhost:3000')))).toBeNull();
     expect(rewriteTarget(proxy(request('/', {}, 'app.vercel.app')))).toBeNull();
+  });
+});
+
+describe('custom domain rewrite — own apex + www (regression)', () => {
+  const orig = process.env.APP_URL;
+  afterEach(() => {
+    if (orig === undefined) delete process.env.APP_URL;
+    else process.env.APP_URL = orig;
+  });
+
+  it('never rewrites the apex or www of APP_URL', () => {
+    process.env.APP_URL = 'https://vendylio.com';
+    expect(rewriteTarget(proxy(request('/', {}, 'vendylio.com')))).toBeNull();
+    expect(rewriteTarget(proxy(request('/', {}, 'www.vendylio.com')))).toBeNull();
+    expect(isNext(proxy(request('/', {}, 'www.vendylio.com')))).toBe(true);
+  });
+
+  it('still rewrites a genuine foreign domain', () => {
+    process.env.APP_URL = 'https://vendylio.com';
+    expect(rewriteTarget(proxy(request('/', {}, 'shop.acme.com')))).toContain('/s/shop.acme.com');
+  });
+
+  it('works when APP_URL itself carries www', () => {
+    process.env.APP_URL = 'https://www.vendylio.com';
+    expect(rewriteTarget(proxy(request('/', {}, 'vendylio.com')))).toBeNull();
+    expect(rewriteTarget(proxy(request('/', {}, 'www.vendylio.com')))).toBeNull();
   });
 });

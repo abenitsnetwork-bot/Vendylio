@@ -40,8 +40,14 @@ function appHost(): string {
 
 function isOwnHost(host: string): boolean {
   const bare = host.split(':')[0]!.toLowerCase();
+  const app = appHost();
+  const apex = app.replace(/^www\./, ''); // treat apex + www as the same site
   return (
-    bare === appHost() ||
+    bare === app ||
+    bare === apex ||
+    // Any sub-domain of our own apex is ours (www, previews, etc.), never a
+    // merchant's connected domain.
+    bare.endsWith(`.${apex}`) ||
     bare === 'localhost' ||
     bare === '127.0.0.1' ||
     bare.endsWith('.vercel.app')
