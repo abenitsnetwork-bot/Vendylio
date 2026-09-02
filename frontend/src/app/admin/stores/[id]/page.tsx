@@ -26,6 +26,9 @@ interface StoreDetail {
   publishedAt: string | null;
   ordersPaused: boolean;
   plan: string;
+  planSource: string | null;
+  subscriptionStatus: string | null;
+  planCompExpiresAt: string | null;
   createdAt: string;
   termsAcceptedAt: string | null;
   termsVersion: string | null;
@@ -33,10 +36,24 @@ interface StoreDetail {
   orderCount: number;
 }
 
+function planSourceLabel(s: StoreDetail): string {
+  if (s.planSource === 'SUBSCRIPTION') {
+    return `Paid via Stripe${s.subscriptionStatus ? ` · ${s.subscriptionStatus}` : ''}`;
+  }
+  if (s.planSource === 'COMP') {
+    return s.planCompExpiresAt
+      ? `Comped until ${new Date(s.planCompExpiresAt).toLocaleDateString()}`
+      : 'Comped';
+  }
+  return s.plan === 'PRO' ? 'Manual — no billing attached' : 'Default';
+}
+
 export default function AdminStoreDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { can } = useAdminAuth();
+  const { can, admin } = useAdminAuth();
   const canResetPassword = can.includes('users:password-reset');
+  const isSuperadmin = admin?.role === 'SUPERADMIN';
+  const [compDays, setCompDays] = useState('90');
 
   const [store, setStore] = useState<StoreDetail | null>(null);
   const [team, setTeam] = useState<TeamMember[]>([]);
@@ -81,6 +98,41 @@ export default function AdminStoreDetailPage({ params }: { params: Promise<{ id:
       setStore((prev) => (prev ? { ...prev, published: res.store.published } : prev));
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : 'Could not update this store.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setPlan(plan: 'FREE' | 'PRO') {
+    if (!store) return;
+    const body: { plan: 'FREE' | 'PRO'; compDays?: number } = { plan };
+    if (plan === 'PRO') {
+      const n = Number(compDays);
+      if (!Number.isInteger(n) || n < 1 || n > 730) {
+        setActionError('Comp length must be between 1 and 730 days.');
+        return;
+      }
+      body.compDays = n;
+    }
+    if (
+      plan === 'FREE' &&
+      !confirm(`Move ${store.name} back to the Free plan? Any comped Pro is cleared.`)
+    ) {
+      return;
+    }
+    setBusy(true);
+    setActionError(null);
+    try {
+      await api(`/api/admin/stores/${store.id}/plan`, { method: 'PATCH', body });
+      load();
+    } catch (err) {
+      setActionError(
+        err instanceof ApiError
+          ? err.code === 'STRIPE_MANAGED_PLAN'
+            ? 'This store pays for Pro via Stripe — cancel it through the subscription, not here.'
+            : err.message
+          : 'Could not change the plan.',
+      );
     } finally {
       setBusy(false);
     }
@@ -158,6 +210,7 @@ export default function AdminStoreDetailPage({ params }: { params: Promise<{ id:
                 <div>
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Plan</p>
                   <p className="font-semibold text-foreground">{store.plan}</p>
+                  <p className="text-[11px] text-muted-foreground">{planSourceLabel(store)}</p>
                 </div>
                 <div>
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Products</p>
@@ -215,6 +268,55 @@ export default function AdminStoreDetailPage({ params }: { params: Promise<{ id:
                 {busy ? 'Saving…' : store.published ? 'Deactivate store' : 'Activate store'}
               </button>
             </Card>
+
+            {isSuperadmin && (
+              <Card className="mb-6">
+                <p className="mb-1 text-sm font-semibold text-foreground">Plan</p>
+                <p className="mb-3 text-xs text-muted-foreground">
+                  {store.plan} · {planSourceLabel(store)}
+                </p>
+
+                {store.planSource === 'SUBSCRIPTION' ? (
+                  <p className="rounded-lg border border-border bg-secondary/50 px-3 py-2 text-xs text-muted-foreground">
+                    This store pays for Pro through Stripe. Change it through the subscription
+                    (Stripe portal / dashboard) — the back office won&apos;t override a paid plan.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-3">
+                    {store.plan !== 'FREE' && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setPlan('FREE')}
+                        className="rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                      >
+                        {busy ? 'Saving…' : 'Move to Free'}
+                      </button>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setPlan('PRO')}
+                        className="rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-semibold text-foreground hover:bg-border disabled:opacity-50"
+                      >
+                        {store.plan === 'PRO' ? 'Re-comp Pro' : 'Comp Pro'}
+                      </button>
+                      <input
+                        type="number"
+                        min="1"
+                        max="730"
+                        value={compDays}
+                        onChange={(e) => setCompDays(e.target.value)}
+                        aria-label="Comp length in days"
+                        className="w-20 rounded-lg border border-border bg-card px-2 py-2 text-sm text-foreground"
+                      />
+                      <span className="text-xs text-muted-foreground">days</span>
+                    </div>
+                  </div>
+                )}
+              </Card>
+            )}
 
             <Card>
               <p className="mb-3 text-sm font-semibold text-foreground">Team</p>
