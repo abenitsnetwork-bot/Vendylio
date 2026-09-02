@@ -35,6 +35,20 @@ const Body = z
     imageUrl: z.string().url().optional(),
     // Phase 3 — per-product low-stock threshold (null/omitted = store default).
     lowStockThreshold: z.number().int().min(0).optional(),
+    // Phase 7 — flat variant options created alongside the product (e.g.
+    // Size: Small / Large). Same shape as POST /api/products/[id]/variants.
+    // Editable afterwards via the VariantManager on the edit screen.
+    variants: z
+      .array(
+        z.object({
+          name: z.string().trim().min(1).max(60),
+          value: z.string().trim().min(1).max(60),
+          priceDeltaCents: z.number().int().default(0),
+          quantity: z.number().min(0).default(0),
+        }),
+      )
+      .max(50)
+      .optional(),
   })
   .superRefine((data, ctx) => {
     if (!isValidQuantityForUnit(data.quantity, data.unit)) {
@@ -44,6 +58,15 @@ const Body = z
         message: 'Quantity must be a whole number for a per-item product.',
       });
     }
+    (data.variants ?? []).forEach((v, i) => {
+      if (!isValidQuantityForUnit(v.quantity, data.unit)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['variants', i, 'quantity'],
+          message: 'Quantity must be a whole number for a per-item product.',
+        });
+      }
+    });
   });
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -80,6 +103,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       unit,
       imageUrl,
       lowStockThreshold,
+      variants,
     } = parsed.data;
 
     if (categoryId) {
@@ -123,6 +147,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           actorType: 'SELLER',
         },
       });
+      if (variants && variants.length > 0) {
+        // Same as POST /api/products/[id]/variants — the variant `quantity`
+        // is an opening balance with no StockMovement row of its own.
+        await tx.productVariant.createMany({
+          data: variants.map((v) => ({
+            productId: created.id,
+            name: v.name,
+            value: v.value,
+            priceDeltaCents: v.priceDeltaCents,
+            quantity: roundQuantity(v.quantity),
+          })),
+        });
+      }
       return created;
     });
 

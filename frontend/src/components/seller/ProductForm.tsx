@@ -13,6 +13,7 @@ import type { CategoryOption } from '@/lib/productCategories';
 import { PRODUCT_UNITS, type ProductUnit } from '@/lib/productUnits';
 import { isValidQuantityForUnit, roundQuantity } from '@/lib/quantity';
 import { VariantManager } from '@/components/seller/VariantManager';
+import { VariantDraftEditor, type DraftVariant } from '@/components/seller/VariantDraftEditor';
 
 const AI_ERROR_MESSAGES: Record<string, string> = {
   AI_NOT_CONFIGURED: 'AI description generation isn’t configured yet — contact support.',
@@ -70,6 +71,7 @@ export function ProductForm(props: CreateProps | EditProps) {
   const [deleting, setDeleting] = useState(false);
   const [generatingDescription, setGeneratingDescription] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [draftVariants, setDraftVariants] = useState<DraftVariant[]>([]);
 
   useEffect(() => {
     api<{ categories: CategoryOption[] }>('/api/categories')
@@ -135,6 +137,14 @@ export function ProductForm(props: CreateProps | EditProps) {
       return;
     }
 
+    if (
+      props.mode === 'create' &&
+      draftVariants.some((v) => !isValidQuantityForUnit(v.quantity, unit))
+    ) {
+      setError('Each variant quantity must be a whole number for a per-item product.');
+      return;
+    }
+
     setSubmitting(true);
     try {
       if (props.mode === 'create') {
@@ -149,6 +159,7 @@ export function ProductForm(props: CreateProps | EditProps) {
             unit,
             ...(parsedThreshold !== null ? { lowStockThreshold: parsedThreshold } : {}),
             ...(imageUrl ? { imageUrl } : {}),
+            ...(draftVariants.length > 0 ? { variants: draftVariants } : {}),
           },
         });
         props.onCreated(name);
@@ -400,11 +411,13 @@ export function ProductForm(props: CreateProps | EditProps) {
           </Field>
         )}
 
-        {props.mode === 'edit' && (
-          <div className="border-t border-border pt-8">
+        <div className="border-t border-border pt-8">
+          {props.mode === 'edit' ? (
             <VariantManager productId={props.product.id} unit={unit} />
-          </div>
-        )}
+          ) : (
+            <VariantDraftEditor onChange={setDraftVariants} unit={unit} />
+          )}
+        </div>
 
         {error && (
           <p role="alert" className="text-sm text-red-600">

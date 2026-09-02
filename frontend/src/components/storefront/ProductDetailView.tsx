@@ -117,6 +117,7 @@ export function ProductDetailView({
               <p className="mb-2 text-sm font-semibold text-foreground">Choose an option</p>
               <VariantSwatches
                 variants={product.variants}
+                basePriceCents={product.priceCents}
                 selectedId={selectedVariantId}
                 onSelect={(id) => {
                   setSelectedVariantId(id);

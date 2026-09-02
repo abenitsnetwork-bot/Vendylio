@@ -147,6 +147,43 @@ describe('POST /api/products', () => {
     const body = await res.json();
     expect(body.error).toBe('VALIDATION_FAILED');
   });
+
+  it('creates variant options passed alongside the product (Phase 7)', async () => {
+    prismaMock.product.create.mockResolvedValue({ id: 'prod-1', ...validBody } as never);
+    const res = await POST(
+      makePost({
+        ...validBody,
+        variants: [
+          { name: 'Size', value: 'Small', priceDeltaCents: -200, quantity: 4 },
+          { name: 'Size', value: 'Large', priceDeltaCents: 500, quantity: 2 },
+        ],
+      }),
+    );
+    expect(res.status).toBe(201);
+    const arg = prismaMock.productVariant.createMany.mock.calls[0]?.[0];
+    expect(arg?.data).toEqual([
+      { productId: 'prod-1', name: 'Size', value: 'Small', priceDeltaCents: -200, quantity: 4 },
+      { productId: 'prod-1', name: 'Size', value: 'Large', priceDeltaCents: 500, quantity: 2 },
+    ]);
+  });
+
+  it('does not touch productVariant when no variants are passed', async () => {
+    prismaMock.product.create.mockResolvedValue({ id: 'prod-1', ...validBody } as never);
+    await POST(makePost(validBody));
+    expect(prismaMock.productVariant.createMany).not.toHaveBeenCalled();
+  });
+
+  it('400s when a variant quantity is fractional for a per-item product', async () => {
+    const res = await POST(
+      makePost({
+        ...validBody,
+        variants: [{ name: 'Size', value: 'Large', priceDeltaCents: 0, quantity: 1.5 }],
+      }),
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('VALIDATION_FAILED');
+  });
 });
 
 describe('GET /api/products', () => {

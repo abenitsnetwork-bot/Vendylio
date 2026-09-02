@@ -22,6 +22,16 @@ export function effectivePriceCents(
   return basePriceCents + (variant?.priceDeltaCents ?? 0);
 }
 
+/** Formatted absolute price of one option ("$15.00") — base + this option's
+ *  delta. Shown under each choice in the storefront picker so a shopper sees
+ *  what each option costs before selecting it. */
+export function variantOptionPriceLabel(
+  basePriceCents: number,
+  variant: ProductVariantOption,
+): string {
+  return `$${(effectivePriceCents(basePriceCents, variant) / 100).toFixed(2)}`;
+}
+
 export interface ProductForVariantPicker {
   id: string;
   name: string;

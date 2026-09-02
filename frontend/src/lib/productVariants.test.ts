@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { variantLabel, effectivePriceCents, toAddableProduct } from './productVariants';
+import {
+  variantLabel,
+  effectivePriceCents,
+  toAddableProduct,
+  variantOptionPriceLabel,
+} from './productVariants';
 
 const VARIANT = { id: 'v1', name: 'Size', value: 'Large', priceDeltaCents: 200, quantity: 5 };
 
@@ -17,6 +22,14 @@ describe('effectivePriceCents', () => {
   it('returns the base price when no variant is selected', () => {
     expect(effectivePriceCents(1800, null)).toBe(1800);
     expect(effectivePriceCents(1800, undefined)).toBe(1800);
+  });
+});
+
+describe('variantOptionPriceLabel', () => {
+  it('formats the absolute price of an option (base + delta)', () => {
+    expect(variantOptionPriceLabel(1800, VARIANT)).toBe('$20.00');
+    expect(variantOptionPriceLabel(1800, { ...VARIANT, priceDeltaCents: -300 })).toBe('$15.00');
+    expect(variantOptionPriceLabel(1800, { ...VARIANT, priceDeltaCents: 0 })).toBe('$18.00');
   });
 });
 
