@@ -98,13 +98,13 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
       role="switch"
       aria-checked={on}
       onClick={() => onChange(!on)}
-      className={`relative h-6 w-11 flex-shrink-0 rounded-full border transition-colors ${
+      className={`inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full border px-0.5 transition-colors ${
         on ? 'border-panel bg-panel' : 'border-muted-foreground/40 bg-muted-foreground/25'
       }`}
     >
       <span
-        className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm ring-1 ring-black/10 transition-transform ${
-          on ? 'translate-x-5' : 'translate-x-0.5'
+        className={`block h-5 w-5 rounded-full bg-white shadow-sm ring-1 ring-black/10 transition-transform duration-200 ${
+          on ? 'translate-x-[18px]' : 'translate-x-0'
         }`}
       />
     </button>
