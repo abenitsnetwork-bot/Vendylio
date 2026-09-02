@@ -366,9 +366,9 @@ export default function BillingPayoutsPage() {
                       <button
                         type="button"
                         onClick={() => setDowngradeOpen(true)}
-                        className="text-center text-xs font-medium text-muted-foreground hover:text-red-600 sm:text-right"
+                        className="rounded-lg border border-red-200 px-6 py-3 text-sm font-semibold text-red-600 hover:bg-red-50"
                       >
-                        Cancel Pro
+                        Cancel Pro — go back to Free
                       </button>
                     )}
                   </>
