@@ -4,6 +4,7 @@ import { evaluateDiscount, normalizeDiscountCode, type DiscountInput } from './e
 const now = new Date('2026-09-01T12:00:00Z');
 const valid: DiscountInput = {
   kind: 'FREE_DELIVERY',
+  percentOff: null,
   active: true,
   startsAt: null,
   endsAt: null,
@@ -20,6 +21,7 @@ describe('evaluateDiscount', () => {
       reason: 'NOT_FOUND',
       discountCents: 0,
       deliveryFeeCents: 599,
+      subtotalDiscountCents: 0,
     });
   });
 
@@ -28,6 +30,7 @@ describe('evaluateDiscount', () => {
       ok: true,
       discountCents: 599,
       deliveryFeeCents: 0,
+      subtotalDiscountCents: 0,
     });
   });
 
@@ -36,6 +39,7 @@ describe('evaluateDiscount', () => {
       ok: true,
       discountCents: 0,
       deliveryFeeCents: 0,
+      subtotalDiscountCents: 0,
     });
   });
 
@@ -59,12 +63,53 @@ describe('evaluateDiscount', () => {
     );
   });
 
+  describe('PERCENT', () => {
+    const pct = (percentOff: number | null): DiscountInput => ({
+      ...valid,
+      kind: 'PERCENT',
+      percentOff,
+    });
+
+    it('takes the percentage off the subtotal, leaving the delivery fee', () => {
+      expect(evaluateDiscount(pct(20), ctx)).toEqual({
+        ok: true,
+        discountCents: 1000, // 20% of 5000
+        deliveryFeeCents: 599, // unchanged
+        subtotalDiscountCents: 1000,
+      });
+    });
+
+    it('rounds to the nearest cent', () => {
+      const r = evaluateDiscount(pct(15), { ...ctx, subtotalCents: 3333 });
+      expect(r.discountCents).toBe(500); // round(499.95)
+    });
+
+    it('never discounts more than the subtotal', () => {
+      const r = evaluateDiscount(pct(100), ctx);
+      expect(r.discountCents).toBe(5000);
+      expect(r.subtotalDiscountCents).toBe(5000);
+    });
+
+    it('fails closed on a misconfigured percentage', () => {
+      expect(evaluateDiscount(pct(null), ctx).ok).toBe(false);
+      expect(evaluateDiscount(pct(0), ctx).ok).toBe(false);
+      expect(evaluateDiscount(pct(150), ctx).ok).toBe(false);
+    });
+
+    it('still honours the min-subtotal gate', () => {
+      expect(evaluateDiscount({ ...pct(20), minSubtotalCents: 6000 }, ctx).reason).toBe(
+        'MIN_SUBTOTAL',
+      );
+    });
+  });
+
   it('treats an unknown kind as not applicable rather than throwing', () => {
-    expect(evaluateDiscount({ ...valid, kind: 'PERCENT' }, ctx)).toEqual({
+    expect(evaluateDiscount({ ...valid, kind: 'MYSTERY' }, ctx)).toEqual({
       ok: false,
       reason: 'NOT_FOUND',
       discountCents: 0,
       deliveryFeeCents: 599,
+      subtotalDiscountCents: 0,
     });
   });
 

@@ -420,12 +420,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // a hard 400 so the buyer knows to remove it, rather than silently
     // charging them the fee they thought was waived.
     let discountCents = 0;
+    let subtotalDiscountCents = 0;
     let appliedDiscountCode: string | null = null;
     if (discountCode) {
       const discount = await prisma.discount.findUnique({
         where: { storeId_code: { storeId: store.id, code: discountCode } },
         select: {
           kind: true,
+          percentOff: true,
           active: true,
           startsAt: true,
           endsAt: true,
@@ -446,12 +448,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         );
       }
       discountCents = result.discountCents;
+      subtotalDiscountCents = result.subtotalDiscountCents;
       deliveryFeeCents = result.deliveryFeeCents;
       appliedDiscountCode = discountCode;
     }
 
     const taxCents = 0; // no tax engine in the MVP
-    const amount = subtotalCents + deliveryFeeCents + taxCents;
+    const amount = subtotalCents - subtotalDiscountCents + deliveryFeeCents + taxCents;
 
     // Shared across both branches below — only `provider` (and, for Stripe,
     // the later providerChargeId/paymentUrl update) differs.

@@ -37,6 +37,8 @@ const PatchBody = z
       .max(40)
       .regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/, 'Use letters, numbers, "-" or "_" only')
       .optional(),
+    kind: z.enum(['FREE_DELIVERY', 'PERCENT']).optional(),
+    percentOff: z.number().int().min(1).max(100).nullable().optional(),
     active: z.boolean().optional(),
     startsAt: isoDate.nullable().optional(),
     endsAt: isoDate.nullable().optional(),
@@ -49,6 +51,7 @@ const SELECT = {
   id: true,
   code: true,
   kind: true,
+  percentOff: true,
   active: true,
   startsAt: true,
   endsAt: true,
@@ -63,7 +66,7 @@ async function findOwned(userId: string, discountId: string) {
   if (!store) return { store: null, discount: null };
   const discount = await prisma.discount.findFirst({
     where: { id: discountId, storeId: store.id },
-    select: { id: true, startsAt: true, endsAt: true },
+    select: { id: true, kind: true, percentOff: true, startsAt: true, endsAt: true },
   });
   return { store, discount };
 }
@@ -109,8 +112,22 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<NextRespon
       );
     }
 
+    // Merge kind + percentOff, then require a valid percentage for PERCENT.
+    const nextKind = d.kind ?? discount.kind;
+    const nextPercent = d.percentOff !== undefined ? d.percentOff : (discount.percentOff ?? null);
+    if (nextKind === 'PERCENT' && (nextPercent == null || nextPercent < 1 || nextPercent > 100)) {
+      return NextResponse.json(
+        { error: 'VALIDATION_FAILED', message: 'Set a percentage between 1 and 100.' },
+        { status: 400, headers: { 'x-request-id': reqCtx.requestId } },
+      );
+    }
+
     const data: Prisma.DiscountUpdateInput = {
       ...(d.code !== undefined ? { code: normalizeDiscountCode(d.code) } : {}),
+      ...(d.kind !== undefined ? { kind: d.kind } : {}),
+      ...(d.kind !== undefined || d.percentOff !== undefined
+        ? { percentOff: nextKind === 'PERCENT' ? nextPercent : null }
+        : {}),
       ...(d.active !== undefined ? { active: d.active } : {}),
       ...(d.startsAt !== undefined ? { startsAt: nextStart } : {}),
       ...(d.endsAt !== undefined ? { endsAt: nextEnd } : {}),

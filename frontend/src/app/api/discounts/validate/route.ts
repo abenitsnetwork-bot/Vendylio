@@ -56,6 +56,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       where: { storeId_code: { storeId: store.id, code } },
       select: {
         kind: true,
+        percentOff: true,
         active: true,
         startsAt: true,
         endsAt: true,
@@ -72,13 +73,20 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       deliveryFeeCents: store.deliveryFeeCents,
     });
 
+    const kind = discount?.kind ?? null;
+    const okMessage =
+      kind === 'PERCENT'
+        ? `${discount?.percentOff ?? 0}% off your order applied.`
+        : 'Free delivery applied.';
+
     return NextResponse.json(
       {
         valid: result.ok,
         code,
-        kind: 'FREE_DELIVERY',
+        kind,
+        ...(kind === 'PERCENT' ? { percentOff: discount?.percentOff ?? null } : {}),
         ...(result.ok
-          ? { message: 'Free delivery applied.' }
+          ? { message: okMessage, discountCents: result.discountCents }
           : { reason: result.reason, message: REASON_MESSAGE[result.reason ?? 'NOT_FOUND'] }),
       },
       { headers: { 'x-request-id': ctx.requestId } },

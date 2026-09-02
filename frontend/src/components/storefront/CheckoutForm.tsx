@@ -189,6 +189,8 @@ function CheckoutFormInner({
   // between apply and submit), handled in the error map below.
   const [promoInput, setPromoInput] = useState('');
   const [appliedCode, setAppliedCode] = useState<string | null>(null);
+  const [appliedKind, setAppliedKind] = useState<'FREE_DELIVERY' | 'PERCENT' | null>(null);
+  const [appliedPercentOff, setAppliedPercentOff] = useState<number | null>(null);
   const [promoBusy, setPromoBusy] = useState(false);
   const [promoMsg, setPromoMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -207,13 +209,19 @@ function CheckoutFormInner({
       const body = (await res.json().catch(() => ({}))) as {
         valid?: boolean;
         code?: string;
+        kind?: 'FREE_DELIVERY' | 'PERCENT' | null;
+        percentOff?: number | null;
         message?: string;
       };
       if (res.ok && body.valid) {
         setAppliedCode(body.code ?? code.toUpperCase());
+        setAppliedKind(body.kind ?? 'FREE_DELIVERY');
+        setAppliedPercentOff(body.percentOff ?? null);
         setPromoMsg({ ok: true, text: body.message ?? 'Promo code applied.' });
       } else {
         setAppliedCode(null);
+        setAppliedKind(null);
+        setAppliedPercentOff(null);
         setPromoMsg({ ok: false, text: body.message ?? 'That promo code is not valid.' });
       }
     } catch {
@@ -225,6 +233,8 @@ function CheckoutFormInner({
 
   function removePromo() {
     setAppliedCode(null);
+    setAppliedKind(null);
+    setAppliedPercentOff(null);
     setPromoInput('');
     setPromoMsg(null);
   }
@@ -387,10 +397,16 @@ function CheckoutFormInner({
       : selectedOption
         ? selectedOption.feeCents
         : deliveryFeeCents;
-  // V1's only promo mechanism, FREE_DELIVERY, waives the whole delivery fee.
-  const freeDelivery = appliedCode !== null && fulfillmentMethod === 'delivery';
+  // Promo preview. FREE_DELIVERY waives the delivery fee; PERCENT takes a %
+  // off the subtotal. Authoritative pricing is still POST /api/orders.
+  const freeDelivery =
+    appliedCode !== null && appliedKind === 'FREE_DELIVERY' && fulfillmentMethod === 'delivery';
+  const subtotalDiscountCents =
+    appliedCode !== null && appliedKind === 'PERCENT' && appliedPercentOff
+      ? Math.min(subtotalCents, Math.round((subtotalCents * appliedPercentOff) / 100))
+      : 0;
   const appliedDeliveryFeeCents = freeDelivery ? 0 : rawDeliveryFeeCents;
-  const totalCents = subtotalCents + appliedDeliveryFeeCents;
+  const totalCents = subtotalCents - subtotalDiscountCents + appliedDeliveryFeeCents;
   const deliveryBlocked =
     fulfillmentMethod === 'delivery' && addressComplete && !quoting && deliveryUnavailable;
 
@@ -891,6 +907,15 @@ function CheckoutFormInner({
                 <span>Subtotal</span>
                 <span>{formatUsd(subtotalCents)}</span>
               </div>
+              {subtotalDiscountCents > 0 && (
+                <div className="flex justify-between font-medium text-green-600">
+                  <span>
+                    Promo <span className="font-mono">{appliedCode}</span> ({appliedPercentOff}%
+                    off)
+                  </span>
+                  <span>−{formatUsd(subtotalDiscountCents)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-muted-foreground">
                 <span>{fulfillmentMethod === 'pickup' ? 'Pickup' : 'Delivery'}</span>
                 <span>

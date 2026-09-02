@@ -108,6 +108,34 @@ describe('POST /api/discounts', () => {
     });
   });
 
+  it('creates a PERCENT code with its percentage', async () => {
+    prismaMock.discount.create.mockResolvedValue({ id: 'd2', code: 'SAVE15' } as never);
+    const res = await POST(makeReq('POST', { code: 'save15', kind: 'PERCENT', percentOff: 15 }));
+    expect(res.status).toBe(201);
+    expect(prismaMock.discount.create.mock.calls[0]?.[0]?.data).toMatchObject({
+      code: 'SAVE15',
+      kind: 'PERCENT',
+      percentOff: 15,
+    });
+  });
+
+  it('400s a PERCENT code with no / out-of-range percentage', async () => {
+    expect((await POST(makeReq('POST', { code: 'SAVE', kind: 'PERCENT' }))).status).toBe(400);
+    expect(
+      (await POST(makeReq('POST', { code: 'SAVE', kind: 'PERCENT', percentOff: 150 }))).status,
+    ).toBe(400);
+    expect(prismaMock.discount.create).not.toHaveBeenCalled();
+  });
+
+  it('forces percentOff to null for a FREE_DELIVERY code', async () => {
+    prismaMock.discount.create.mockResolvedValue({ id: 'd3', code: 'FREESHIP' } as never);
+    await POST(makeReq('POST', { code: 'freeship', kind: 'FREE_DELIVERY', percentOff: 20 }));
+    expect(prismaMock.discount.create.mock.calls[0]?.[0]?.data).toMatchObject({
+      kind: 'FREE_DELIVERY',
+      percentOff: null,
+    });
+  });
+
   it('409 CODE_TAKEN on a unique-constraint hit', async () => {
     prismaMock.discount.create.mockRejectedValueOnce(
       new Prisma.PrismaClientKnownRequestError('dup', {

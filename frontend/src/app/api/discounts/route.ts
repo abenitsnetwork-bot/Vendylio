@@ -1,10 +1,10 @@
 // GET  /api/discounts — the caller's own promo codes.
 // POST /api/discounts — create one.
 //
-// Phase D. Seller-managed, per store. V1 mechanism is FREE_DELIVERY only —
-// `kind` is not accepted from the client yet (forced below), so a code can
-// only ever waive the delivery fee. Windows (startsAt/endsAt), the on/off
-// switch, min-subtotal and the redemption cap are all editable at will.
+// Phase D. Seller-managed, per store. `kind` is FREE_DELIVERY (waives the
+// delivery fee) or PERCENT (`percentOff`% off the subtotal). Windows
+// (startsAt/endsAt), the on/off switch, min-subtotal and the redemption cap
+// are all editable at will.
 export const runtime = 'nodejs';
 
 import 'server-only';
@@ -33,6 +33,8 @@ export const DiscountCreateBody = z
       .min(2)
       .max(40)
       .regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/, 'Use letters, numbers, "-" or "_" only'),
+    kind: z.enum(['FREE_DELIVERY', 'PERCENT']).optional(),
+    percentOff: z.number().int().min(1).max(100).nullable().optional(),
     active: z.boolean().optional(),
     startsAt: isoDate.nullable().optional(),
     endsAt: isoDate.nullable().optional(),
@@ -42,6 +44,10 @@ export const DiscountCreateBody = z
   .refine((d) => !(d.startsAt && d.endsAt) || Date.parse(d.startsAt) < Date.parse(d.endsAt), {
     message: 'The end date must be after the start date',
     path: ['endsAt'],
+  })
+  .refine((d) => d.kind !== 'PERCENT' || (d.percentOff != null && d.percentOff >= 1), {
+    message: 'Set a percentage between 1 and 100.',
+    path: ['percentOff'],
   });
 
 function noStore(requestId: string): NextResponse {
@@ -55,6 +61,7 @@ const SELECT = {
   id: true,
   code: true,
   kind: true,
+  percentOff: true,
   active: true,
   startsAt: true,
   endsAt: true,
@@ -111,11 +118,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const d = parsed.data;
 
     try {
+      const kind = d.kind ?? 'FREE_DELIVERY';
       const created = await prisma.discount.create({
         data: {
           storeId: store.id,
           code: normalizeDiscountCode(d.code),
-          kind: 'FREE_DELIVERY',
+          kind,
+          percentOff: kind === 'PERCENT' ? (d.percentOff ?? null) : null,
           active: d.active ?? true,
           startsAt: d.startsAt ? new Date(d.startsAt) : null,
           endsAt: d.endsAt ? new Date(d.endsAt) : null,

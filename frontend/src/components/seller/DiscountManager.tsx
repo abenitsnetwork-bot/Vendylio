@@ -13,6 +13,7 @@ export interface Discount {
   id: string;
   code: string;
   kind: string;
+  percentOff: number | null;
   active: boolean;
   startsAt: string | null;
   endsAt: string | null;
@@ -22,13 +23,23 @@ export interface Discount {
   createdAt: string;
 }
 
+type DiscountKind = 'FREE_DELIVERY' | 'PERCENT';
+
 interface DraftValues {
   code: string;
+  kind: DiscountKind;
+  percentOff: string; // whole percent ("" while empty)
   active: boolean;
   startsAt: string; // datetime-local ("" = none)
   endsAt: string;
   minSubtotal: string; // dollars ("" = 0)
   maxRedemptions: string; // ("" = unlimited)
+}
+
+/** Human label for a code's mechanism. */
+export function discountKindLabel(d: Pick<Discount, 'kind' | 'percentOff'>): string {
+  if (d.kind === 'PERCENT') return `${d.percentOff ?? 0}% off`;
+  return 'Free delivery';
 }
 
 const STATUS_TONE: Record<DiscountStatus, string> = {
@@ -51,6 +62,8 @@ function toLocalInput(iso: string | null): string {
 function draftFrom(d: Discount | null): DraftValues {
   return {
     code: d?.code ?? '',
+    kind: d?.kind === 'PERCENT' ? 'PERCENT' : 'FREE_DELIVERY',
+    percentOff: d?.percentOff != null ? String(d.percentOff) : '',
     active: d?.active ?? true,
     startsAt: toLocalInput(d?.startsAt ?? null),
     endsAt: toLocalInput(d?.endsAt ?? null),
@@ -62,6 +75,8 @@ function draftFrom(d: Discount | null): DraftValues {
 function draftToBody(v: DraftValues) {
   return {
     code: v.code.trim(),
+    kind: v.kind,
+    percentOff: v.kind === 'PERCENT' && v.percentOff ? Math.trunc(Number(v.percentOff)) : null,
     active: v.active,
     startsAt: v.startsAt ? new Date(v.startsAt).toISOString() : null,
     endsAt: v.endsAt ? new Date(v.endsAt).toISOString() : null,
@@ -99,6 +114,13 @@ function DiscountForm({
       setError('Give the code a name.');
       return;
     }
+    if (v.kind === 'PERCENT') {
+      const n = Number(v.percentOff);
+      if (!Number.isInteger(n) || n < 1 || n > 100) {
+        setError('Enter a percentage between 1 and 100.');
+        return;
+      }
+    }
     setError(null);
     setBusy(true);
     try {
@@ -127,10 +149,36 @@ function DiscountForm({
             className={`${inputClass} uppercase`}
             value={v.code}
             onChange={(e) => setV({ ...v, code: e.target.value.toUpperCase() })}
-            placeholder="FREESHIP"
+            placeholder={v.kind === 'PERCENT' ? 'SAVE15' : 'FREESHIP'}
             maxLength={40}
           />
         </Field>
+        <Field label="Reward" htmlFor="d-kind">
+          <select
+            id="d-kind"
+            className={inputClass}
+            value={v.kind}
+            onChange={(e) => setV({ ...v, kind: e.target.value as DiscountKind })}
+          >
+            <option value="FREE_DELIVERY">Free delivery</option>
+            <option value="PERCENT">Percent off the subtotal</option>
+          </select>
+        </Field>
+        {v.kind === 'PERCENT' && (
+          <Field label="Percent off (1–100)" htmlFor="d-pct">
+            <input
+              id="d-pct"
+              type="number"
+              min="1"
+              max="100"
+              step="1"
+              className={inputClass}
+              value={v.percentOff}
+              onChange={(e) => setV({ ...v, percentOff: e.target.value })}
+              placeholder="15"
+            />
+          </Field>
+        )}
         <Field label="Minimum cart subtotal ($, optional)" htmlFor="d-min">
           <input
             id="d-min"
@@ -185,8 +233,17 @@ function DiscountForm({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        This code gives the customer <strong>free delivery</strong> when it&apos;s active and the
-        cart clears the minimum.
+        {v.kind === 'PERCENT' ? (
+          <>
+            This code takes <strong>{v.percentOff ? `${v.percentOff}%` : 'a percentage'}</strong>{' '}
+            off the cart subtotal when it&apos;s active and the cart clears the minimum.
+          </>
+        ) : (
+          <>
+            This code gives the customer <strong>free delivery</strong> when it&apos;s active and
+            the cart clears the minimum.
+          </>
+        )}
       </p>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -300,7 +357,7 @@ export function DiscountManager() {
         <Card className="py-12 text-center">
           <Icon i="bookmark" size={28} className="mx-auto mb-3 text-muted-foreground opacity-50" />
           <p className="text-sm text-muted-foreground">
-            No promo codes yet. Create one to offer free delivery.
+            No promo codes yet. Create one to offer free delivery or a percent off.
           </p>
         </Card>
       ) : (
@@ -334,7 +391,7 @@ export function DiscountManager() {
                       </span>
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Free delivery · {windowText(d)}
+                      {discountKindLabel(d)} · {windowText(d)}
                       {d.minSubtotalCents > 0 && ` · min $${(d.minSubtotalCents / 100).toFixed(2)}`}
                       {' · '}
                       {d.redemptionCount}

@@ -654,6 +654,28 @@ describe('POST /api/orders — promo code (Phase D)', () => {
     });
   });
 
+  it('applies a PERCENT code: subtotal cut, delivery fee kept, amount reduced', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({ ...STORE, deliveryFeeCents: 500 } as never);
+    prismaMock.discount.findUnique.mockResolvedValue({
+      ...ACTIVE_FREE_DELIVERY,
+      kind: 'PERCENT',
+      percentOff: 25,
+    } as never);
+    prismaMock.order.create.mockResolvedValue(seededOrder() as never);
+    prismaMock.order.update.mockResolvedValue(seededOrder() as never);
+
+    await POST(makePost({ ...validBody, discountCode: 'save25' }));
+
+    const data = prismaMock.order.create.mock.calls[0]?.[0]?.data;
+    // subtotal 3600, 25% off = 900; delivery fee 500 kept → 3600 - 900 + 500
+    expect(data).toMatchObject({
+      deliveryFeeCents: 500,
+      discountCents: 900,
+      discountCode: 'SAVE25',
+      amount: 3200,
+    });
+  });
+
   it('400 DISCOUNT_INVALID when the code is unknown', async () => {
     prismaMock.store.findFirst.mockResolvedValue({ ...STORE, deliveryFeeCents: 500 } as never);
     prismaMock.discount.findUnique.mockResolvedValue(null as never);

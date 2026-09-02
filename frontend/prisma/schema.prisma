@@ -839,7 +839,10 @@ model Discount {
   storeId          String
   store            Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
   code             String // stored UPPERCASE; unique per store
-  kind             String    @default("FREE_DELIVERY") // FREE_DELIVERY (PERCENT | FIXED later)
+  kind             String    @default("FREE_DELIVERY") // FREE_DELIVERY | PERCENT (FIXED later)
+  // Whole-percent discount off the cart subtotal, 1..100. Required when
+  // kind = PERCENT, null otherwise.
+  percentOff       Int?
   active           Boolean   @default(true)
   startsAt         DateTime?
   endsAt           DateTime?
