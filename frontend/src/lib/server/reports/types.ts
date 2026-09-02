@@ -19,7 +19,16 @@ export type ReportType =
   | 'business-waitlist'
   | 'admin-activity'
   | 'seller-tax-summary'
-  | 'suspended-accounts';
+  | 'suspended-accounts'
+  | 'product-performance'
+  | 'dead-stock'
+  | 'inventory-valuation'
+  | 'stock-movements'
+  | 'promo-performance'
+  | 'customers'
+  | 'reviews'
+  | 'webhook-health'
+  | 'email-delivery';
 
 export type ColumnFormat = 'text' | 'usd' | 'number' | 'percent' | 'date';
 

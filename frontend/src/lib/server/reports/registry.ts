@@ -14,6 +14,15 @@ import { buildBusinessWaitlist } from './builders/businessWaitlist';
 import { buildAdminActivity } from './builders/adminActivity';
 import { buildSellerTaxSummary } from './builders/sellerTaxSummary';
 import { buildSuspendedAccounts } from './builders/suspendedAccounts';
+import { buildProductPerformance } from './builders/productPerformance';
+import { buildDeadStock } from './builders/deadStock';
+import { buildInventoryValuation } from './builders/inventoryValuation';
+import { buildStockMovements } from './builders/stockMovements';
+import { buildPromoPerformance } from './builders/promoPerformance';
+import { buildCustomers } from './builders/customers';
+import { buildReviews } from './builders/reviews';
+import { buildWebhookHealth } from './builders/webhookHealth';
+import { buildEmailDelivery } from './builders/emailDelivery';
 
 export const REPORTS: Record<ReportType, ReportDef> = {
   'platform-revenue': {
@@ -139,6 +148,84 @@ export const REPORTS: Record<ReportType, ReportDef> = {
     usesDateRange: false,
     usesStoreFilter: false,
     build: buildSuspendedAccounts,
+  },
+  'product-performance': {
+    type: 'product-performance',
+    label: 'Product performance',
+    description:
+      'Units sold, revenue and last-sold date per product in the period, from the paid orders.',
+    usesDateRange: true,
+    usesStoreFilter: true,
+    build: buildProductPerformance,
+  },
+  'dead-stock': {
+    type: 'dead-stock',
+    label: 'Dead stock',
+    description:
+      'Active products with stock on hand that have not sold in 60 days — capital sitting still (snapshot).',
+    usesDateRange: false,
+    usesStoreFilter: true,
+    build: buildDeadStock,
+  },
+  'inventory-valuation': {
+    type: 'inventory-valuation',
+    label: 'Inventory valuation',
+    description:
+      'On-hand inventory valued at retail per store, with low / out-of-stock counts (snapshot).',
+    usesDateRange: false,
+    usesStoreFilter: true,
+    build: buildInventoryValuation,
+  },
+  'stock-movements': {
+    type: 'stock-movements',
+    label: 'Stock movements',
+    description: 'The append-only stock ledger for the period — sales, restocks, manual edits.',
+    usesDateRange: true,
+    usesStoreFilter: true,
+    build: buildStockMovements,
+  },
+  'promo-performance': {
+    type: 'promo-performance',
+    label: 'Promo performance',
+    description:
+      'Promo codes redeemed in the period — redemptions, discount given away, discounted GMV.',
+    usesDateRange: true,
+    usesStoreFilter: true,
+    build: buildPromoPerformance,
+  },
+  customers: {
+    type: 'customers',
+    label: 'Customer cohorts',
+    description:
+      'Customers per store, new in the window, repeat rate and spend — drills into one store’s top buyers.',
+    usesDateRange: true,
+    usesStoreFilter: true,
+    build: buildCustomers,
+  },
+  reviews: {
+    type: 'reviews',
+    label: 'Reviews & ratings',
+    description: 'Buyer reviews left in the period per store — average, star distribution, hidden.',
+    usesDateRange: true,
+    usesStoreFilter: true,
+    build: buildReviews,
+  },
+  'webhook-health': {
+    type: 'webhook-health',
+    label: 'Webhook health',
+    description:
+      'Inbound webhook processing by provider + event type — received, processed, stuck, median lag.',
+    usesDateRange: true,
+    usesStoreFilter: false,
+    build: buildWebhookHealth,
+  },
+  'email-delivery': {
+    type: 'email-delivery',
+    label: 'Email delivery',
+    description: 'Transactional email outcomes by template — sent, failed, dead-lettered.',
+    usesDateRange: true,
+    usesStoreFilter: false,
+    build: buildEmailDelivery,
   },
 };
 

@@ -33,6 +33,14 @@ beforeEach(() => {
   prismaMock.adminAction.findMany.mockResolvedValue([] as never);
   prismaMock.businessLead.findMany.mockResolvedValue([] as never);
   prismaMock.user.findMany.mockResolvedValue([] as never);
+  // Lot 3 builders
+  prismaMock.stockMovement.findMany.mockResolvedValue([] as never);
+  groupByMock(prismaMock.stockMovement.groupBy).mockResolvedValue([]);
+  prismaMock.discount.findMany.mockResolvedValue([] as never);
+  prismaMock.customer.findMany.mockResolvedValue([] as never);
+  prismaMock.review.findMany.mockResolvedValue([] as never);
+  prismaMock.webhookLog.findMany.mockResolvedValue([] as never);
+  prismaMock.emailJob.findMany.mockResolvedValue([] as never);
 });
 
 describe('report registry', () => {
@@ -209,6 +217,74 @@ describe('onboarding funnel', () => {
     expect(r.rows[0]).toMatchObject({ step: 'Created a store', stores: 2 });
     expect(r.rows.find((x) => x.step === 'Published the storefront')).toMatchObject({ stores: 1 });
     expect(r.kpis.find((k) => k.label === 'Activation rate')?.value).toBe('50.0%');
+  });
+});
+
+describe('product performance', () => {
+  it('sums units + revenue from the lineItems snapshot', async () => {
+    prismaMock.order.findMany.mockResolvedValue([
+      {
+        paidAt: new Date('2026-08-03T00:00:00Z'),
+        lineItems: [
+          { productId: 'p1', name: 'Shea Butter', priceCents: 1800, quantity: 2 },
+          { productId: 'p2', name: 'Soap', priceCents: 500, quantity: 1 },
+        ],
+      },
+      {
+        paidAt: new Date('2026-08-10T00:00:00Z'),
+        lineItems: [{ productId: 'p1', name: 'Shea Butter', priceCents: 1800, quantity: 1 }],
+      },
+    ] as never);
+    prismaMock.product.findMany.mockResolvedValue([
+      { id: 'p1', name: 'Shea Butter', status: 'ACTIVE', category: { name: 'Skcare' } },
+    ] as never);
+
+    const r = await REPORTS['product-performance'].build(ARGS);
+    const p1 = r.rows.find((x) => x.product === 'Shea Butter');
+    expect(p1).toMatchObject({ units: 3, revenue: 5400, orders: 2 });
+    expect(r.kpis.find((k) => k.label === 'Revenue')?.value).toBe('$59.00');
+  });
+});
+
+describe('inventory valuation', () => {
+  it('values stock at retail and flags low / out', async () => {
+    prismaMock.product.findMany.mockResolvedValue([
+      {
+        storeId: 's1',
+        priceCents: 1000,
+        quantity: 5,
+        lowStockThreshold: null,
+        store: { name: 'Shop', defaultLowStockThreshold: 3 },
+        variants: [],
+      },
+      {
+        storeId: 's1',
+        priceCents: 2000,
+        quantity: 2,
+        lowStockThreshold: 3,
+        store: { name: 'Shop', defaultLowStockThreshold: 3 },
+        variants: [],
+      },
+      {
+        storeId: 's1',
+        priceCents: 800,
+        quantity: 0,
+        lowStockThreshold: null,
+        store: { name: 'Shop', defaultLowStockThreshold: 3 },
+        variants: [],
+      },
+    ] as never);
+
+    const r = await REPORTS['inventory-valuation'].build(ARGS);
+    expect(r.period).toBeNull();
+    expect(r.rows[0]).toMatchObject({
+      store: 'Shop',
+      skus: 3,
+      units: 7,
+      retailValue: 9000,
+      lowStock: 1,
+      outOfStock: 1,
+    });
   });
 });
 
