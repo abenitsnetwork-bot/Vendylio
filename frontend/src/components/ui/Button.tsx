@@ -4,8 +4,9 @@ import { cn } from '@/lib/utils';
 type Variant = 'primary' | 'accent' | 'outline' | 'dark';
 
 const VARIANT_CLASSES: Record<Variant, string> = {
-  primary: 'bg-primary text-primary-foreground hover:opacity-90',
-  // Vivid brand coral — the eye-catching call-to-action.
+  // The default call-to-action is the vivid brand coral. `accent` is kept as
+  // an explicit alias; `dark` is the escape hatch for the rare near-black button.
+  primary: 'bg-accent text-accent-foreground hover:opacity-90',
   accent: 'bg-accent text-accent-foreground hover:opacity-90',
   outline: 'bg-card text-foreground border border-border hover:bg-secondary',
   dark: 'bg-foreground text-background hover:opacity-90',

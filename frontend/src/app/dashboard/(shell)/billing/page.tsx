@@ -413,11 +413,33 @@ export default function BillingPayoutsPage() {
               <h2 className="mb-6 border-b border-border pb-6 font-headings text-lg font-bold text-foreground">
                 Payout Methods
               </h2>
-              <p className="text-sm text-muted-foreground">
-                Vendylio doesn&apos;t save payment methods — enter your Cash App tag or Zelle
-                contact each time you request a withdrawal. Withdrawals are fulfilled manually by
-                the Vendylio team; there are no automated payout fees.
-              </p>
+              <ul className="space-y-4 text-sm text-muted-foreground">
+                <li>
+                  <span className="font-semibold text-foreground">Cash App &amp; Zelle</span> —
+                  enter your tag or contact each time (nothing is saved). Sent by hand by the
+                  Vendylio team, no payout fees.
+                </li>
+                <li>
+                  <span className="font-semibold text-foreground">Bank (ACH)</span> —{' '}
+                  {stripe?.stripeOnboardingStatus === 'ACTIVE' ? (
+                    <>
+                      available. Paid to the bank account on your connected Stripe account, on
+                      Stripe&apos;s standard ~2-business-day schedule.
+                    </>
+                  ) : (
+                    <>
+                      connect your Stripe account in{' '}
+                      <Link
+                        href="/dashboard/settings?tab=payments"
+                        className="font-medium text-accent"
+                      >
+                        Settings → Payments
+                      </Link>{' '}
+                      to pay out straight to your bank.
+                    </>
+                  )}
+                </li>
+              </ul>
             </Card>
           </div>
 
