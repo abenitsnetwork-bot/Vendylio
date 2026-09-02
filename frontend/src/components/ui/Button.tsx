@@ -1,10 +1,12 @@
 import type { ButtonHTMLAttributes } from 'react';
 import { cn } from '@/lib/utils';
 
-type Variant = 'primary' | 'outline' | 'dark';
+type Variant = 'primary' | 'accent' | 'outline' | 'dark';
 
 const VARIANT_CLASSES: Record<Variant, string> = {
   primary: 'bg-primary text-primary-foreground hover:opacity-90',
+  // Vivid brand coral — the eye-catching call-to-action.
+  accent: 'bg-accent text-accent-foreground hover:opacity-90',
   outline: 'bg-card text-foreground border border-border hover:bg-secondary',
   dark: 'bg-foreground text-background hover:opacity-90',
 };

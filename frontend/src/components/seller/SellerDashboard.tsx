@@ -136,7 +136,7 @@ export function SellerDashboard({
       <div className="px-4 py-8 font-body lg:px-14">
         {topBanner}
         {published && recentOrders.length === 0 && (
-          <div className="mb-6 flex flex-col gap-3 rounded-xl border border-primary bg-secondary p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mb-6 flex flex-col gap-3 rounded-xl border border-accent/40 bg-accent/5 p-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-semibold text-foreground">Your store is live 🎉</p>
               <p className="text-xs text-muted-foreground">
@@ -146,7 +146,7 @@ export function SellerDashboard({
             <button
               type="button"
               onClick={() => setShareOpen(true)}
-              className="flex-shrink-0 rounded-md bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground"
+              className="flex-shrink-0 rounded-md bg-accent px-4 py-2 text-xs font-semibold text-accent-foreground hover:opacity-90"
             >
               Share your store
             </button>
@@ -199,14 +199,20 @@ export function SellerDashboard({
             <p className="mt-1 text-xs text-muted-foreground">Orders: {stats.monthOrdersCount}</p>
           </Card>
           <Link href="/dashboard/orders?status=PAID">
-            <Card className="transition-colors hover:border-primary">
+            <Card className="transition-colors hover:border-accent">
               <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
                 Pending Orders
               </p>
               <p className="font-headings text-2xl font-bold text-foreground">
                 {stats.pendingOrdersCount}
               </p>
-              <p className="mt-1 text-xs text-primary">
+              <p
+                className={`mt-1 text-xs ${
+                  stats.pendingOrdersCount > 0
+                    ? 'font-semibold text-accent'
+                    : 'text-muted-foreground'
+                }`}
+              >
                 {stats.pendingOrdersCount > 0 ? 'Needs attention →' : 'All caught up'}
               </p>
             </Card>
@@ -215,7 +221,7 @@ export function SellerDashboard({
             const restockCount = stats.lowStockCount + stats.outOfStockCount;
             return (
               <Link href={restockCount > 0 ? '/dashboard/inventory' : '/dashboard/products'}>
-                <Card className="transition-colors hover:border-primary">
+                <Card className="transition-colors hover:border-accent">
                   <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
                     Active Products
                   </p>
@@ -227,7 +233,7 @@ export function SellerDashboard({
                       ⚠ {restockCount} to restock →
                     </p>
                   ) : (
-                    <p className="mt-1 text-xs text-primary">Manage products →</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Manage products →</p>
                   )}
                 </Card>
               </Link>
@@ -240,7 +246,10 @@ export function SellerDashboard({
           <Card className="lg:col-span-2">
             <div className="mb-6 flex items-center justify-between">
               <h2 className="font-headings text-lg font-bold text-foreground">Recent Orders</h2>
-              <Link href="/dashboard/orders" className="text-sm font-medium text-primary">
+              <Link
+                href="/dashboard/orders"
+                className="text-sm font-semibold text-accent hover:underline"
+              >
                 View all
               </Link>
             </div>
@@ -261,7 +270,7 @@ export function SellerDashboard({
                   <Link
                     key={order.id}
                     href={`/dashboard/orders/${order.id}`}
-                    className="flex items-center justify-between rounded-lg border border-border p-4 hover:border-primary"
+                    className="flex items-center justify-between rounded-lg border border-border p-4 transition-colors hover:border-accent"
                   >
                     <div>
                       <p className="text-xs font-medium text-muted-foreground">
@@ -285,28 +294,28 @@ export function SellerDashboard({
           </Card>
 
           <div className="flex flex-col gap-4">
-            <div className="rounded-lg border border-primary bg-primary p-6 text-primary-foreground">
+            <div className="rounded-lg bg-accent p-6 text-accent-foreground">
               <Icon i="share-2" size={20} className="mb-4" />
               <p className="mb-2 text-sm font-semibold">Share Your Store</p>
-              <p className="mb-4 text-xs" style={{ opacity: 0.8 }}>
+              <p className="mb-4 text-xs" style={{ opacity: 0.9 }}>
                 Copy your link and share it everywhere.
               </p>
               <button
                 type="button"
                 onClick={() => setShareOpen(true)}
-                className="w-full rounded-md bg-primary-foreground py-2 text-xs font-semibold text-primary"
+                className="w-full rounded-md bg-white py-2 text-xs font-semibold text-accent hover:opacity-90"
               >
                 Share Link
               </button>
             </div>
 
             <Card>
-              <Icon i="package" size={20} className="mb-4 text-foreground" />
+              <Icon i="package" size={20} className="mb-4 text-accent" />
               <p className="mb-2 text-sm font-semibold text-foreground">Add Products</p>
               <p className="mb-4 text-xs text-muted-foreground">Build your product catalog.</p>
               <Link
                 href="/dashboard/products/new"
-                className="block w-full rounded-md bg-foreground py-2 text-center text-xs font-semibold text-background"
+                className="block w-full rounded-md bg-accent py-2 text-center text-xs font-semibold text-accent-foreground hover:opacity-90"
               >
                 Add Now
               </Link>
@@ -324,7 +333,7 @@ export function SellerDashboard({
               </Link>
             </Card>
 
-            <Card className="bg-secondary">
+            <Card>
               <Icon i="truck" size={20} className="mb-4 text-foreground" />
               <p className="mb-2 text-sm font-semibold text-foreground">Delivery</p>
               <p className="mb-4 text-xs text-muted-foreground">
@@ -383,7 +392,7 @@ export function SellerDashboard({
         </div>
 
         {/* Getting started */}
-        <Card className="mt-8 bg-secondary">
+        <Card className="mt-8">
           <h3 className="mb-4 font-headings text-lg font-bold text-foreground">Getting Started</h3>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {GETTING_STARTED.map((step, i) => {
@@ -392,7 +401,7 @@ export function SellerDashboard({
                 <div key={step.title} className="flex items-start gap-3">
                   <div
                     className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                      done ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'
+                      done ? 'bg-accent text-accent-foreground' : 'bg-muted text-foreground'
                     }`}
                   >
                     {done ? '✓' : i + 1}

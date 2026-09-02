@@ -2,12 +2,12 @@ import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
 
 // Landing-page pricing teaser — the two live plans (Free / Pro) side by side.
-// Vivid on-brand gradients (coral accent + forest teal). The full comparison
-// table + FAQ lives at /pricing.
+// White cards, on-brand accents (forest teal for Free, coral for Pro). The full
+// comparison table + FAQ lives at /pricing.
 
 interface Plan {
   badge: string;
-  gradient: string;
+  accent: 'teal' | 'coral';
   price: string;
   cadence: string;
   blurb: string;
@@ -19,8 +19,8 @@ interface Plan {
 
 const PLANS: Plan[] = [
   {
-    badge: 'FREE',
-    gradient: 'linear-gradient(135deg, #0f9d8f 0%, #1fbf6b 55%, #46d17a 100%)',
+    badge: 'Free',
+    accent: 'teal',
     price: '$0',
     cadence: 'forever',
     blurb: 'Everything you need to launch and take your first orders.',
@@ -35,8 +35,8 @@ const PLANS: Plan[] = [
     ],
   },
   {
-    badge: 'PRO',
-    gradient: 'linear-gradient(135deg, #dd5b2e 0%, #e0417a 55%, #d6409a 100%)',
+    badge: 'Pro',
+    accent: 'coral',
     price: '$29',
     cadence: '/ month · or $290 / year',
     blurb: 'Lower fees and the tools to grow once orders pick up.',
@@ -54,11 +54,16 @@ const PLANS: Plan[] = [
   },
 ];
 
+const HEADER_BG: Record<Plan['accent'], string> = {
+  teal: 'bg-panel text-panel-foreground',
+  coral: 'bg-accent text-accent-foreground',
+};
+
 export function PlansSection() {
   return (
     <section
       id="plans"
-      className="border-t border-border bg-secondary px-4 py-16 font-body lg:px-14 lg:py-20"
+      className="border-t border-border bg-card px-4 py-16 font-body lg:px-14 lg:py-20"
     >
       <div className="mx-auto mb-10 max-w-7xl text-center lg:mb-14">
         <h2
@@ -77,31 +82,27 @@ export function PlansSection() {
         {PLANS.map((plan) => (
           <div
             key={plan.badge}
-            className={`relative overflow-hidden rounded-2xl border bg-card shadow-sm ${
-              plan.featured ? 'border-accent/40 shadow-lg md:-mt-3' : 'border-border'
+            className={`relative overflow-hidden rounded-2xl border bg-card ${
+              plan.featured
+                ? 'border-accent shadow-lg ring-1 ring-accent/20 md:-mt-3'
+                : 'border-border shadow-sm'
             }`}
           >
             {plan.featured && (
-              <span className="absolute right-4 top-4 z-10 rounded-full bg-white/20 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-white backdrop-blur">
+              <span className="absolute right-4 top-4 z-10 rounded-full bg-white/25 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-white backdrop-blur">
                 Most popular
               </span>
             )}
 
-            {/* Gradient header */}
-            <div
-              className="relative px-6 pb-8 pt-6 text-white"
-              style={{ background: plan.gradient }}
-            >
+            <div className={`px-6 pb-7 pt-6 ${HEADER_BG[plan.accent]}`}>
               <span className="inline-block rounded-full border border-white/40 px-3 py-1 text-xs font-bold uppercase tracking-widest">
                 {plan.badge}
               </span>
-              <div className="mt-4 flex items-baseline gap-1">
+              <div className="mt-4 flex items-baseline gap-1.5">
                 <span className="font-headings text-5xl font-bold">{plan.price}</span>
-                <span className="text-sm font-medium text-white/90">{plan.cadence}</span>
+                <span className="text-sm font-medium opacity-90">{plan.cadence}</span>
               </div>
-              <p className="mt-2 max-w-xs text-sm text-white/90">{plan.blurb}</p>
-              {/* Decorative blob */}
-              <div className="pointer-events-none absolute -bottom-16 -right-10 h-40 w-40 rounded-full bg-white/10" />
+              <p className="mt-2 max-w-xs text-sm opacity-90">{plan.blurb}</p>
             </div>
 
             <div className="p-6">
@@ -112,7 +113,11 @@ export function PlansSection() {
                       <span className="font-semibold">{point}</span>
                     ) : (
                       <>
-                        <Icon i="check-circle" size={18} className="mt-0.5 shrink-0 text-accent" />
+                        <Icon
+                          i="check-circle"
+                          size={18}
+                          className="mt-0.5 shrink-0 text-green-600"
+                        />
                         <span>{point}</span>
                       </>
                     )}
@@ -125,7 +130,7 @@ export function PlansSection() {
                 className={`mt-6 block rounded-full px-5 py-3 text-center text-sm font-semibold transition hover:opacity-90 ${
                   plan.featured
                     ? 'bg-accent text-accent-foreground'
-                    : 'border border-border bg-card text-foreground hover:bg-secondary'
+                    : 'bg-panel text-panel-foreground'
                 }`}
               >
                 {plan.cta}

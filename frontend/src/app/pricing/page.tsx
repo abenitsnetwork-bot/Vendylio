@@ -40,22 +40,15 @@ const ROWS: Row[] = [
 
 function Cell({ value }: { value: string | boolean }) {
   if (value === true)
-    return <Icon i="check" size={16} className="mx-auto text-primary" aria-label="Included" />;
+    return <Icon i="check" size={17} className="mx-auto text-green-600" aria-label="Included" />;
   if (value === false)
-    return (
-      <Icon
-        i="x"
-        size={16}
-        className="mx-auto text-muted-foreground/50"
-        aria-label="Not included"
-      />
-    );
-  return <span className="text-sm text-foreground">{value}</span>;
+    return <Icon i="x" size={17} className="mx-auto text-red-500" aria-label="Not included" />;
+  return <span className="text-sm font-medium text-foreground">{value}</span>;
 }
 
 export default function PricingPage() {
   return (
-    <div className="bg-background font-body">
+    <div className="bg-card font-body">
       <PublicNavBar />
 
       <div className="px-4 py-12 lg:px-14 lg:py-16">
@@ -75,9 +68,11 @@ export default function PricingPage() {
 
           {/* Plan cards */}
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-            <div className="rounded-2xl border border-border bg-card p-7">
-              <p className="font-headings text-lg font-bold text-foreground">Free</p>
-              <p className="mt-1 text-sm text-muted-foreground">
+            <div className="rounded-2xl border border-border bg-card p-7 shadow-sm">
+              <span className="inline-block rounded-full bg-panel px-3 py-1 text-xs font-bold uppercase tracking-widest text-panel-foreground">
+                Free
+              </span>
+              <p className="mt-3 text-sm text-muted-foreground">
                 Everything you need to open and run your store.
               </p>
               <p className="mt-5 font-headings text-4xl font-bold text-foreground">
@@ -86,18 +81,20 @@ export default function PricingPage() {
               <p className="mt-1 text-sm text-muted-foreground">5% fee on card sales</p>
               <Link
                 href="/register"
-                className="mt-6 block rounded-full border border-primary px-6 py-3 text-center text-sm font-semibold text-primary hover:bg-secondary"
+                className="mt-6 block rounded-full bg-panel px-6 py-3 text-center text-sm font-semibold text-panel-foreground hover:opacity-90"
               >
                 Start free
               </Link>
             </div>
 
-            <div className="relative rounded-2xl border-2 border-primary bg-card p-7">
-              <span className="absolute -top-3 left-7 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">
+            <div className="relative rounded-2xl border-2 border-accent bg-card p-7 shadow-lg ring-1 ring-accent/20">
+              <span className="absolute -top-3 left-7 rounded-full bg-accent px-3 py-1 text-xs font-semibold text-accent-foreground">
                 Most popular
               </span>
-              <p className="font-headings text-lg font-bold text-foreground">Pro</p>
-              <p className="mt-1 text-sm text-muted-foreground">
+              <span className="inline-block rounded-full bg-accent/10 px-3 py-1 text-xs font-bold uppercase tracking-widest text-accent">
+                Pro
+              </span>
+              <p className="mt-3 text-sm text-muted-foreground">
                 Lower fees plus the tools to grow — promos, analytics, your own domain.
               </p>
               <p className="mt-5 font-headings text-4xl font-bold text-foreground">
@@ -108,7 +105,7 @@ export default function PricingPage() {
               </p>
               <Link
                 href="/register?plan=pro"
-                className="mt-6 block rounded-full bg-primary px-6 py-3 text-center text-sm font-semibold text-primary-foreground hover:opacity-90"
+                className="mt-6 block rounded-full bg-accent px-6 py-3 text-center text-sm font-semibold text-accent-foreground hover:opacity-90"
               >
                 Start with Pro
               </Link>
@@ -122,7 +119,7 @@ export default function PricingPage() {
           </p>
 
           {/* Comparison table */}
-          <div className="mt-12 overflow-x-auto">
+          <div className="mt-12 overflow-x-auto rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6">
             <table className="w-full min-w-[520px] border-collapse text-left">
               <thead>
                 <tr className="border-b border-border">
@@ -130,7 +127,7 @@ export default function PricingPage() {
                   <th className="w-28 py-3 text-center text-sm font-semibold text-foreground">
                     Free
                   </th>
-                  <th className="w-28 py-3 text-center text-sm font-semibold text-primary">Pro</th>
+                  <th className="w-28 py-3 text-center text-sm font-semibold text-accent">Pro</th>
                 </tr>
               </thead>
               <tbody>
@@ -150,7 +147,7 @@ export default function PricingPage() {
           </div>
 
           {/* Business teaser */}
-          <div className="mt-10 rounded-2xl border border-dashed border-border bg-secondary/40 p-6 text-center">
+          <div className="mt-10 rounded-2xl border border-dashed border-accent/40 bg-secondary/50 p-6 text-center">
             <p className="font-headings text-base font-bold text-foreground">
               Business <span className="text-muted-foreground">— coming soon</span>
             </p>
