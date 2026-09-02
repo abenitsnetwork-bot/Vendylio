@@ -1,11 +1,71 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type ReactElement } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { Field, inputClass } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 
 type Method = 'CASH_APP' | 'ZELLE' | 'BANK';
+
+// Brand marks — inline SVG (CSP blocks remote images). Simplified glyphs in
+// each service's own colour so the picker reads at a glance.
+function CashAppMark() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+      <rect width="24" height="24" rx="6" fill="#00D54B" />
+      <text
+        x="12"
+        y="17"
+        textAnchor="middle"
+        fontSize="14"
+        fontWeight="700"
+        fill="#fff"
+        fontFamily="system-ui, sans-serif"
+      >
+        $
+      </text>
+    </svg>
+  );
+}
+function ZelleMark() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+      <rect width="24" height="24" rx="6" fill="#6D1ED4" />
+      <text
+        x="12"
+        y="17.5"
+        textAnchor="middle"
+        fontSize="14"
+        fontWeight="700"
+        fontStyle="italic"
+        fill="#fff"
+        fontFamily="Georgia, 'Times New Roman', serif"
+      >
+        Z
+      </text>
+    </svg>
+  );
+}
+function BankMark() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+      <rect width="24" height="24" rx="6" fill="#16322d" />
+      <g fill="#fff">
+        <path d="M12 4.5 19 8.5H5z" />
+        <rect x="6.5" y="9.5" width="2" height="6.5" />
+        <rect x="11" y="9.5" width="2" height="6.5" />
+        <rect x="15.5" y="9.5" width="2" height="6.5" />
+        <rect x="5" y="17" width="14" height="2" rx="0.5" />
+      </g>
+    </svg>
+  );
+}
+
+const METHOD_META: Record<Method, { label: string; brand: string; Mark: () => ReactElement }> = {
+  CASH_APP: { label: 'Cash App', brand: '#00D54B', Mark: CashAppMark },
+  ZELLE: { label: 'Zelle', brand: '#6D1ED4', Mark: ZelleMark },
+  BANK: { label: 'Bank (ACH)', brand: '#16322d', Mark: BankMark },
+};
 
 const ERROR_MESSAGES: Record<string, string> = {
   AMOUNT_BELOW_MIN: 'That amount is below the minimum withdrawal.',
@@ -173,29 +233,35 @@ export function WithdrawalRequestForm({
   const methods: Method[] = bankPayoutAvailable
     ? ['CASH_APP', 'ZELLE', 'BANK']
     : ['CASH_APP', 'ZELLE'];
-  const methodLabel: Record<Method, string> = {
-    CASH_APP: 'Cash App',
-    ZELLE: 'Zelle',
-    BANK: 'Bank (ACH)',
-  };
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <div className="flex gap-2">
-        {methods.map((m) => (
-          <button
-            key={m}
-            type="button"
-            onClick={() => setMethod(m)}
-            className={`flex-1 rounded-lg border px-4 py-2 text-sm font-medium ${
-              method === m
-                ? 'border-accent bg-secondary text-foreground'
-                : 'border-border text-muted-foreground'
-            }`}
-          >
-            {methodLabel[m]}
-          </button>
-        ))}
+        {methods.map((m) => {
+          const meta = METHOD_META[m];
+          const selected = method === m;
+          return (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMethod(m)}
+              aria-pressed={selected}
+              className={`flex flex-1 flex-col items-center gap-1.5 rounded-lg border px-2 py-3 text-xs font-semibold transition ${
+                selected ? 'border-2 text-foreground' : 'border-border text-muted-foreground'
+              }`}
+              style={
+                selected
+                  ? { borderColor: meta.brand, backgroundColor: `${meta.brand}14` }
+                  : undefined
+              }
+            >
+              <span className={selected ? '' : 'opacity-45 grayscale'}>
+                <meta.Mark />
+              </span>
+              {meta.label}
+            </button>
+          );
+        })}
       </div>
 
       {method === 'BANK' ? (
@@ -267,8 +333,13 @@ export function WithdrawalRequestForm({
         </div>
       )}
 
-      <Button type="submit" disabled={submitting} className="w-full">
-        {submitting ? 'Requesting…' : 'Request Withdrawal'}
+      <Button
+        type="submit"
+        disabled={submitting}
+        className="w-full text-white"
+        style={{ backgroundColor: METHOD_META[method].brand }}
+      >
+        {submitting ? 'Requesting…' : `Request ${METHOD_META[method].label} withdrawal`}
       </Button>
     </form>
   );
