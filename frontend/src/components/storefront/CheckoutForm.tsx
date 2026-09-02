@@ -802,6 +802,7 @@ function CheckoutFormInner({
 
           <Button
             type="submit"
+            variant="dark"
             disabled={submitting || quoting || checkoutBlocked || needsPriceAck}
             className="w-full py-3.5"
           >
