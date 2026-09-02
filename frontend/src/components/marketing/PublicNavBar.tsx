@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { Icon } from '@/components/ui/Icon';
 
 const LINKS = [
@@ -11,6 +12,12 @@ const LINKS = [
   { href: '/pricing', label: 'Pricing' },
   { href: '#testimonials', label: 'Reviews' },
 ];
+
+// Hash links target homepage sections. On the homepage keep them as bare
+// hashes (native smooth scroll); on any other page route home first.
+function resolveHref(href: string, onHome: boolean): string {
+  return href.startsWith('#') && !onHome ? `/${href}` : href;
+}
 
 function NavLink({
   href,
@@ -37,6 +44,7 @@ function NavLink({
 
 export function PublicNavBar() {
   const [open, setOpen] = useState(false);
+  const onHome = usePathname() === '/';
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-card font-body">
@@ -49,7 +57,7 @@ export function PublicNavBar() {
           {LINKS.map((link) => (
             <NavLink
               key={link.href}
-              href={link.href}
+              href={resolveHref(link.href, onHome)}
               label={link.label}
               className="text-sm font-medium text-muted-foreground hover:text-foreground"
             />
@@ -88,7 +96,7 @@ export function PublicNavBar() {
             {LINKS.map((link) => (
               <NavLink
                 key={link.href}
-                href={link.href}
+                href={resolveHref(link.href, onHome)}
                 label={link.label}
                 onClick={() => setOpen(false)}
                 className="rounded-lg px-3 py-3 text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground"
