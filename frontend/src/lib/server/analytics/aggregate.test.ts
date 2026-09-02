@@ -123,6 +123,55 @@ describe('readAnalytics', () => {
     expect(res.topProducts[0]).toEqual({ productId: 'p1', name: 'Widget', views: 4 });
   });
 
+  it('builds a product revenue breakdown from the paid orders lineItems', async () => {
+    const now = new Date('2026-09-03T12:00:00Z');
+    prismaMock.storefrontDayStat.findMany.mockResolvedValueOnce([]);
+    prismaMock.order.findMany.mockResolvedValueOnce([
+      {
+        paidAt: new Date('2026-09-02T15:00:00Z'),
+        amount: 9000,
+        lineItems: [
+          { productId: 'p1', name: 'Soap', priceCents: 1000, quantity: 6 },
+          { productId: 'p2', name: 'Candle', priceCents: 2000, quantity: 1 },
+        ],
+      },
+    ] as never);
+    (
+      prismaMock.productViewDayStat.groupBy as unknown as {
+        mockResolvedValueOnce: (v: unknown) => void;
+      }
+    ).mockResolvedValueOnce([{ productId: 'p1', _sum: { views: 12 } }]);
+    prismaMock.product.findMany.mockResolvedValueOnce([
+      { id: 'p1', name: 'Soap', category: { name: 'Bath' } },
+      { id: 'p2', name: 'Candle', category: null },
+    ] as never);
+
+    const res = await readAnalytics(prismaMock, { storeId: 's1', tz: 'UTC', range: 7, now });
+
+    expect(res.productBreakdown).toEqual([
+      {
+        productId: 'p1',
+        name: 'Soap',
+        category: 'Bath',
+        unitsSold: 6,
+        revenueCents: 6000,
+        avgPriceCents: 1000,
+        sharePct: 75,
+        views: 12,
+      },
+      {
+        productId: 'p2',
+        name: 'Candle',
+        category: 'Uncategorized',
+        unitsSold: 1,
+        revenueCents: 2000,
+        avgPriceCents: 2000,
+        sharePct: 25,
+        views: 0,
+      },
+    ]);
+  });
+
   it('conversion rate is 0 with no visitors', async () => {
     prismaMock.storefrontDayStat.findMany.mockResolvedValueOnce([]);
     prismaMock.order.findMany.mockResolvedValueOnce([]);

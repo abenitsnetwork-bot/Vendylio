@@ -113,6 +113,22 @@ export interface AnalyticsSeriesPoint {
   salesCents: number;
 }
 
+/** Per-product sales, parsed from the paid orders' lineItems snapshot in the
+ *  window — powers the "Product revenue breakdown" table. */
+export interface ProductBreakdownRow {
+  productId: string;
+  name: string;
+  category: string;
+  unitsSold: number;
+  revenueCents: number;
+  /** revenueCents / unitsSold, rounded. */
+  avgPriceCents: number;
+  /** revenueCents as a % of all product revenue in the window, rounded. */
+  sharePct: number;
+  /** Storefront views of this product in the window (0 if none). */
+  views: number;
+}
+
 export interface AnalyticsSummary {
   range: number;
   series: AnalyticsSeriesPoint[];
@@ -127,6 +143,14 @@ export interface AnalyticsSummary {
     conversionRate: number;
   };
   topProducts: Array<{ productId: string; name: string; views: number }>;
+  productBreakdown: ProductBreakdownRow[];
+}
+
+interface LineItemSnapshot {
+  productId: string;
+  name: string;
+  priceCents: number;
+  quantity: number;
 }
 
 /** Enumerate `YYYY-MM-DD` keys from `days`-ago through today (store tz). */
@@ -158,7 +182,7 @@ export async function readAnalytics(
         status: { in: PAID_ORDER_STATUSES },
         paidAt: { gte: startDay },
       },
-      select: { paidAt: true, amount: true },
+      select: { paidAt: true, amount: true, lineItems: true },
     }),
     prisma.productViewDayStat.groupBy({
       by: ['productId'],
@@ -219,19 +243,61 @@ export async function readAnalytics(
     { storeViews: 0, productViews: 0, visitors: 0, orders: 0, salesCents: 0 },
   );
 
-  const topIds = topRaw.map((t) => t.productId);
-  const names = topIds.length
+  // Per-product sales from the lineItems snapshot (name AS SOLD, so a
+  // renamed/deleted product still shows correctly). Mirrors the admin
+  // analytics route — there's no relational OrderLineItem table.
+  const salesByProduct = new Map<
+    string,
+    { name: string; unitsSold: number; revenueCents: number }
+  >();
+  for (const o of orders) {
+    const items = (o.lineItems as unknown as LineItemSnapshot[] | null) ?? [];
+    for (const it of items) {
+      if (!it || typeof it.productId !== 'string') continue;
+      const cur = salesByProduct.get(it.productId) ?? {
+        name: it.name,
+        unitsSold: 0,
+        revenueCents: 0,
+      };
+      cur.unitsSold += it.quantity;
+      cur.revenueCents += Math.round(it.priceCents * it.quantity);
+      salesByProduct.set(it.productId, cur);
+    }
+  }
+
+  const viewsByProduct = new Map(topRaw.map((t) => [t.productId, t._sum.views ?? 0]));
+  const productIds = [...new Set([...topRaw.map((t) => t.productId), ...salesByProduct.keys()])];
+  const products = productIds.length
     ? await prisma.product.findMany({
-        where: { id: { in: topIds } },
-        select: { id: true, name: true },
+        where: { id: { in: productIds } },
+        select: { id: true, name: true, category: { select: { name: true } } },
       })
     : [];
-  const nameById = new Map(names.map((n) => [n.id, n.name]));
+  const productMeta = new Map(
+    products.map((p) => [p.id, { name: p.name, category: p.category?.name ?? 'Uncategorized' }]),
+  );
+
   const topProducts = topRaw.map((t) => ({
     productId: t.productId,
-    name: nameById.get(t.productId) ?? 'Deleted product',
+    name: productMeta.get(t.productId)?.name ?? 'Deleted product',
     views: t._sum.views ?? 0,
   }));
+
+  const productRevenueTotal = [...salesByProduct.values()].reduce((s, p) => s + p.revenueCents, 0);
+  const productBreakdown: ProductBreakdownRow[] = [...salesByProduct.entries()]
+    .map(([productId, s]) => ({
+      productId,
+      name: productMeta.get(productId)?.name ?? s.name,
+      category: productMeta.get(productId)?.category ?? 'Uncategorized',
+      unitsSold: s.unitsSold,
+      revenueCents: s.revenueCents,
+      avgPriceCents: s.unitsSold > 0 ? Math.round(s.revenueCents / s.unitsSold) : 0,
+      sharePct:
+        productRevenueTotal > 0 ? Math.round((s.revenueCents / productRevenueTotal) * 100) : 0,
+      views: viewsByProduct.get(productId) ?? 0,
+    }))
+    .sort((a, b) => b.revenueCents - a.revenueCents)
+    .slice(0, 8);
 
   return {
     range,
@@ -246,6 +312,7 @@ export async function readAnalytics(
       conversionRate: totals.visitors > 0 ? totals.orders / totals.visitors : 0,
     },
     topProducts,
+    productBreakdown,
   };
 }
 
