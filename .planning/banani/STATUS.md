@@ -19,6 +19,11 @@ available in this environment; open `http://localhost:3000` yourself to eyeball 
 
 ## Done — batch 2
 - [x] How It Works — Detailed — `src/app/how-it-works/page.tsx`
+  - 2026-09-01: its visual language (big number + rule, zigzag text/visual rows,
+    card-framed mockups) applied as a **condensed, animated** landing section —
+    `src/components/marketing/HowItWorksSection.tsx` (4 steps, desktop centre
+    timeline + looping node pulse, scroll-reveal, CSS mini-mockups, no assets).
+    Plan: `how-it-works-landing-section.md`.
 - [x] Account Menu Dropdown — `src/components/seller/AccountMenu.tsx` (wired into `SellerHeader`, used on every `/dashboard/*` page)
 - [x] Billing & Payouts — `src/app/dashboard/billing/page.tsx` — real withdrawal history + real request form (Cash App/Zelle, USD)
 - [x] Guide: Your First 5 Products — `src/app/dashboard/resources/first-products/page.tsx`
