@@ -84,19 +84,19 @@ export default function AdminCommissionPage() {
 
       {data && (
         <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <div className="rounded-lg border border-border p-4">
+          <div className="rounded-lg border border-border bg-card p-4">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Owed</p>
             <p className="font-headings text-2xl font-bold text-foreground">
               {usd(data.totals.owedCents)}
             </p>
           </div>
-          <div className="rounded-lg border border-border p-4">
+          <div className="rounded-lg border border-border bg-card p-4">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Invoiced</p>
             <p className="font-headings text-2xl font-bold text-foreground">
               {usd(data.totals.invoicedCents)}
             </p>
           </div>
-          <div className="rounded-lg border border-border p-4">
+          <div className="rounded-lg border border-border bg-card p-4">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Stores</p>
             <p className="font-headings text-2xl font-bold text-foreground">
               {data.totals.storeCount}
