@@ -6,7 +6,11 @@ const webhookLogFindUnique = vi.fn();
 const webhookLogCreate = vi.fn();
 const webhookLogUpdate = vi.fn();
 const orderFindFirst = vi.fn();
+const orderFindUnique = vi.fn();
 const orderUpdate = vi.fn();
+const commissionChargeFindUnique = vi.fn();
+const commissionChargeUpdate = vi.fn();
+const commissionChargeUpsert = vi.fn();
 const productFindUnique = vi.fn();
 const productUpdate = vi.fn();
 const storeFindUnique = vi.fn();
@@ -27,7 +31,12 @@ const $transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>, _opts?:
       create: webhookLogCreate,
       update: webhookLogUpdate,
     },
-    order: { findFirst: orderFindFirst, update: orderUpdate },
+    order: { findFirst: orderFindFirst, findUnique: orderFindUnique, update: orderUpdate },
+    commissionCharge: {
+      findUnique: commissionChargeFindUnique,
+      update: commissionChargeUpdate,
+      upsert: commissionChargeUpsert,
+    },
     product: { findUnique: productFindUnique, update: productUpdate },
     productVariant: { findUnique: productVariantFindUnique, update: productVariantUpdate },
     store: { findUnique: storeFindUnique },
@@ -59,7 +68,11 @@ beforeEach(() => {
   webhookLogCreate.mockReset();
   webhookLogUpdate.mockReset();
   orderFindFirst.mockReset();
+  orderFindUnique.mockReset().mockResolvedValue(null);
   orderUpdate.mockReset();
+  commissionChargeFindUnique.mockReset().mockResolvedValue(null);
+  commissionChargeUpdate.mockReset();
+  commissionChargeUpsert.mockReset();
   productFindUnique.mockReset();
   productUpdate.mockReset();
   storeFindUnique.mockReset();
@@ -453,6 +466,124 @@ describe('POST /api/webhooks/stripe', () => {
       // processed, so the whole attempt (including the Order PAID write) rolls
       // back and Stripe will retry.
       expect(res.status).toBe(500);
+    });
+  });
+
+  describe('onPaid — captures the PaymentIntent id', () => {
+    it('writes session.payment_intent to Order.stripePaymentIntentId', async () => {
+      orderFindFirst.mockResolvedValueOnce(PAID_ORDER);
+      productFindUnique.mockResolvedValueOnce({ quantity: 10 });
+      storeFindUnique.mockResolvedValueOnce({ organization: { ownerId: 'seller-1' } });
+      outboxCreate.mockResolvedValue({ id: 'ob1' });
+
+      const { POST } = await import('./route');
+      const { req } = stripeFixtureRequest({ paymentIntentId: 'pi_live_abc' });
+      await POST(req);
+
+      expect(orderUpdate).toHaveBeenCalledWith({
+        where: { id: 'order-1' },
+        data: expect.objectContaining({ stripePaymentIntentId: 'pi_live_abc' }),
+      });
+    });
+  });
+
+  describe('charge.refunded (onRefunded)', () => {
+    const REFUNDABLE_ORDER = {
+      id: 'order-9',
+      storeId: 'store-1',
+      status: 'PAID',
+      amount: 3600,
+      currency: 'USD',
+      customerEmail: 'buyer@example.com',
+      lineItems: [{ productId: 'prod-a', name: 'Shea Butter', priceCents: 1800, quantity: 2 }],
+    };
+
+    it('marks the matched order REFUNDED, restocks, and enqueues the refund email', async () => {
+      orderFindFirst.mockResolvedValueOnce(REFUNDABLE_ORDER); // matched by stripePaymentIntentId
+      orderFindUnique.mockResolvedValueOnce({ status: 'PAID' }); // the in-function guard re-read
+      productFindUnique.mockResolvedValueOnce({ id: 'prod-a' });
+      outboxCreate.mockResolvedValue({ id: 'ob1' });
+
+      const { POST } = await import('./route');
+      const { req } = stripeFixtureRequest({
+        type: 'charge.refunded',
+        paymentIntentId: 'pi_test_001',
+      });
+      const res = await POST(req);
+
+      expect(res.status).toBe(200);
+      expect(orderFindFirst).toHaveBeenCalledWith({
+        where: { stripePaymentIntentId: 'pi_test_001' },
+      });
+      expect(orderUpdate).toHaveBeenCalledWith({
+        where: { id: 'order-9' },
+        data: { status: 'REFUNDED' },
+      });
+      expect(applyStockChange).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ productId: 'prod-a', delta: 2, reason: 'REFUND_RESTOCK' }),
+      );
+      const kinds = outboxCreate.mock.calls.map(
+        (c) => (c[0] as { data: { kind: string } }).data.kind,
+      );
+      expect(kinds).toContain('email.order_refunded');
+    });
+
+    it('is a no-op when the order was already refunded in-app (race guard)', async () => {
+      orderFindFirst.mockResolvedValueOnce({ ...REFUNDABLE_ORDER, status: 'REFUNDED' });
+
+      const { POST } = await import('./route');
+      const { req } = stripeFixtureRequest({
+        type: 'charge.refunded',
+        paymentIntentId: 'pi_test_001',
+      });
+      const res = await POST(req);
+
+      expect(res.status).toBe(200);
+      expect(orderUpdate).not.toHaveBeenCalled();
+      expect(applyStockChange).not.toHaveBeenCalled();
+    });
+
+    it('drops a partial refund (charge.refunded === false)', async () => {
+      const { POST } = await import('./route');
+      const { req } = stripeFixtureRequest({
+        type: 'charge.refunded',
+        chargeRefunded: false,
+        paymentIntentId: 'pi_test_001',
+      });
+      const res = await POST(req);
+
+      expect(res.status).toBe(200);
+      expect(orderFindFirst).not.toHaveBeenCalled();
+      expect(orderUpdate).not.toHaveBeenCalled();
+    });
+
+    it('drops an event for an unknown payment_intent', async () => {
+      orderFindFirst.mockResolvedValueOnce(null);
+
+      const { POST } = await import('./route');
+      const { req } = stripeFixtureRequest({
+        type: 'charge.refunded',
+        paymentIntentId: 'pi_unknown',
+      });
+      const res = await POST(req);
+
+      expect(res.status).toBe(200);
+      expect(orderUpdate).not.toHaveBeenCalled();
+    });
+
+    it('a replayed charge.refunded event is deduped by the factory', async () => {
+      webhookLogFindUnique.mockResolvedValueOnce({ id: 'wl1', processedAt: new Date() });
+
+      const { POST } = await import('./route');
+      const { req } = stripeFixtureRequest({
+        type: 'charge.refunded',
+        paymentIntentId: 'pi_test_001',
+      });
+      const res = await POST(req);
+
+      expect(await res.json()).toEqual({ ok: true, deduped: true });
+      expect(orderFindFirst).not.toHaveBeenCalled();
     });
   });
 });

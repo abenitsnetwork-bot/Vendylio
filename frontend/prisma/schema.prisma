@@ -427,8 +427,15 @@ model Order {
   // null for these two, see api/orders/route.ts's routing).
   provider         String
   providerChargeId String? @unique
-  paymentUrl       String? // Stripe Checkout Session URL — null for manual payment methods
-  paymentMethod    String? // set on PAID (e.g. Stripe's payment_method_types entry, or "cashapp"/"zelle")
+  // Stripe PaymentIntent id (pi_...), captured from the checkout.session on
+  // the paid webhook. `providerChargeId` above is the Checkout Session id
+  // (cs_...), which `charge.refunded` events do NOT carry — this is what the
+  // refund webhook (api/webhooks/stripe/route.ts onRefunded) matches on. Null
+  // for manual methods and for orders that predate this column (backfilled by
+  // scripts/backfill-payment-intent-ids.ts).
+  stripePaymentIntentId String? @unique
+  paymentUrl            String? // Stripe Checkout Session URL — null for manual payment methods
+  paymentMethod        String? // set on PAID (e.g. Stripe's payment_method_types entry, or "cashapp"/"zelle")
 
   // Marketplace commission (Phase 3 uses this to split platform vs. seller take)
   commissionAmount Int?

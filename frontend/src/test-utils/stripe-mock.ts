@@ -23,6 +23,11 @@ export interface StripeFixtureOpts {
   paymentStatus?: string;
   webhookSecret?: string;
   eventId?: string;
+  /** PaymentIntent id carried by the session (onPaid) or the charge (onRefunded). */
+  paymentIntentId?: string | null;
+  /** charge.refunded only — `charge.refunded` bool (true = fully refunded). */
+  chargeRefunded?: boolean;
+  chargeId?: string;
 }
 
 export function stripeFixture(opts: StripeFixtureOpts = {}): {
@@ -32,20 +37,33 @@ export function stripeFixture(opts: StripeFixtureOpts = {}): {
 } {
   const type = opts.type ?? 'checkout.session.completed';
   const sessionId = opts.sessionId ?? 'cs_test_001';
+  const paymentIntentId = opts.paymentIntentId === undefined ? 'pi_test_001' : opts.paymentIntentId;
+
+  const dataObject =
+    type === 'charge.refunded'
+      ? {
+          id: opts.chargeId ?? 'ch_test_001',
+          object: 'charge',
+          payment_intent: paymentIntentId,
+          refunded: opts.chargeRefunded ?? true,
+          amount: opts.amountTotal ?? 3600,
+          amount_refunded: opts.amountTotal ?? 3600,
+        }
+      : {
+          id: sessionId,
+          object: 'checkout.session',
+          amount_total: opts.amountTotal ?? 3600,
+          customer_email: opts.customerEmail ?? null,
+          payment_method_types: opts.paymentMethodTypes ?? ['card'],
+          payment_status: opts.paymentStatus ?? 'paid',
+          payment_intent: paymentIntentId,
+        };
+
   const event = {
     id: opts.eventId ?? 'evt_test_001',
     object: 'event',
     type,
-    data: {
-      object: {
-        id: sessionId,
-        object: 'checkout.session',
-        amount_total: opts.amountTotal ?? 3600,
-        customer_email: opts.customerEmail ?? null,
-        payment_method_types: opts.paymentMethodTypes ?? ['card'],
-        payment_status: opts.paymentStatus ?? 'paid',
-      },
-    },
+    data: { object: dataObject },
   } as unknown as Stripe.Event;
 
   const payload = JSON.stringify(event);

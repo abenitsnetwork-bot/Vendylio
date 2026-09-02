@@ -31,12 +31,12 @@
  * providerChargeId, check it's still PENDING, and confirm Stripe collected
  * the exact amount we priced before handing off to applyOrderPaidEffects.
  *
- * Refunds are NOT handled here yet: Stripe's `charge.refunded` event carries
- * a PaymentIntent id, but `Order.providerChargeId` stores the Checkout
- * Session id — correlating the two would need either a new column or an
- * extra Stripe API call from inside this transaction. Nothing in the app
- * calls `provider.refund()` yet either, so this is deferred rather than
- * built speculatively.
+ * Refunds: `onRefunded` handles Stripe's `charge.refunded` event (a refund
+ * issued from the Stripe dashboard, a dispute tool, or the app's own
+ * `POST /api/orders/[id]/refund`). That event carries the PaymentIntent id,
+ * not the Checkout Session id in `Order.providerChargeId`, so we match on
+ * `Order.stripePaymentIntentId` — captured in `onPaid` from the session, and
+ * backfilled for older orders by scripts/backfill-payment-intent-ids.ts.
  */
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -46,10 +46,18 @@ import type Stripe from 'stripe';
 import { createWebhookHandler } from '@/lib/server/webhook/handler';
 import { stripeWebhookProvider } from '@/lib/server/webhook/stripe';
 import { applyOrderPaidEffects } from '@/lib/server/orders/markPaid';
+import { applyOrderRefundedEffects } from '@/lib/server/orders/refund';
 import { prisma } from '@/lib/server/prisma';
 import { createLogger } from '@/lib/server/logger';
 
 const log = createLogger();
+
+/** `charge.payment_intent` / `session.payment_intent` is a string id or an
+ * expanded object — normalise to the `pi_…` string (or null). */
+function paymentIntentId(pi: string | Stripe.PaymentIntent | null | undefined): string | null {
+  if (!pi) return null;
+  return typeof pi === 'string' ? pi : pi.id;
+}
 
 export const POST = createWebhookHandler<Stripe.Event>({
   prisma,
@@ -93,8 +101,62 @@ export const POST = createWebhookHandler<Stripe.Event>({
     }
 
     const paymentMethod = session.payment_method_types?.[0] ?? null;
-    await applyOrderPaidEffects(tx, order, { paymentMethod });
+    await applyOrderPaidEffects(tx, order, {
+      paymentMethod,
+      stripePaymentIntentId: paymentIntentId(session.payment_intent),
+    });
 
+    return {};
+  },
+
+  async onRefunded(event, tx) {
+    const charge = event.data.object as Stripe.Charge;
+
+    // The app only ever issues FULL refunds. `charge.refunded` is true only
+    // when the charge is fully refunded; a partial refund fires the same
+    // event with `refunded: false`. Nothing here creates partial refunds, so
+    // log and skip rather than half-restocking.
+    if (!charge.refunded) {
+      log.warn('stripe webhook: charge.refunded with refunded=false (partial refund?) — skipping', {
+        chargeId: charge.id,
+        amountRefunded: charge.amount_refunded,
+      });
+      return {};
+    }
+
+    const pi = paymentIntentId(charge.payment_intent);
+    if (!pi) {
+      log.warn(
+        'stripe webhook: charge.refunded carries no payment_intent — cannot match an order',
+        {
+          chargeId: charge.id,
+        },
+      );
+      return {};
+    }
+
+    const order = await tx.order.findFirst({ where: { stripePaymentIntentId: pi } });
+    if (!order) {
+      // A charge that predates the stripePaymentIntentId column (and was never
+      // backfilled), or a charge unrelated to a Vendylio order.
+      log.warn('stripe webhook: charge.refunded for an unknown payment_intent', {
+        chargeId: charge.id,
+        paymentIntentId: pi,
+      });
+      return {};
+    }
+
+    // Race guard: the seller may have already refunded via
+    // POST /api/orders/[id]/refund, which ran applyOrderRefundedEffects.
+    // That function now re-checks status internally too, but bail early here
+    // to avoid a needless status-event write.
+    if (order.status === 'REFUNDED' || order.status === 'CANCELLED' || order.status === 'EXPIRED') {
+      return {};
+    }
+
+    // The money is already reversed (that is what fired this event) — we only
+    // record the outcome, exactly like the in-app refund route does.
+    await applyOrderRefundedEffects(tx, order);
     return {};
   },
 });

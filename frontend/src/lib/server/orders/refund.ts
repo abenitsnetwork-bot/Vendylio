@@ -30,6 +30,25 @@ export async function applyOrderRefundedEffects(
   tx: PrismaTransactionClient,
   order: OrderForRefundEffects,
 ): Promise<void> {
+  // Idempotency guard. The in-app refund route (POST /api/orders/[id]/refund)
+  // and the Stripe `charge.refunded` webhook can both fire for the same
+  // refund; the restock below goes through applyStockChange, which is an
+  // append-only ledger write with NO orderId+reason dedup — running it twice
+  // double-restocks. Bail if the order is already in a terminal refunded/
+  // cancelled state (re-read inside the tx, not trusting the passed-in row).
+  const current = await tx.order.findUnique({
+    where: { id: order.id },
+    select: { status: true },
+  });
+  if (
+    current &&
+    (current.status === 'REFUNDED' ||
+      current.status === 'CANCELLED' ||
+      current.status === 'EXPIRED')
+  ) {
+    return;
+  }
+
   await tx.order.update({
     where: { id: order.id },
     data: { status: 'REFUNDED' },

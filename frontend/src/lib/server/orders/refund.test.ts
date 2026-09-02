@@ -153,4 +153,12 @@ describe('applyOrderRefundedEffects', () => {
     expect(prismaMock.commissionCharge.update).not.toHaveBeenCalled();
     expect(prismaMock.commissionCharge.upsert).not.toHaveBeenCalled();
   });
+
+  it('is a no-op when the order is already REFUNDED (webhook + in-app race)', async () => {
+    prismaMock.order.findUnique.mockResolvedValueOnce({ status: 'REFUNDED' } as never);
+    await applyOrderRefundedEffects(prismaMock, BASE_ORDER);
+    expect(prismaMock.order.update).not.toHaveBeenCalled();
+    expect(prismaMock.orderStatusEvent.create).not.toHaveBeenCalled();
+    expect(mockApplyStockChange).not.toHaveBeenCalled();
+  });
 });

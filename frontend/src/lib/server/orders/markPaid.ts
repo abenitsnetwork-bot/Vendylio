@@ -69,7 +69,7 @@ export interface OrderForPaidEffects {
 export async function applyOrderPaidEffects(
   tx: PrismaTransactionClient,
   order: OrderForPaidEffects,
-  opts: { paymentMethod?: string | null } = {},
+  opts: { paymentMethod?: string | null; stripePaymentIntentId?: string | null } = {},
 ): Promise<void> {
   // Fetched once up front — reused below both for the Phase 12 PRO
   // commission discount and for the seller notification's userId, instead
@@ -95,6 +95,7 @@ export async function applyOrderPaidEffects(
   const { commission, net } = computeCommission(order.amount, rateBp);
   const isManualMoney = MANUAL_MONEY_PROVIDERS.has(order.provider);
   const paymentMethod = opts.paymentMethod ?? null;
+  const stripePaymentIntentId = opts.stripePaymentIntentId ?? null;
 
   await tx.order.update({
     where: { id: order.id },
@@ -104,6 +105,10 @@ export async function applyOrderPaidEffects(
       commissionAmount: commission,
       netAmount: net,
       ...(paymentMethod !== null ? { paymentMethod } : {}),
+      // Captured from the checkout.session so the `charge.refunded` webhook can
+      // match this order later (that event carries the PaymentIntent id, not
+      // the Checkout Session id stored in providerChargeId).
+      ...(stripePaymentIntentId !== null ? { stripePaymentIntentId } : {}),
     },
   });
 
