@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Icon } from '@/components/ui/Icon';
 import { MobileNavTrigger } from '@/components/nav/MobileNav';
+import { AdminWithdrawalBell } from '@/components/admin/AdminWithdrawalBell';
 import type { AdminInfo } from '@/contexts/AdminContext';
 
 export function AdminHeader({ admin }: { admin: AdminInfo }) {
@@ -20,6 +21,7 @@ export function AdminHeader({ admin }: { admin: AdminInfo }) {
         </p>
       </div>
       <div className="flex flex-shrink-0 items-center gap-3">
+        {admin.role === 'SUPERADMIN' && <AdminWithdrawalBell />}
         <span className="hidden rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-accent sm:inline">
           {admin.role}
         </span>
