@@ -44,6 +44,9 @@ export interface DashboardStats {
   todayOrdersCount: number;
   monthSalesCents: number;
   monthOrdersCount: number;
+  /** Every paid sale ever — no date window (matches the withdrawable balance's scope). */
+  allTimeSalesCents: number;
+  allTimeOrdersCount: number;
   visits: number;
   /** Phase 8 — orders sitting in PAID/PREPARING/READY (need merchant action). */
   pendingOrdersCount: number;
@@ -181,7 +184,7 @@ export function SellerDashboard({
         </div>
 
         {/* Stats grid */}
-        <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           <Card>
             <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
               Today&apos;s Sales
@@ -197,6 +200,15 @@ export function SellerDashboard({
               {formatUsd(stats.monthSalesCents)}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">Orders: {stats.monthOrdersCount}</p>
+          </Card>
+          <Card>
+            <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
+              All-Time Sales
+            </p>
+            <p className="font-headings text-2xl font-bold text-foreground">
+              {formatUsd(stats.allTimeSalesCents)}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Orders: {stats.allTimeOrdersCount}</p>
           </Card>
           <Link href="/dashboard/orders?status=PAID">
             <Card className="transition-colors hover:border-accent">

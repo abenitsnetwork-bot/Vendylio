@@ -82,6 +82,8 @@ describe('GET /api/stores/me', () => {
       todayOrdersCount: 0,
       monthSalesCents: 0,
       monthOrdersCount: 0,
+      allTimeSalesCents: 0,
+      allTimeOrdersCount: 0,
       pendingOrdersCount: 0,
       visits: 0,
       lowStockCount: 2,
@@ -148,7 +150,8 @@ describe('GET /api/stores/me', () => {
     } as never);
     prismaMock.order.aggregate
       .mockResolvedValueOnce({ _sum: { amount: 1800 }, _count: 1 } as never) // today
-      .mockResolvedValueOnce({ _sum: { amount: 5400 }, _count: 3 } as never); // month
+      .mockResolvedValueOnce({ _sum: { amount: 5400 }, _count: 3 } as never) // month
+      .mockResolvedValueOnce({ _sum: { amount: 9000 }, _count: 7 } as never); // all-time
 
     const res = await GET(makeGet());
     const body = await res.json();
@@ -157,9 +160,16 @@ describe('GET /api/stores/me', () => {
       todayOrdersCount: 1,
       monthSalesCents: 5400,
       monthOrdersCount: 3,
+      allTimeSalesCents: 9000,
+      allTimeOrdersCount: 7,
     });
 
-    const [todayArgs, monthArgs] = prismaMock.order.aggregate.mock.calls;
+    const [todayArgs, monthArgs, allTimeArgs] = prismaMock.order.aggregate.mock.calls;
+    // All-time has no date window.
+    expect(allTimeArgs?.[0]?.where).toEqual({
+      storeId: 'store-1',
+      status: { in: ['PAID', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED'] },
+    });
     expect(todayArgs?.[0]?.where).toMatchObject({
       storeId: 'store-1',
       status: { in: ['PAID', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED'] },
@@ -189,7 +199,8 @@ describe('GET /api/stores/me', () => {
     } as never);
     prismaMock.order.aggregate
       .mockResolvedValueOnce({ _sum: { amount: 10000 }, _count: 1 } as never) // today
-      .mockResolvedValueOnce({ _sum: { amount: 10000 }, _count: 1 } as never); // month
+      .mockResolvedValueOnce({ _sum: { amount: 10000 }, _count: 1 } as never) // month
+      .mockResolvedValueOnce({ _sum: { amount: 10000 }, _count: 1 } as never); // all-time
 
     const res = await GET(makeGet());
     const body = await res.json();

@@ -60,7 +60,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     const now = new Date();
     const tz = store.timezone || 'UTC';
-    const [todayAgg, monthAgg, lowStock, pendingCount, visits] = await Promise.all([
+    const [todayAgg, monthAgg, allTimeAgg, lowStock, pendingCount, visits] = await Promise.all([
       prisma.order.aggregate({
         where: {
           storeId: store.id,
@@ -76,6 +76,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           status: { in: PAID_ORDER_STATUSES },
           paidAt: { gte: startOfStoreMonth(tz, now) },
         },
+        _sum: { amount: true },
+        _count: true,
+      }),
+      // All-time — every paid sale ever, no date window. Sits next to the
+      // calendar-month figure so a low "This Month" early in the month
+      // doesn't read as "no money" when there's a withdrawable balance.
+      prisma.order.aggregate({
+        where: { storeId: store.id, status: { in: PAID_ORDER_STATUSES } },
         _sum: { amount: true },
         _count: true,
       }),
@@ -106,6 +114,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           todayOrdersCount: todayAgg._count,
           monthSalesCents: monthAgg._sum.amount ?? 0,
           monthOrdersCount: monthAgg._count,
+          allTimeSalesCents: allTimeAgg._sum.amount ?? 0,
+          allTimeOrdersCount: allTimeAgg._count,
           pendingOrdersCount: pendingCount,
           visits,
           lowStockCount: lowStock.lowStockCount,
