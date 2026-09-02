@@ -117,6 +117,21 @@ export const ACTION_META: Record<string, ActionMeta> = {
     group: 'Stores',
     phrase: ({ target, meta }) => `deleted the store ${meta.name ? String(meta.name) : target}`,
   },
+  'store.plan.comp': {
+    label: 'Pro plan comped',
+    icon: 'trending-up',
+    tone: 'positive',
+    group: 'Stores',
+    phrase: ({ target, meta }) =>
+      `comped Pro for ${target}${meta.compDays ? ` for ${String(meta.compDays)} days` : ''}`,
+  },
+  'store.plan.free': {
+    label: 'Plan set to Free',
+    icon: 'arrow-down',
+    tone: 'warning',
+    group: 'Stores',
+    phrase: ({ target }) => `moved ${target} back to the Free plan`,
+  },
   'withdrawal.complete': {
     label: 'Payout marked as sent',
     icon: 'dollar-sign',
@@ -218,6 +233,7 @@ const META_KEY_LABELS: Record<string, string> = {
   previousCommissionRateBpPro: 'Previous Pro rate',
   newCommissionRateBpPro: 'New Pro rate',
   version: 'Version',
+  compDays: 'Comp length (days)',
   bytes: 'Size (characters)',
   detail: 'Detail',
   location: 'Location',
@@ -235,6 +251,8 @@ const REDUNDANT_KEYS: Record<string, Set<string>> = {
   'testimonial.create': new Set(['name']),
   'testimonial.delete': new Set(['name']),
   'store.delete': new Set(['name']),
+  'store.plan.comp': new Set(['from', 'to', 'compDays']),
+  'store.plan.free': new Set(['from', 'to']),
   'site_image.update': new Set(['key']),
   'legal.update': new Set(['slug', 'version']),
 };

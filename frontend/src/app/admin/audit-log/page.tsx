@@ -45,15 +45,17 @@ function EntryCard({ entry }: { entry: AuditEntry }) {
 
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
             <span className="rounded bg-secondary px-1.5 py-0.5 font-medium">{d.label}</span>
-            {d.target?.sub && <span className="truncate">{d.target.sub}</span>}
+            {d.target?.sub && <span className="[overflow-wrap:anywhere]">{d.target.sub}</span>}
           </div>
 
           {d.facts.length > 0 && (
-            <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
+            <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-xs">
               {d.facts.map((f, i) => (
                 <div key={i} className="contents">
                   <dt className="text-muted-foreground">{f.label}</dt>
-                  <dd className="break-words font-medium text-foreground">{f.value}</dd>
+                  <dd className="min-w-0 font-medium text-foreground [overflow-wrap:anywhere]">
+                    {f.value}
+                  </dd>
                 </div>
               ))}
             </dl>
@@ -69,37 +71,41 @@ function EntryCard({ entry }: { entry: AuditEntry }) {
           </button>
 
           {open && (
-            <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-lg bg-secondary p-3 text-[11px]">
+            <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 rounded-lg bg-secondary p-3 text-[11px]">
               <dt className="text-muted-foreground">Event key</dt>
-              <dd className="font-mono text-foreground">{entry.action}</dd>
+              <dd className="min-w-0 font-mono text-foreground [overflow-wrap:anywhere]">
+                {entry.action}
+              </dd>
               <dt className="text-muted-foreground">Actor ID</dt>
-              <dd className="font-mono break-all text-foreground">{entry.actorId}</dd>
+              <dd className="min-w-0 break-all font-mono text-foreground">{entry.actorId}</dd>
               {entry.targetType && (
                 <>
                   <dt className="text-muted-foreground">Target</dt>
-                  <dd className="font-mono break-all text-foreground">
+                  <dd className="min-w-0 break-all font-mono text-foreground">
                     {entry.targetType} · {entry.targetId ?? '—'}
                   </dd>
                 </>
               )}
               <dt className="text-muted-foreground">When</dt>
-              <dd className="text-foreground">{when.toLocaleString()}</dd>
+              <dd className="min-w-0 text-foreground">{when.toLocaleString()}</dd>
               {entry.ip && (
                 <>
                   <dt className="text-muted-foreground">IP</dt>
-                  <dd className="font-mono text-foreground">{entry.ip}</dd>
+                  <dd className="min-w-0 font-mono text-foreground">{entry.ip}</dd>
                 </>
               )}
               {entry.userAgent && (
                 <>
                   <dt className="text-muted-foreground">User agent</dt>
-                  <dd className="break-words text-foreground">{entry.userAgent}</dd>
+                  <dd className="min-w-0 text-foreground [overflow-wrap:anywhere]">
+                    {entry.userAgent}
+                  </dd>
                 </>
               )}
               {entry.metadata && Object.keys(entry.metadata).length > 0 && (
                 <>
                   <dt className="text-muted-foreground">Raw data</dt>
-                  <dd>
+                  <dd className="min-w-0">
                     <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-foreground">
                       {JSON.stringify(entry.metadata, null, 2)}
                     </pre>
