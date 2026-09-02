@@ -51,9 +51,9 @@ export default function AdminWithdrawalsPage() {
   // financially-terminal, SUPERADMIN-only action as cancelling one.
   const canManageWithdrawals = can.includes('withdrawals:cancel');
   const [status, setStatus] = useState('');
-  // `storeInput` is what's in the box; `store` is the debounced value we query on.
-  const [storeInput, setStoreInput] = useState('');
+  // Selected store slug ('' = all stores). `stores` populates the picker.
   const [store, setStore] = useState('');
+  const [stores, setStores] = useState<{ slug: string; name: string }[]>([]);
   const [items, setItems] = useState<AdminWithdrawal[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -87,11 +87,32 @@ export default function AdminWithdrawalsPage() {
       );
   }, [queryString]);
 
-  // Debounce the store box so we don't refetch on every keystroke.
+  // Populate the store picker — page through the admin store list once.
   useEffect(() => {
-    const t = setTimeout(() => setStore(storeInput.trim()), 300);
-    return () => clearTimeout(t);
-  }, [storeInput]);
+    let cancelled = false;
+    (async () => {
+      const acc: { slug: string; name: string }[] = [];
+      let cursor: string | null = null;
+      for (let i = 0; i < 20; i++) {
+        const qs = new URLSearchParams({ limit: '50' });
+        if (cursor) qs.set('cursor', cursor);
+        const res: { items: { slug: string; name: string }[]; nextCursor: string | null } =
+          await api(`/api/admin/stores?${qs.toString()}`);
+        acc.push(...res.items.map((s) => ({ slug: s.slug, name: s.name })));
+        if (!res.nextCursor) break;
+        cursor = res.nextCursor;
+      }
+      if (!cancelled) {
+        acc.sort((a, b) => a.name.localeCompare(b.name));
+        setStores(acc);
+      }
+    })().catch(() => {
+      // Picker just stays limited to stores seen in the rows / row-clicks.
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     load();
@@ -113,10 +134,19 @@ export default function AdminWithdrawalsPage() {
     }
   }
 
-  function filterByStore(slug: string) {
-    setStoreInput(slug);
-    setStore(slug);
-  }
+  // Merge in any store seen on a row but missing from the fetched list
+  // (list truncated, or a since-deleted store) so the picker can show it.
+  const storeOptions = (() => {
+    const bySlug = new Map(stores.map((s) => [s.slug, s.name]));
+    for (const w of items ?? []) {
+      if (w.storeSlug && !bySlug.has(w.storeSlug))
+        bySlug.set(w.storeSlug, w.storeName ?? w.storeSlug);
+    }
+    if (store && !bySlug.has(store)) bySlug.set(store, store);
+    return [...bySlug]
+      .map(([slug, name]) => ({ slug, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  })();
 
   async function cancel(id: string) {
     const reason = window.prompt('Reason for cancelling this withdrawal?');
@@ -195,28 +225,32 @@ export default function AdminWithdrawalsPage() {
       </div>
 
       <div className="mb-6 flex items-center gap-2">
-        <div className="relative max-w-xs flex-1">
-          <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-muted-foreground">
-            <Icon i="search" size={15} />
-          </span>
-          <input
-            type="text"
-            value={storeInput}
-            onChange={(e) => setStoreInput(e.target.value)}
-            placeholder="Filter by store name or slug…"
-            className="w-full rounded-lg border border-border bg-card py-2 pl-9 pr-8 text-sm text-foreground placeholder:text-muted-foreground focus:border-panel focus:outline-none"
-          />
-          {storeInput && (
-            <button
-              type="button"
-              onClick={() => filterByStore('')}
-              aria-label="Clear store filter"
-              className="absolute inset-y-0 right-2 flex items-center text-muted-foreground hover:text-foreground"
-            >
-              <Icon i="x" size={15} />
-            </button>
-          )}
-        </div>
+        <label htmlFor="store-filter" className="text-xs font-semibold text-muted-foreground">
+          Store
+        </label>
+        <select
+          id="store-filter"
+          value={store}
+          onChange={(e) => setStore(e.target.value)}
+          className="max-w-xs rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:border-panel focus:outline-none"
+        >
+          <option value="">All stores</option>
+          {storeOptions.map((s) => (
+            <option key={s.slug} value={s.slug}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+        {store && (
+          <button
+            type="button"
+            onClick={() => setStore('')}
+            className="flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-2 text-xs font-semibold text-foreground hover:bg-secondary"
+          >
+            <Icon i="x" size={13} />
+            Clear
+          </button>
+        )}
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -244,7 +278,7 @@ export default function AdminWithdrawalsPage() {
                     {w.storeName ? (
                       <button
                         type="button"
-                        onClick={() => filterByStore(w.storeSlug ?? w.storeName ?? '')}
+                        onClick={() => w.storeSlug && setStore(w.storeSlug)}
                         title="Filter to this store"
                         className="hover:underline"
                       >

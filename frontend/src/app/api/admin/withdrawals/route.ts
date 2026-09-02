@@ -71,9 +71,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const status = url.searchParams.get('status');
     const since = parseDate(url.searchParams.get('since'));
     const until = parseDate(url.searchParams.get('until'));
-    // Filter to one store: match the requester's org store by name or slug
-    // (Withdrawal has no store FK — the requester is always an org member,
-    // and withdrawals are OWNER-only, so user→memberships→org→store resolves).
+    // Filter to one store, identified by its exact slug (or exact name as a
+    // fallback) — the admin picks it from a dropdown. Withdrawal has no store
+    // FK; the requester is always an org member and withdrawals are
+    // OWNER-only, so user→memberships→org→store resolves.
     const store = (url.searchParams.get('store') ?? '').slice(0, 200).trim();
     const cursor = decodeCursor(url.searchParams.get('cursor'));
 
@@ -85,12 +86,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
               memberships: {
                 some: {
                   organization: {
-                    store: {
-                      OR: [
-                        { name: { contains: store, mode: 'insensitive' } },
-                        { slug: { contains: store, mode: 'insensitive' } },
-                      ],
-                    },
+                    store: { OR: [{ slug: store }, { name: store }] },
                   },
                 },
               },

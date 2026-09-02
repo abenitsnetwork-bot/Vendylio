@@ -171,19 +171,14 @@ describe('/api/admin/withdrawals [Wave 1] — list', () => {
     expect(where?.['status']).toBe('PENDING');
   });
 
-  it('GET filters by store — matches the requester org store name or slug', async () => {
+  it('GET filters by store — matches the requester org store by exact slug or name', async () => {
     prismaMock.withdrawal.findMany.mockResolvedValueOnce([] as never);
-    await GET(makeGet('http://test/api/admin/withdrawals?store=ako'));
+    await GET(makeGet('http://test/api/admin/withdrawals?store=ako-market'));
     const args = prismaMock.withdrawal.findMany.mock.calls[0]?.[0];
     const where = args?.where as { user?: { memberships?: { some?: unknown } } } | undefined;
     expect(where?.user?.memberships?.some).toEqual({
       organization: {
-        store: {
-          OR: [
-            { name: { contains: 'ako', mode: 'insensitive' } },
-            { slug: { contains: 'ako', mode: 'insensitive' } },
-          ],
-        },
+        store: { OR: [{ slug: 'ako-market' }, { name: 'ako-market' }] },
       },
     });
   });
