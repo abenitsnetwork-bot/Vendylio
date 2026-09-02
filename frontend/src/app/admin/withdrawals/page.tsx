@@ -10,6 +10,7 @@ interface AdminWithdrawal {
   id: string;
   userId: string;
   amount: number;
+  commissionSettledCents?: number;
   currency: string;
   status: string;
   destination: { method?: string; cashtag?: string; contact?: string };
@@ -17,6 +18,10 @@ interface AdminWithdrawal {
   failureReason: string | null;
   requestedAt: string;
   completedAt: string | null;
+  requesterEmail: string | null;
+  requesterName: string | null;
+  storeName: string | null;
+  storeSlug: string | null;
 }
 
 const STATUS_FILTERS = ['', 'PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'CANCELLED'];
@@ -187,16 +192,34 @@ export default function AdminWithdrawalsPage() {
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-foreground">
-                    {destinationLabel(w.destination)}
+                    {w.storeName ?? '(no store)'}
+                    {w.storeSlug && (
+                      <a
+                        href={`/s/${w.storeSlug}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="ml-1.5 text-xs font-normal text-accent hover:underline"
+                      >
+                        /s/{w.storeSlug}
+                      </a>
+                    )}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {w.requesterEmail ?? w.userId} · {destinationLabel(w.destination)}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {new Date(w.requestedAt).toLocaleString()}
                     {w.failureReason ? ` · ${w.failureReason}` : ''}
                   </p>
                 </div>
-                <p className="w-20 flex-shrink-0 text-right text-sm font-bold text-foreground">
-                  {formatUsd(w.amount)}
-                </p>
+                <div className="w-24 flex-shrink-0 text-right">
+                  <p className="text-sm font-bold text-foreground">{formatUsd(w.amount)}</p>
+                  {(w.commissionSettledCents ?? 0) > 0 && (
+                    <p className="text-[10px] leading-tight text-muted-foreground">
+                      pay {formatUsd(w.amount - (w.commissionSettledCents ?? 0))}
+                    </p>
+                  )}
+                </div>
                 <span
                   className={`w-28 flex-shrink-0 rounded px-3 py-1 text-center text-xs font-semibold ${
                     STATUS_STYLES[w.status] ?? 'bg-secondary text-muted-foreground'

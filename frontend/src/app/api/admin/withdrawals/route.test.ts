@@ -100,6 +100,8 @@ beforeEach(() => {
   mockVerifyCsrf.mockReturnValue(null);
   mockLogAdminAction.mockResolvedValue(undefined);
   mockLockUserTx.mockResolvedValue(undefined);
+  // Store attribution lookup (userId → org → store) — default to none.
+  prismaMock.organizationMember.findMany.mockResolvedValue([] as never);
   // Default $transaction passthrough — runs the callback against the prismaMock.
   prismaMock.$transaction.mockImplementation((cb: unknown) => {
     if (typeof cb === 'function') {
@@ -129,6 +131,29 @@ describe('/api/admin/withdrawals [Wave 1] — list', () => {
       destination: true,
       requestedAt: true,
     });
+  });
+
+  it('GET attributes each withdrawal to its requester + store', async () => {
+    const w1 = {
+      ...wrow({ id: 'w1', userId: 'u1' }),
+      user: { email: 'owner@ako.test', name: 'Ulrich' },
+    };
+    prismaMock.withdrawal.findMany.mockResolvedValueOnce([w1] as never);
+    prismaMock.organizationMember.findMany.mockResolvedValueOnce([
+      { userId: 'u1', organization: { store: { name: 'Ako Market', slug: 'ako' } } },
+    ] as never);
+
+    const res = await GET(makeGet('http://test/api/admin/withdrawals'));
+    const body = (await res.json()) as { items: Array<Record<string, unknown>> };
+    expect(body.items[0]).toMatchObject({
+      id: 'w1',
+      requesterEmail: 'owner@ako.test',
+      requesterName: 'Ulrich',
+      storeName: 'Ako Market',
+      storeSlug: 'ako',
+    });
+    // The raw `user` relation is not leaked verbatim.
+    expect(body.items[0]).not.toHaveProperty('user');
   });
 
   it('GET returns empty 200 (never 404) on no rows', async () => {

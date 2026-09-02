@@ -46,6 +46,9 @@ const WITHDRAWAL_SELECT = {
   requestedAt: true,
   processedAt: true,
   completedAt: true,
+  // Attribution — who requested it (the seller/owner) so an operator can see
+  // it at a glance without cross-referencing.
+  user: { select: { email: true, name: true } },
 } as const satisfies Prisma.WithdrawalSelect;
 
 function parseDate(raw: string | null): Date | null {
@@ -98,10 +101,34 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     });
 
     const hasMore = rows.length > limit;
-    const items = hasMore ? rows.slice(0, limit) : rows;
-    const last = items[items.length - 1];
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    const last = page[page.length - 1];
     const nextCursor =
       hasMore && last ? encodeCursor({ createdAt: last.requestedAt, id: last.id }) : null;
+
+    // Resolve the requester's store name (userId → org → store) for the page.
+    const userIds = [...new Set(page.map((r) => r.userId))];
+    const memberships = userIds.length
+      ? await prisma.organizationMember.findMany({
+          where: { userId: { in: userIds } },
+          select: {
+            userId: true,
+            organization: { select: { store: { select: { name: true, slug: true } } } },
+          },
+        })
+      : [];
+    const storeByUser = new Map(memberships.map((m) => [m.userId, m.organization.store] as const));
+
+    const items = page.map(({ user, ...w }) => {
+      const store = storeByUser.get(w.userId);
+      return {
+        ...w,
+        requesterEmail: user?.email ?? null,
+        requesterName: user?.name ?? null,
+        storeName: store?.name ?? null,
+        storeSlug: store?.slug ?? null,
+      };
+    });
 
     return NextResponse.json({ items, nextCursor }, { headers: { 'x-request-id': ctx.requestId } });
   });
