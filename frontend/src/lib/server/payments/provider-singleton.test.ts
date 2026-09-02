@@ -6,11 +6,11 @@ import {
   __resetProviderSingleton,
 } from './provider-singleton';
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test_fixture');
   vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'whsec_fixture');
   __resetProviderSingleton();
-  breaker.reset();
+  await breaker.reset();
 });
 
 afterEach(() => {
@@ -36,7 +36,7 @@ describe('provider-singleton (lazy init)', () => {
     expect(a.name).toBe('stripe');
   });
 
-  it('exposes a shared, resettable CircuitBreaker', () => {
-    expect(breaker.state()).toBe('closed');
+  it('exposes a shared, resettable breaker (in-memory in tests — no Upstash env)', async () => {
+    expect(await breaker.snapshot()).toBe('closed');
   });
 });

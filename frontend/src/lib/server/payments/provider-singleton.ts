@@ -12,13 +12,14 @@
 //   `PaymentProviderUnconfiguredError` the route translates to a clean 503.
 //
 // Why a single shared CircuitBreaker?
-//   The breaker holds in-memory failure-counter state. Re-instantiating it
-//   per request would defeat its purpose. Sharing it at module scope is by
-//   design — see CLAUDE.md "single-instance only" note. For multi-pod
-//   deployments swap for a Redis-backed variant.
+//   The breaker holds failure-counter state that must be shared across calls.
+//   `createBreaker` returns a Redis-backed breaker when Upstash is configured
+//   (state shared across ALL Vercel instances) and falls back to the in-memory
+//   `CircuitBreaker` in dev / single-instance. Either way it's instantiated
+//   once at module scope.
 import 'server-only';
 import { createStripeProvider, type StripeProviderHandle } from '@/lib/server/payments/stripe';
-import { CircuitBreaker } from '@/lib/server/payments/circuit-breaker';
+import { createBreaker, type Breaker } from '@/lib/server/payments/circuit-breaker-redis';
 
 /**
  * Thrown by `getProvider()` when STRIPE_SECRET_KEY or STRIPE_WEBHOOK_SECRET
@@ -58,11 +59,11 @@ export function getProvider(): StripeProviderHandle {
 }
 
 /**
- * Module-level CircuitBreaker — single-instance only per CLAUDE.md.
- * Same thresholds as the pre-Phase-0 Bictorys breaker: 5 failures within a
- * 30s window trips OPEN, 60s cooldown before a HALF_OPEN probe.
+ * Module-level breaker. Redis-backed (shared across instances) when Upstash is
+ * configured, in-memory otherwise. Thresholds: 5 failures within a 30s window
+ * trip OPEN, 60s cooldown before a single HALF_OPEN probe.
  */
-export const breaker = new CircuitBreaker({
+export const breaker: Breaker = createBreaker({
   name: 'stripe.charge',
   failureThreshold: 5,
   windowMs: 30_000,
