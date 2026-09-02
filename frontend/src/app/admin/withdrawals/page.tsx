@@ -51,18 +51,33 @@ export default function AdminWithdrawalsPage() {
   // financially-terminal, SUPERADMIN-only action as cancelling one.
   const canManageWithdrawals = can.includes('withdrawals:cancel');
   const [status, setStatus] = useState('');
+  // `storeInput` is what's in the box; `store` is the debounced value we query on.
+  const [storeInput, setStoreInput] = useState('');
+  const [store, setStore] = useState('');
   const [items, setItems] = useState<AdminWithdrawal[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const load = useCallback((filterStatus: string) => {
+  const queryString = useCallback(
+    (extra?: Record<string, string>) => {
+      const qs = new URLSearchParams(extra);
+      if (status) qs.set('status', status);
+      if (store) qs.set('store', store);
+      return qs.toString();
+    },
+    [status, store],
+  );
+
+  const load = useCallback(() => {
     setItems(null);
     setCursor(null);
     setError(null);
-    const qs = filterStatus ? `?status=${filterStatus}` : '';
-    api<{ items: AdminWithdrawal[]; nextCursor: string | null }>(`/api/admin/withdrawals${qs}`)
+    const qs = queryString();
+    api<{ items: AdminWithdrawal[]; nextCursor: string | null }>(
+      `/api/admin/withdrawals${qs ? `?${qs}` : ''}`,
+    )
       .then((res) => {
         setItems(res.items);
         setCursor(res.nextCursor);
@@ -70,20 +85,24 @@ export default function AdminWithdrawalsPage() {
       .catch((err) =>
         setError(err instanceof ApiError ? err.message : 'Could not load withdrawals.'),
       );
-  }, []);
+  }, [queryString]);
+
+  // Debounce the store box so we don't refetch on every keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setStore(storeInput.trim()), 300);
+    return () => clearTimeout(t);
+  }, [storeInput]);
 
   useEffect(() => {
-    load(status);
-  }, [status, load]);
+    load();
+  }, [load]);
 
   async function loadMore() {
     if (!cursor || loadingMore) return;
     setLoadingMore(true);
     try {
-      const qs = new URLSearchParams({ cursor });
-      if (status) qs.set('status', status);
       const res = await api<{ items: AdminWithdrawal[]; nextCursor: string | null }>(
-        `/api/admin/withdrawals?${qs.toString()}`,
+        `/api/admin/withdrawals?${queryString({ cursor })}`,
       );
       setItems((prev) => [...(prev ?? []), ...res.items]);
       setCursor(res.nextCursor);
@@ -94,13 +113,18 @@ export default function AdminWithdrawalsPage() {
     }
   }
 
+  function filterByStore(slug: string) {
+    setStoreInput(slug);
+    setStore(slug);
+  }
+
   async function cancel(id: string) {
     const reason = window.prompt('Reason for cancelling this withdrawal?');
     if (!reason) return;
     setBusyId(id);
     try {
       await api(`/api/admin/withdrawals/${id}/cancel`, { method: 'POST', body: { reason } });
-      load(status);
+      load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not cancel this withdrawal.');
     } finally {
@@ -117,7 +141,7 @@ export default function AdminWithdrawalsPage() {
     setBusyId(id);
     try {
       await api(`/api/admin/withdrawals/${id}/complete`, { method: 'POST', body: {} });
-      load(status);
+      load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not complete this withdrawal.');
     } finally {
@@ -136,7 +160,7 @@ export default function AdminWithdrawalsPage() {
     setBusyId(id);
     try {
       await api(`/api/admin/withdrawals/${id}/send-transfer`, { method: 'POST', body: {} });
-      load(status);
+      load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not send this transfer.');
     } finally {
@@ -153,7 +177,7 @@ export default function AdminWithdrawalsPage() {
         Withdrawals
       </h1>
 
-      <div className="mb-6 flex flex-wrap gap-2">
+      <div className="mb-4 flex flex-wrap gap-2">
         {STATUS_FILTERS.map((s) => (
           <button
             key={s}
@@ -168,6 +192,31 @@ export default function AdminWithdrawalsPage() {
             {s || 'All'}
           </button>
         ))}
+      </div>
+
+      <div className="mb-6 flex items-center gap-2">
+        <div className="relative max-w-xs flex-1">
+          <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-muted-foreground">
+            <Icon i="search" size={15} />
+          </span>
+          <input
+            type="text"
+            value={storeInput}
+            onChange={(e) => setStoreInput(e.target.value)}
+            placeholder="Filter by store name or slug…"
+            className="w-full rounded-lg border border-border bg-card py-2 pl-9 pr-8 text-sm text-foreground placeholder:text-muted-foreground focus:border-panel focus:outline-none"
+          />
+          {storeInput && (
+            <button
+              type="button"
+              onClick={() => filterByStore('')}
+              aria-label="Clear store filter"
+              className="absolute inset-y-0 right-2 flex items-center text-muted-foreground hover:text-foreground"
+            >
+              <Icon i="x" size={15} />
+            </button>
+          )}
+        </div>
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -192,7 +241,18 @@ export default function AdminWithdrawalsPage() {
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-foreground">
-                    {w.storeName ?? '(no store)'}
+                    {w.storeName ? (
+                      <button
+                        type="button"
+                        onClick={() => filterByStore(w.storeSlug ?? w.storeName ?? '')}
+                        title="Filter to this store"
+                        className="hover:underline"
+                      >
+                        {w.storeName}
+                      </button>
+                    ) : (
+                      '(no store)'
+                    )}
                     {w.storeSlug && (
                       <a
                         href={`/s/${w.storeSlug}`}

@@ -171,6 +171,31 @@ describe('/api/admin/withdrawals [Wave 1] — list', () => {
     expect(where?.['status']).toBe('PENDING');
   });
 
+  it('GET filters by store — matches the requester org store name or slug', async () => {
+    prismaMock.withdrawal.findMany.mockResolvedValueOnce([] as never);
+    await GET(makeGet('http://test/api/admin/withdrawals?store=ako'));
+    const args = prismaMock.withdrawal.findMany.mock.calls[0]?.[0];
+    const where = args?.where as { user?: { memberships?: { some?: unknown } } } | undefined;
+    expect(where?.user?.memberships?.some).toEqual({
+      organization: {
+        store: {
+          OR: [
+            { name: { contains: 'ako', mode: 'insensitive' } },
+            { slug: { contains: 'ako', mode: 'insensitive' } },
+          ],
+        },
+      },
+    });
+  });
+
+  it('GET ignores a blank store param', async () => {
+    prismaMock.withdrawal.findMany.mockResolvedValueOnce([] as never);
+    await GET(makeGet('http://test/api/admin/withdrawals?store=%20%20'));
+    const args = prismaMock.withdrawal.findMany.mock.calls[0]?.[0];
+    const where = args?.where as Record<string, unknown> | undefined;
+    expect(where?.['user']).toBeUndefined();
+  });
+
   it('GET filters by since/until on requestedAt (not createdAt)', async () => {
     prismaMock.withdrawal.findMany.mockResolvedValueOnce([] as never);
     await GET(
