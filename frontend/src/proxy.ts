@@ -63,14 +63,35 @@ const LOGIN_PATH = process.env.AUTH_LOGIN_PATH || '/login';
 // practice.
 function buildCsp(nonce: string): string {
   const isDev = process.env.NODE_ENV === 'development';
+  // Vercel injects the Live/Toolbar on preview + development deploys (never on
+  // production for end users). It frames vercel.live and opens a Pusher
+  // websocket. Allow it OFF production so the preview console stays free of
+  // noise that would mask real CSP violations during the transition.
+  const previewTooling = process.env.VERCEL_ENV && process.env.VERCEL_ENV !== 'production';
+
+  // hCaptcha's own CSP guidance lists BOTH the apex and the wildcard for
+  // script/frame/connect (the widget's loader + challenge iframe + XHR hit
+  // hcaptcha.com directly, not only *.hcaptcha.com).
+  const hcaptcha = ['https://hcaptcha.com', 'https://*.hcaptcha.com'];
+
   const scriptSrc = [
     "'self'",
     `'nonce-${nonce}'`,
     "'strict-dynamic'",
-    'https://js.hcaptcha.com',
-    'https://*.hcaptcha.com',
+    ...hcaptcha,
+    ...(previewTooling ? ['https://vercel.live'] : []),
     ...(isDev ? ["'unsafe-eval'"] : []),
   ].join(' ');
+
+  const connectSrc = [
+    "'self'",
+    ...hcaptcha,
+    'https://*.sentry.io',
+    'https://*.ingest.sentry.io',
+    ...(previewTooling ? ['https://vercel.live', 'wss://ws-us3.pusher.com'] : []),
+  ].join(' ');
+
+  const frameSrc = [...hcaptcha, ...(previewTooling ? ['https://vercel.live'] : [])].join(' ');
 
   return [
     "default-src 'self'",
@@ -79,10 +100,12 @@ function buildCsp(nonce: string): string {
     "frame-ancestors 'none'",
     `script-src ${scriptSrc}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https://res.cloudinary.com",
-    "font-src 'self' data:",
-    "connect-src 'self' https://*.hcaptcha.com https://*.sentry.io https://*.ingest.sentry.io",
-    'frame-src https://*.hcaptcha.com',
+    `img-src 'self' data: blob: https://res.cloudinary.com${
+      previewTooling ? ' https://vercel.live https://vercel.com' : ''
+    }`,
+    `font-src 'self' data:${previewTooling ? ' https://vercel.live https://assets.vercel.com' : ''}`,
+    `connect-src ${connectSrc}`,
+    `frame-src ${frameSrc}`,
     "form-action 'self'",
     'report-uri /api/csp-report',
   ].join('; ');

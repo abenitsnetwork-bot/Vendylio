@@ -31,18 +31,24 @@ default-src 'self';
 base-uri 'self';
 object-src 'none';
 frame-ancestors 'none';
-script-src 'self' 'nonce-<per-request>' 'strict-dynamic' https://js.hcaptcha.com https://*.hcaptcha.com;
+script-src 'self' 'nonce-<per-request>' 'strict-dynamic' https://hcaptcha.com https://*.hcaptcha.com;
 style-src 'self' 'unsafe-inline';
 img-src 'self' data: blob: https://res.cloudinary.com;
 font-src 'self' data:;
-connect-src 'self' https://*.hcaptcha.com https://*.sentry.io https://*.ingest.sentry.io;
-frame-src https://*.hcaptcha.com;
+connect-src 'self' https://hcaptcha.com https://*.hcaptcha.com https://*.sentry.io https://*.ingest.sentry.io;
+frame-src https://hcaptcha.com https://*.hcaptcha.com;
 form-action 'self';
 report-uri /api/csp-report;
 ```
 
 In development, `'unsafe-eval'` is appended to `script-src` (React's dev runtime
 needs it; production React/Next never `eval`).
+
+On **preview + development** deploys only (`VERCEL_ENV !== 'production'`),
+`https://vercel.live` (+ `wss://ws-us3.pusher.com`, `assets.vercel.com`,
+`vercel.com`) is added to `script-src` / `connect-src` / `frame-src` / `img-src`
+/ `font-src` so the Vercel Toolbar it injects doesn't fill the preview console
+with violations that would mask real ones. Production never gets these entries.
 
 ### How the nonce flows
 
@@ -73,7 +79,7 @@ resolution), so there is no regression there.
 
 | Directive | Host | Why |
 |---|---|---|
-| `script-src` / `frame-src` | `*.hcaptcha.com`, `js.hcaptcha.com` | the login / signup / forgot-password captcha widget + its iframe. Under `'strict-dynamic'` a conformant browser ignores these host entries (hCaptcha's `<script>` is created by an already-trusted script, so it is allowed transitively); they remain for browsers without `'strict-dynamic'` support. |
+| `script-src` / `frame-src` / `connect-src` | `hcaptcha.com`, `*.hcaptcha.com` | the login / signup / forgot-password captcha widget, its challenge iframe, and its verification XHR. Both the apex and the wildcard per hCaptcha's own CSP guidance. Under `'strict-dynamic'` a conformant browser ignores the `script-src` host entries (hCaptcha's `<script>` is created by an already-trusted script, so it is allowed transitively); they remain for browsers without `'strict-dynamic'` support and for `frame-src` / `connect-src` (which `'strict-dynamic'` does not affect). |
 | `img-src` | `res.cloudinary.com` | every storefront / product / hero / logo image |
 | `connect-src` | `*.sentry.io`, `*.ingest.sentry.io` | the Sentry **browser** SDK ships error events from the client |
 | `img-src` | `data:` / `blob:` | inline SVG data URIs + object-URL image previews in the uploader |
