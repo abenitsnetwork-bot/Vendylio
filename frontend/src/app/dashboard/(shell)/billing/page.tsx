@@ -1,7 +1,7 @@
 'use client';
 
 import { sellerFirstName } from '@/lib/utils';
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth, useUser } from '@/contexts/AuthContext';
 import { api, ApiError } from '@/lib/api';
@@ -10,6 +10,7 @@ import { Card } from '@/components/ui/Card';
 import { SellerHeader } from '@/components/seller/SellerHeader';
 import { WithdrawalRequestForm } from '@/components/seller/WithdrawalRequestForm';
 import { DowngradeDialog } from '@/components/seller/DowngradeDialog';
+import { ProWelcomeModal } from '@/components/seller/ProWelcomeModal';
 
 interface WithdrawalItem {
   id: string;
@@ -179,6 +180,9 @@ export default function BillingPayoutsPage() {
 
   return (
     <div className="min-h-screen bg-background font-body">
+      <Suspense fallback={null}>
+        <ProWelcomeModal />
+      </Suspense>
       <SellerHeader
         userName={sellerFirstName(user)}
         userEmail={user.email}

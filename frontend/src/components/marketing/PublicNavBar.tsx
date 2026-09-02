@@ -7,6 +7,7 @@ import { Icon } from '@/components/ui/Icon';
 const LINKS = [
   { href: '#how-it-works', label: 'How It Works' },
   { href: '#features', label: 'Features' },
+  { href: '#plans', label: 'Plans' },
   { href: '/pricing', label: 'Pricing' },
   { href: '#testimonials', label: 'Reviews' },
 ];
