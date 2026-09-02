@@ -136,3 +136,22 @@ export const leadIpLimiter = createIpLimiter({
   code: 'TOO_MANY_REQUESTS',
   message: 'Too many submissions. Wait a minute and try again.',
 });
+
+// Team-invite public endpoints (`GET /api/team/invites/peek`, `POST
+// /api/team/invites/claim`). Both key on the invite token, not a session; the
+// caps just bound token-guessing and account-creation spam.
+export const invitePeekIpLimiter = createIpLimiter({
+  bucket: 'pub:invite-peek',
+  windowMs: 60_000,
+  max: Number(process.env.INVITE_PEEK_IP_RATE_LIMIT_MAX ?? 30),
+  code: 'TOO_MANY_REQUESTS',
+  message: 'Too many requests. Wait a minute and try again.',
+});
+
+export const inviteClaimIpLimiter = createIpLimiter({
+  bucket: 'pub:invite-claim',
+  windowMs: 60_000,
+  max: Number(process.env.INVITE_CLAIM_IP_RATE_LIMIT_MAX ?? 10),
+  code: 'TOO_MANY_REQUESTS',
+  message: 'Too many attempts. Wait a minute and try again.',
+});

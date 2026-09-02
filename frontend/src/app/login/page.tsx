@@ -26,9 +26,15 @@ export default function LoginPage() {
   // issues no cookies — the user signs in fresh here). Read from the URL in an
   // effect so the page needs no Suspense boundary.
   const [justReset, setJustReset] = useState(false);
+  // Optional post-login destination (e.g. a team-invite link). Only same-origin
+  // relative paths are honoured — never an absolute URL (open-redirect guard).
+  const [nextPath, setNextPath] = useState<string | null>(null);
   useEffect(() => {
     try {
-      setJustReset(new URLSearchParams(window.location.search).get('reset') === '1');
+      const q = new URLSearchParams(window.location.search);
+      setJustReset(q.get('reset') === '1');
+      const n = q.get('next');
+      if (n && n.startsWith('/') && !n.startsWith('//')) setNextPath(n);
     } catch {
       /* no-op */
     }
@@ -45,6 +51,12 @@ export default function LoginPage() {
       });
       if (res.csrfToken) storeCsrfToken(res.csrfToken);
       await refresh();
+
+      // An explicit ?next= wins (team invites, deep links). Same-origin only.
+      if (nextPath) {
+        router.push(nextPath);
+        return;
+      }
 
       // Admins/superadmins go straight to the back office — a store-less
       // admin account (the normal shape, see CLAUDE.md) would otherwise land
