@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { Icon, type IconName } from '@/components/ui/Icon';
+import { useState, type CSSProperties, type ReactNode } from 'react';
+import { Icon } from '@/components/ui/Icon';
+import { WhatsAppIcon, InstagramIcon, TikTokIcon } from '@/components/ui/BrandIcon';
 import { Button } from '@/components/ui/Button';
 import { StoreQrCode } from './StoreQrCode';
 
@@ -25,16 +26,46 @@ export function ShareStoreModal({ storeUrl, onClose }: { storeUrl: string; onClo
     }
   }
 
-  const channels: { icon: IconName; label: string; href?: string }[] = [
+  const INSTAGRAM_GRADIENT: CSSProperties = {
+    background:
+      'radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285AEB 90%)',
+  };
+
+  const channels: {
+    label: string;
+    href?: string;
+    circle: string;
+    circleStyle?: CSSProperties;
+    glyph: ReactNode;
+  }[] = [
     {
-      icon: 'message-circle',
       label: 'WhatsApp',
       href: `https://wa.me/?text=${encodeURIComponent(storeUrl)}`,
+      circle: 'bg-[#25D366]',
+      glyph: <WhatsAppIcon size={20} className="text-white" />,
     },
-    { icon: 'mail', label: 'Email', href: `mailto:?body=${encodeURIComponent(storeUrl)}` },
-    { icon: 'smartphone', label: 'Instagram' },
-    { icon: 'smartphone', label: 'TikTok' },
-    { icon: 'link', label: 'Copy Link' },
+    {
+      label: 'Email',
+      href: `mailto:?body=${encodeURIComponent(storeUrl)}`,
+      circle: 'bg-[#2563EB]',
+      glyph: <Icon i="mail" size={18} className="text-white" />,
+    },
+    {
+      label: 'Instagram',
+      circle: '',
+      circleStyle: INSTAGRAM_GRADIENT,
+      glyph: <InstagramIcon size={20} className="text-white" />,
+    },
+    {
+      label: 'TikTok',
+      circle: 'bg-[#010101]',
+      glyph: <TikTokIcon size={19} className="text-white" />,
+    },
+    {
+      label: 'Copy Link',
+      circle: 'bg-secondary',
+      glyph: <Icon i="link" size={18} className="text-foreground" />,
+    },
   ];
 
   return (
@@ -77,17 +108,19 @@ export function ShareStoreModal({ storeUrl, onClose }: { storeUrl: string; onClo
         <div className="grid grid-cols-3 gap-3">
           {channels.map((channel) => {
             const copyOnly = COPY_ONLY_CHANNELS.has(channel.label) || channel.label === 'Copy Link';
+            const justCopied = copied === channel.label;
             const content = (
               <>
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary">
-                  <Icon
-                    i={copied === channel.label ? 'check' : channel.icon}
-                    size={18}
-                    className="text-foreground"
-                  />
+                <div
+                  className={`flex h-10 w-10 items-center justify-center rounded-full ${
+                    justCopied ? 'bg-green-500' : channel.circle
+                  }`}
+                  style={justCopied ? undefined : channel.circleStyle}
+                >
+                  {justCopied ? <Icon i="check" size={18} className="text-white" /> : channel.glyph}
                 </div>
                 <span className="text-center text-xs font-medium text-foreground">
-                  {copied === channel.label ? 'Copied!' : channel.label}
+                  {justCopied ? 'Copied!' : channel.label}
                 </span>
               </>
             );
