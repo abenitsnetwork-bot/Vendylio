@@ -29,6 +29,26 @@ export const SITE_IMAGE_KEYS = [
     label: 'Feature — Same-Day Delivery',
     hint: 'Illustration for the "Same-Day Delivery" feature card.',
   },
+  {
+    key: 'hiw_step_create',
+    label: 'How it works — 01 Create your store',
+    hint: 'Photo/screenshot for step 1. Falls back to a built-in mockup if empty.',
+  },
+  {
+    key: 'hiw_step_share',
+    label: 'How it works — 02 Share your link',
+    hint: 'Photo/screenshot for step 2. Falls back to a built-in mockup if empty.',
+  },
+  {
+    key: 'hiw_step_paid',
+    label: 'How it works — 03 Get paid',
+    hint: 'Photo/screenshot for step 3. Falls back to a built-in mockup if empty.',
+  },
+  {
+    key: 'hiw_step_delivery',
+    label: 'How it works — 04 A courier delivers',
+    hint: 'Photo/screenshot for step 4. Falls back to a built-in mockup if empty.',
+  },
 ] as const;
 
 export type SiteImageKey = (typeof SITE_IMAGE_KEYS)[number]['key'];

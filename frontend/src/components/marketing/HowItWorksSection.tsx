@@ -3,12 +3,21 @@
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
+import type { SiteImageKey } from '@/lib/siteImageKeys';
 
-/* --- Per-step CSS mini-mockups (no assets — div-built, on-brand) --- */
+// Minimal shape (avoid importing the server-only landing module into a client
+// component); mirrors `LandingImage`.
+type StepImage = { url: string; altText: string | null };
+
+/* --- Per-step visual: a real uploaded photo (SUPERADMIN, /admin/site-content)
+   when set, otherwise a div-built on-brand mockup — no assets required. --- */
+
+const FRAME_CLS =
+  'aspect-[16/10] w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm';
 
 function Frame({ children }: { children: ReactNode }) {
   return (
-    <div className="aspect-[16/10] w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+    <div className={FRAME_CLS}>
       <div className="flex h-full w-full flex-col bg-gradient-to-br from-secondary to-muted">
         {children}
       </div>
@@ -114,29 +123,39 @@ function DeliveryMock() {
   );
 }
 
-const STEPS: { num: string; title: string; desc: string; mock: ReactNode }[] = [
+const STEPS: {
+  num: string;
+  title: string;
+  desc: string;
+  imageKey: SiteImageKey;
+  mock: ReactNode;
+}[] = [
   {
     num: '01',
     title: 'Create your store',
     desc: 'Add your products, a photo, a link. Less than 5 minutes.',
+    imageKey: 'hiw_step_create',
     mock: <StoreMock />,
   },
   {
     num: '02',
     title: 'Share your link',
     desc: 'One unique link to paste in your Instagram bio or WhatsApp group.',
+    imageKey: 'hiw_step_share',
     mock: <LinkMock />,
   },
   {
     num: '03',
     title: 'Get paid',
     desc: 'Cash App, Zelle, card — your customer pays however they want.',
+    imageKey: 'hiw_step_paid',
     mock: <PaymentMock />,
   },
   {
     num: '04',
     title: 'A courier delivers for you',
     desc: 'Activate same-day delivery. DoorDash or Uber Direct takes it from there.',
+    imageKey: 'hiw_step_delivery',
     mock: <DeliveryMock />,
   },
 ];
@@ -149,7 +168,11 @@ function reveal(visible: boolean, from: 'left' | 'right', delay: number): CSSPro
   };
 }
 
-export function HowItWorksSection() {
+export function HowItWorksSection({
+  images = {},
+}: {
+  images?: Partial<Record<SiteImageKey, StepImage>>;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   const [motionOk, setMotionOk] = useState(false);
@@ -262,12 +285,22 @@ export function HowItWorksSection() {
                   </p>
                 </div>
 
-                {/* Visual */}
+                {/* Visual — uploaded photo if set, else the built-in mockup */}
                 <div
                   className={flip ? 'lg:order-1 lg:pr-14' : 'lg:order-2 lg:pl-14'}
                   style={reveal(visible, flip ? 'left' : 'right', i * 90 + 60)}
                 >
-                  {step.mock}
+                  {images[step.imageKey] ? (
+                    <div className={FRAME_CLS}>
+                      <img
+                        src={images[step.imageKey]!.url}
+                        alt={images[step.imageKey]!.altText ?? ''}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                  ) : (
+                    step.mock
+                  )}
                 </div>
               </li>
             );

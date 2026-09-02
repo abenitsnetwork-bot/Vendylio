@@ -32,7 +32,7 @@ export default async function HomePage() {
         productImage={images.hero_product}
         sellerCount={sellerCount}
       />
-      <HowItWorksSection />
+      <HowItWorksSection images={images} />
       <FeaturesSection images={images} />
       <PlansSection />
       <TestimonialSection testimonials={testimonials} />

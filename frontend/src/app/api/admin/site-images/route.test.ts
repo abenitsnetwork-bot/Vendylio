@@ -55,7 +55,7 @@ describe('GET /api/admin/site-images', () => {
     const res = await GET(makeGet());
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.images).toHaveLength(5);
+    expect(body.images).toHaveLength(9);
     expect(body.images.every((img: { url: null }) => img.url === null)).toBe(true);
     expect(body.images.map((img: { key: string }) => img.key)).toContain('hero_showcase');
   });
