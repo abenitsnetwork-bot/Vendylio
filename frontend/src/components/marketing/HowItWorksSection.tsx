@@ -83,12 +83,12 @@ export function HowItWorksSection() {
       </div>
 
       <div ref={ref} className="relative mx-auto max-w-7xl">
-        {/* Animated path connecting steps 1 → 4 (desktop only) */}
+        {/* Path connecting steps 1 → 4, sitting in the gap between the numbers
+            and the icon chips (desktop only). Dark, draws in on scroll. */}
         <span
           aria-hidden="true"
-          className="absolute left-[12%] right-[12%] top-[1.15rem] hidden h-[3px] origin-left rounded-full lg:block"
+          className="absolute left-[12%] right-[12%] top-[2.85rem] hidden h-[3px] origin-left rounded-full bg-panel lg:block"
           style={{
-            background: 'linear-gradient(90deg, #0f9d8f, #46d17a, #f4a259, #dd5b2e)',
             transform: visible ? 'scaleX(1)' : 'scaleX(0)',
             transition: 'transform 900ms cubic-bezier(0.4, 0, 0.2, 1)',
           }}
@@ -98,10 +98,10 @@ export function HowItWorksSection() {
         {visible && motionOk && (
           <span
             aria-hidden="true"
-            className="pointer-events-none absolute top-[1.15rem] z-10 hidden h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white lg:block"
+            className="pointer-events-none absolute top-[2.85rem] z-10 hidden h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white lg:block"
             style={{
               boxShadow:
-                '0 0 16px 5px rgba(45, 212, 191, 0.85), 0 0 6px 2px rgba(255, 255, 255, 0.95)',
+                '0 0 16px 5px rgba(45, 212, 191, 0.9), 0 0 6px 2px rgba(255, 255, 255, 0.95)',
               animation: 'hiw-orb 4600ms cubic-bezier(0.55, 0, 0.45, 1) infinite',
               animationDelay: '700ms',
             }}
