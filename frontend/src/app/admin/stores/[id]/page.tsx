@@ -369,7 +369,7 @@ export default function AdminStoreDetailPage({ params }: { params: Promise<{ id:
                           One-time temporary password for {m.email}
                         </p>
                         <div className="flex items-center gap-2">
-                          <code className="flex-1 select-all rounded bg-white px-2 py-1 font-mono text-sm text-foreground">
+                          <code className="flex-1 select-all rounded bg-amber-100 px-2 py-1 font-mono text-sm text-amber-900">
                             {issued[m.id]}
                           </code>
                           <button

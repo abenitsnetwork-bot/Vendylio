@@ -315,7 +315,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     type="button"
                     disabled={updating}
                     onClick={() => advance('CANCELLED')}
-                    className="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 disabled:opacity-50"
+                    className="rounded-lg border border-red-200 bg-card px-4 py-2 text-sm font-semibold text-red-600 disabled:opacity-50 dark:border-red-900/60 dark:text-red-400"
                   >
                     Cancel Order
                   </button>
@@ -334,7 +334,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         onClick={() => advance(action.value)}
                         className={
                           action.danger
-                            ? 'rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 disabled:opacity-50'
+                            ? 'rounded-lg border border-red-200 bg-card px-4 py-2 text-sm font-semibold text-red-600 disabled:opacity-50 dark:border-red-900/60 dark:text-red-400'
                             : 'rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-semibold text-foreground disabled:opacity-50'
                         }
                       >
@@ -427,7 +427,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                           type="button"
                           disabled={updating}
                           onClick={cancelDelivery}
-                          className="rounded-lg border border-red-200 bg-white px-4 py-2 text-xs font-semibold text-red-600 disabled:opacity-50"
+                          className="rounded-lg border border-red-200 bg-card px-4 py-2 text-xs font-semibold text-red-600 disabled:opacity-50 dark:border-red-900/60 dark:text-red-400"
                         >
                           Cancel delivery
                         </button>
@@ -521,7 +521,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     type="button"
                     disabled={updating}
                     onClick={refundOrder}
-                    className="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 disabled:opacity-50"
+                    className="rounded-lg border border-red-200 bg-card px-4 py-2 text-sm font-semibold text-red-600 disabled:opacity-50 dark:border-red-900/60 dark:text-red-400"
                   >
                     {updating ? 'Processing…' : 'Refund Order'}
                   </button>

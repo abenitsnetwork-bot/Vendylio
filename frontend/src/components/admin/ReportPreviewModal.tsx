@@ -81,7 +81,7 @@ export function ReportPreviewModal({
         aria-label={`Preview — ${report.title}`}
       >
         {/* Toolbar */}
-        <div className="rp-no-print flex flex-wrap items-center gap-2 border-b border-white/10 bg-[#16322d] px-4 py-2.5 text-panel-foreground">
+        <div className="rp-no-print flex flex-wrap items-center gap-2 border-b border-white/10 bg-panel px-4 py-2.5 text-panel-foreground">
           <Icon i="file-text" size={15} />
           <span className="mr-auto text-sm font-semibold">Preview — {report.title}</span>
 

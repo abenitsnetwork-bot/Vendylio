@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { useAdminAuth } from '@/contexts/AdminContext';
 import { MobileNavDrawer } from '@/components/nav/MobileNav';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 interface NavItem {
   href: string;
@@ -58,13 +59,19 @@ export function AdminSidebar() {
         homeHref="/admin"
         title="Admin"
         footer={
-          <Link
-            href="/dashboard"
-            className="flex items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary"
-          >
-            <Icon i="arrow-left" size={18} />
-            Back to Seller Dashboard
-          </Link>
+          <div className="flex flex-col gap-2">
+            <Link
+              href="/dashboard"
+              className="flex items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary"
+            >
+              <Icon i="arrow-left" size={18} />
+              Back to Seller Dashboard
+            </Link>
+            <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
+              <span className="text-sm font-medium text-muted-foreground">Theme</span>
+              <ThemeToggle />
+            </div>
+          </div>
         }
       />
 
@@ -96,11 +103,15 @@ export function AdminSidebar() {
         </div>
         <Link
           href="/dashboard"
-          className="mx-3 mb-4 flex items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary"
+          className="mx-3 mb-3 flex items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary"
         >
           <Icon i="arrow-left" size={18} />
           Back to Seller Dashboard
         </Link>
+        <div className="mx-3 mb-4 flex items-center justify-between rounded-lg border border-border px-3 py-2">
+          <span className="text-sm font-medium text-muted-foreground">Theme</span>
+          <ThemeToggle />
+        </div>
       </nav>
 
       <nav

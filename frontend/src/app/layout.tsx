@@ -1,10 +1,13 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import { Inter, Fraunces } from 'next/font/google';
 import './globals.css';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { ThemeProvider } from '@/contexts/ThemeContext';
 import { SentryClientInit } from '@/components/SentryClientInit';
 import { siteOrigin } from '@/lib/seo';
+import { THEME_PREPAINT_SCRIPT } from '@/lib/theme';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -42,17 +45,27 @@ export const metadata: Metadata = {
   description: 'Open your online store and start selling — free, in minutes.',
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Nonce minted per request by src/proxy.ts — the pre-paint theme script is
+  // inline, so it needs the nonce to run under the enforcing CSP.
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
+
   return (
-    <html lang="en" className={`${inter.variable} ${fraunces.variable}`}>
+    // suppressHydrationWarning: the pre-paint script sets data-theme on <html>
+    // before React hydrates, so the server (no attribute) and client differ by
+    // design on that one attribute.
+    <html lang="en" className={`${inter.variable} ${fraunces.variable}`} suppressHydrationWarning>
       <body className={inter.className}>
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_PREPAINT_SCRIPT }} />
         <SentryClientInit />
         <ToastProvider>
-          <AuthProvider>{children}</AuthProvider>
+          <ThemeProvider>
+            <AuthProvider>{children}</AuthProvider>
+          </ThemeProvider>
         </ToastProvider>
       </body>
     </html>

@@ -328,7 +328,7 @@ export default function AdminWithdrawalsPage() {
                       type="button"
                       disabled={busyId === w.id}
                       onClick={() => sendTransfer(w.id)}
-                      className="flex-shrink-0 rounded-lg border border-accent bg-white px-3 py-1.5 text-xs font-semibold text-accent disabled:opacity-50"
+                      className="flex-shrink-0 rounded-lg border border-accent bg-card px-3 py-1.5 text-xs font-semibold text-accent disabled:opacity-50"
                     >
                       Send transfer
                     </button>
@@ -338,7 +338,7 @@ export default function AdminWithdrawalsPage() {
                     type="button"
                     disabled={busyId === w.id}
                     onClick={() => complete(w.id)}
-                    className="flex-shrink-0 rounded-lg border border-green-200 bg-white px-3 py-1.5 text-xs font-semibold text-green-700 disabled:opacity-50"
+                    className="flex-shrink-0 rounded-lg border border-green-200 bg-card px-3 py-1.5 text-xs font-semibold text-green-700 disabled:opacity-50 dark:border-green-900/60 dark:text-green-400"
                   >
                     Mark as Sent
                   </button>
@@ -348,7 +348,7 @@ export default function AdminWithdrawalsPage() {
                     type="button"
                     disabled={busyId === w.id}
                     onClick={() => cancel(w.id)}
-                    className="flex-shrink-0 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 disabled:opacity-50"
+                    className="flex-shrink-0 rounded-lg border border-red-200 bg-card px-3 py-1.5 text-xs font-semibold text-red-600 disabled:opacity-50 dark:border-red-900/60 dark:text-red-400"
                   >
                     Cancel
                   </button>

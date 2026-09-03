@@ -315,7 +315,7 @@ export function SellerDashboard({
               <button
                 type="button"
                 onClick={() => setShareOpen(true)}
-                className="w-full rounded-md bg-white py-2 text-xs font-semibold text-foreground hover:opacity-90"
+                className="w-full rounded-md bg-panel-foreground py-2 text-xs font-semibold text-panel hover:opacity-90"
               >
                 Share Link
               </button>

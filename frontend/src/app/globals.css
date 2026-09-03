@@ -32,6 +32,62 @@
   --font-headings: var(--font-fraunces), ui-serif, Georgia, serif;
 }
 
+/* ── Light / dark theme ──────────────────────────────────────────────────────
+   The whole app is built on the semantic tokens above (~1700 uses of
+   bg-card / text-foreground / bg-panel / …). Dark mode = redefine those
+   tokens under [data-theme="dark"]; components need no change. The toggle
+   lives in the dashboard + admin nav (see ThemeToggle); the choice is stored
+   per-device in localStorage and applied before first paint by the inline
+   script in layout.tsx. The public storefront (/s/*) always renders light —
+   it's the customer's view, styled by the merchant's chosen template. */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+:root {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --color-background: #0f1512;
+  --color-foreground: #e8ede9;
+  --color-border: #29332d;
+  --color-input: #19211c;
+  /* "ink" tokens flip: on light they are the near-black green used for both
+     dark text and dark buttons; on dark they become the light tone, and their
+     *-foreground counterpart carries the contrast. Every call site pairs them
+     (bg-primary + text-primary-foreground, bg-panel + text-panel-foreground). */
+  --color-primary: #e8ede9;
+  --color-primary-foreground: #12201c;
+  --color-secondary: #1b2521;
+  --color-secondary-foreground: #e8ede9;
+  --color-muted: #202b26;
+  --color-muted-foreground: #9aa79e;
+  --color-accent: #e9673d;
+  --color-accent-foreground: #ffffff;
+  --color-card: #161e1a;
+  --color-card-foreground: #e8ede9;
+  --color-panel: #1f3d37;
+  --color-panel-foreground: #eef3ef;
+}
+
+/* The viewer's browser paints its own ground behind the page; give body an
+   explicit token background so a page that doesn't set its own full-height
+   wrapper (error boundaries, thin auth pages) never shows a bare white/black
+   behind the dark theme. */
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  body {
+    transition:
+      background-color 0.18s ease,
+      color 0.18s ease;
+  }
+}
+
 /* "How it works" timeline — each node lights up in turn (01→02→03→04) so a
    pulse appears to roll down the line, then loops. Steps stagger the delay. */
 @keyframes hiw-node {

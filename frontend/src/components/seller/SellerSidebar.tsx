@@ -7,6 +7,7 @@ import { Icon, type IconName } from '@/components/ui/Icon';
 import { api } from '@/lib/api';
 import { useUser } from '@/contexts/AuthContext';
 import { MobileNavDrawer, type MobileNavItem } from '@/components/nav/MobileNav';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 interface NavItem {
   href: string;
@@ -87,17 +88,23 @@ export function SellerSidebar() {
         items={drawerItems}
         homeHref="/dashboard"
         footer={
-          storeSlug ? (
-            <a
-              href={`/s/${storeSlug}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary"
-            >
-              <Icon i="store" size={18} />
-              View Store ↗
-            </a>
-          ) : undefined
+          <div className="flex flex-col gap-2">
+            {storeSlug && (
+              <a
+                href={`/s/${storeSlug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary"
+              >
+                <Icon i="store" size={18} />
+                View Store ↗
+              </a>
+            )}
+            <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
+              <span className="text-sm font-medium text-muted-foreground">Theme</span>
+              <ThemeToggle />
+            </div>
+          </div>
         }
       />
 
@@ -138,12 +145,16 @@ export function SellerSidebar() {
             href={`/s/${storeSlug}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="mx-3 mb-4 flex items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary"
+            className="mx-3 mb-3 flex items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary"
           >
             <Icon i="store" size={18} />
             View Store ↗
           </a>
         )}
+        <div className="mx-3 mb-4 flex items-center justify-between rounded-lg border border-border px-3 py-2">
+          <span className="text-sm font-medium text-muted-foreground">Theme</span>
+          <ThemeToggle />
+        </div>
       </nav>
 
       {/* Mobile bottom tab bar */}

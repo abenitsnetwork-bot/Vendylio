@@ -103,7 +103,7 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
       }`}
     >
       <span
-        className={`block h-5 w-5 rounded-full bg-white shadow-sm ring-1 ring-black/10 transition-transform duration-200 ${
+        className={`block h-5 w-5 rounded-full bg-panel-foreground shadow-sm ring-1 ring-black/10 transition-transform duration-200 ${
           on ? 'translate-x-[18px]' : 'translate-x-0'
         }`}
       />

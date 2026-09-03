@@ -39,16 +39,16 @@ function AuthErrorBody() {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 px-4">
       <h1 className="text-2xl font-bold">Échec de connexion</h1>
-      <p className="text-sm text-gray-700">{message}</p>
-      {code && <p className="font-mono text-xs text-gray-400">code: {code}</p>}
+      <p className="text-sm text-foreground">{message}</p>
+      {code && <p className="font-mono text-xs text-muted-foreground">code: {code}</p>}
       <div className="flex flex-col gap-2">
         <Link
           href="/login"
-          className="rounded-md bg-black px-5 py-2.5 text-center text-sm font-medium text-white hover:bg-gray-800"
+          className="rounded-md bg-primary px-5 py-2.5 text-center text-sm font-medium text-primary-foreground hover:opacity-90"
         >
           Retour à la connexion
         </Link>
-        <Link href="/" className="text-center text-sm text-gray-600 underline">
+        <Link href="/" className="text-center text-sm text-muted-foreground underline">
           Accueil
         </Link>
       </div>
