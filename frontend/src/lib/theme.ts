@@ -7,17 +7,30 @@ export type ThemeChoice = Theme | 'system';
 
 export const THEME_STORAGE_KEY = 'vendylio-theme';
 
-/** The public storefront is always light — it's the customer's view, styled by
- *  the merchant's chosen template, not the merchant's personal preference.
- *  `/s/*` covers the platform domain; the `storefront` marker (set by
- *  src/app/s/[slug]/layout.tsx) covers connected custom domains where the
- *  browser path is just `/`. */
+/**
+ * Only the signed-in app surface (dashboards + account pages) follows the
+ * light/dark choice. Everything else — the marketing/landing pages, the legal
+ * pages, and the public storefront — always renders light. This is an
+ * allowlist, not a denylist: a new marketing page is light by default.
+ */
+export const THEMED_PREFIXES = [
+  '/dashboard',
+  '/admin',
+  '/onboarding',
+  '/settings',
+  '/team',
+  '/login',
+  '/register',
+  '/verify-email',
+  '/forgot-password',
+  '/reset-password',
+  '/set-password',
+  '/change-password',
+  '/auth',
+] as const;
+
 export function isThemedPath(pathname: string): boolean {
-  if (pathname.startsWith('/s/')) return false;
-  if (typeof document !== 'undefined' && document.documentElement.dataset.storefront === '1') {
-    return false;
-  }
-  return true;
+  return THEMED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
 export function systemTheme(): Theme {
@@ -54,11 +67,13 @@ export function persistThemeChoice(choice: ThemeChoice): void {
   }
 }
 
-/** The self-contained script that runs in <head> before first paint to set
- *  data-theme, so there is no flash of the wrong theme. Kept as a string so
- *  layout.tsx can drop it into a nonce'd <script>. */
+/** The self-contained script that runs before first paint to set data-theme on
+ *  the themed routes only, so there is no flash of the wrong theme and the
+ *  landing / marketing / storefront pages are never darkened. Kept as a string
+ *  so layout.tsx can drop it into a nonce'd <script>. */
 export const THEME_PREPAINT_SCRIPT = `(function(){try{
-if(location.pathname.indexOf('/s/')===0)return;
+var p=location.pathname,P=${JSON.stringify(THEMED_PREFIXES)};
+if(!P.some(function(x){return p===x||p.indexOf(x+'/')===0}))return;
 var k=${JSON.stringify(THEME_STORAGE_KEY)},v=null;
 try{v=localStorage.getItem(k)}catch(e){}
 if(v!=='light'&&v!=='dark'){v=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}
