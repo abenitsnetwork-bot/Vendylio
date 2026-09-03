@@ -5,7 +5,16 @@
 export type Theme = 'light' | 'dark';
 export type ThemeChoice = Theme | 'system';
 
+/** Generic key: the pre-paint script's best-effort cache of the last theme
+ *  shown on this browser. The authoritative choice is per-account (see
+ *  themeStorageKey) — this only avoids a flash before the account loads. */
 export const THEME_STORAGE_KEY = 'vendylio-theme';
+
+/** Per-account key so a shared browser keeps each profile's choice separate.
+ *  Falls back to the generic key when signed out. */
+export function themeStorageKey(userId?: string | null): string {
+  return userId ? `${THEME_STORAGE_KEY}:${userId}` : THEME_STORAGE_KEY;
+}
 
 /**
  * Only the signed-in app surface follows the light/dark choice. Everything
@@ -25,11 +34,11 @@ export function systemTheme(): Theme {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
-/** The stored explicit choice, or 'system' when the user hasn't picked one. */
-export function readThemeChoice(): ThemeChoice {
+/** The stored explicit choice for a key, or 'system' when none is set. */
+export function readThemeChoice(key: string = THEME_STORAGE_KEY): ThemeChoice {
   if (typeof window === 'undefined') return 'system';
   try {
-    const v = window.localStorage.getItem(THEME_STORAGE_KEY);
+    const v = window.localStorage.getItem(key);
     return v === 'light' || v === 'dark' ? v : 'system';
   } catch {
     return 'system';
@@ -45,10 +54,17 @@ export function applyTheme(theme: Theme): void {
   document.documentElement.dataset.theme = theme;
 }
 
-export function persistThemeChoice(choice: ThemeChoice): void {
+/** Write a choice to one or more keys (the per-account key + the generic
+ *  pre-paint cache). 'system' clears the key. */
+export function persistThemeChoice(
+  choice: ThemeChoice,
+  keys: string[] = [THEME_STORAGE_KEY],
+): void {
   try {
-    if (choice === 'system') window.localStorage.removeItem(THEME_STORAGE_KEY);
-    else window.localStorage.setItem(THEME_STORAGE_KEY, choice);
+    for (const key of keys) {
+      if (choice === 'system') window.localStorage.removeItem(key);
+      else window.localStorage.setItem(key, choice);
+    }
   } catch {
     /* private mode / storage disabled — the in-memory state still works for the session */
   }

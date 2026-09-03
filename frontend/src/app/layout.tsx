@@ -63,9 +63,9 @@ export default async function RootLayout({
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_PREPAINT_SCRIPT }} />
         <SentryClientInit />
         <ToastProvider>
-          <ThemeProvider>
-            <AuthProvider>{children}</AuthProvider>
-          </ThemeProvider>
+          <AuthProvider>
+            <ThemeProvider>{children}</ThemeProvider>
+          </AuthProvider>
         </ToastProvider>
       </body>
     </html>
