@@ -21,6 +21,7 @@ import { ProUpgradeCard } from '@/components/seller/ProUpgradeCard';
 import {
   CHART_ACCENT,
   CHART_AXIS,
+  CHART_BAR_IDLE,
   CHART_GRID,
   CHART_NEGATIVE,
   CHART_POSITIVE,
@@ -192,7 +193,7 @@ function RevenueGrowth({ series }: { series: SeriesPoint[] }) {
                   className="w-full rounded-full transition-all"
                   style={{
                     height: `${Math.max(h, b.cents > 0 ? 8 : 0)}%`,
-                    backgroundColor: isPeak ? CHART_ACCENT : 'rgba(20,32,29,0.18)',
+                    backgroundColor: isPeak ? CHART_ACCENT : CHART_BAR_IDLE,
                   }}
                   title={`${b.label}: ${usd2(b.cents)}`}
                 />

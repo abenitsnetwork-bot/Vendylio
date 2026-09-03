@@ -1,21 +1,23 @@
-// Recharts needs real color strings, not Tailwind classes. These are drawn from
-// the Vendylio theme tokens in globals.css (--color-primary #14201d,
-// --color-accent #dd5b2e, --color-panel #16322d) plus a few in-between tones.
+// Recharts needs real color strings, not Tailwind classes — so these resolve to
+// `var(--chart-*)` custom properties defined per theme in globals.css. Because
+// SVG presentation attributes resolve CSS variables live, flipping the theme
+// recolors every chart with no React re-render. Light = the warm-earth +
+// forest-teal Vendylio range; dark brightens every hue so stats stay legible on
+// the near-black ground.
 
 /**
  * Donut / category slice palette — forest, coral, teal, gold, slate-blue, clay,
- * sage, plum. Wider than the original six so a busy breakdown still reads, while
- * staying inside the warm-earth + forest-teal Vendylio range (no neon).
+ * sage, plum. Wide enough that a busy breakdown still reads.
  */
 export const SLICE_COLORS = [
-  '#16322d', // forest
-  '#dd5b2e', // coral
-  '#2f8f83', // teal
-  '#e3a857', // gold
-  '#3b6ea5', // slate-blue
-  '#b0563a', // clay
-  '#5c7a6f', // sage
-  '#8a5a83', // plum
+  'var(--chart-1)',
+  'var(--chart-2)',
+  'var(--chart-3)',
+  'var(--chart-4)',
+  'var(--chart-5)',
+  'var(--chart-6)',
+  'var(--chart-7)',
+  'var(--chart-8)',
 ];
 
 /**
@@ -24,17 +26,25 @@ export const SLICE_COLORS = [
  * /api/admin/pulse (`revenueMix[].method`).
  */
 export const METHOD_COLORS: Record<string, string> = {
-  Card: '#16322d',
-  'Cash App': '#2f8f83',
-  Zelle: '#3b6ea5',
-  Other: '#9c8b6f',
+  Card: 'var(--chart-method-card)',
+  'Cash App': 'var(--chart-method-cashapp)',
+  Zelle: 'var(--chart-method-zelle)',
+  Other: 'var(--chart-method-other)',
 };
 
-export const CHART_GRID = '#dbe2d6';
-export const CHART_AXIS = '#615c4d'; // A11Y-01 — matches --color-muted-foreground
-export const CHART_INK = '#14201d';
-export const CHART_ACCENT = '#dd5b2e';
-export const CHART_POSITIVE = '#15803d';
-export const CHART_NEGATIVE = '#b91c1c';
+export const CHART_GRID = 'var(--chart-grid)';
+export const CHART_AXIS = 'var(--chart-axis)';
+export const CHART_INK = 'var(--chart-ink)';
+export const CHART_ACCENT = 'var(--chart-accent)';
+export const CHART_POSITIVE = 'var(--chart-positive)';
+export const CHART_NEGATIVE = 'var(--chart-negative)';
+/** Faint fill for the "not the peak" bars in the analytics hour/day strips. */
+export const CHART_BAR_IDLE = 'var(--chart-bar-idle)';
 
-export const TOOLTIP_STYLE = { borderRadius: 10, borderColor: CHART_GRID, fontSize: 12 } as const;
+export const TOOLTIP_STYLE = {
+  borderRadius: 10,
+  border: '1px solid var(--chart-grid)',
+  background: 'var(--chart-tooltip-bg)',
+  color: 'var(--color-foreground)',
+  fontSize: 12,
+} as const;

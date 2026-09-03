@@ -44,10 +44,57 @@
 
 :root {
   color-scheme: light;
+
+  /* Chart palette — recharts needs real color strings, so components read these
+     via `var(--chart-*)` (resolved live in SVG attrs, so a theme flip recolors
+     every chart with no re-render). Light = the warm-earth + forest-teal
+     Vendylio range; dark brightens every hue so stats stay legible on the near
+     -black ground. */
+  --chart-grid: #dbe2d6;
+  --chart-axis: #615c4d;
+  --chart-ink: #14201d; /* primary data series (bars / neutral lines) */
+  --chart-accent: #dd5b2e;
+  --chart-positive: #15803d;
+  --chart-negative: #b91c1c;
+  --chart-bar-idle: rgba(20, 32, 29, 0.18);
+  --chart-tooltip-bg: #ffffff;
+  --chart-1: #16322d;
+  --chart-2: #dd5b2e;
+  --chart-3: #2f8f83;
+  --chart-4: #e3a857;
+  --chart-5: #3b6ea5;
+  --chart-6: #b0563a;
+  --chart-7: #5c7a6f;
+  --chart-8: #8a5a83;
+  --chart-method-card: #16322d;
+  --chart-method-cashapp: #2f8f83;
+  --chart-method-zelle: #3b6ea5;
+  --chart-method-other: #9c8b6f;
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
+
+  --chart-grid: #2b3831;
+  --chart-axis: #9aa79e;
+  --chart-ink: #48c78e; /* revenue bars/lines glow green on dark instead of vanishing */
+  --chart-accent: #ff7d4d;
+  --chart-positive: #4ade80;
+  --chart-negative: #f87171;
+  --chart-bar-idle: rgba(232, 237, 233, 0.16);
+  --chart-tooltip-bg: #1c2621;
+  --chart-1: #48c78e;
+  --chart-2: #ff7d4d;
+  --chart-3: #2dd4bf;
+  --chart-4: #f5c451;
+  --chart-5: #6aa9f0;
+  --chart-6: #f97362;
+  --chart-7: #a3d977;
+  --chart-8: #e07fc9;
+  --chart-method-card: #48c78e;
+  --chart-method-cashapp: #2dd4bf;
+  --chart-method-zelle: #6aa9f0;
+  --chart-method-other: #b6a888;
 
   --color-background: #0f1512;
   --color-foreground: #e8ede9;

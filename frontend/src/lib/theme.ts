@@ -8,26 +8,13 @@ export type ThemeChoice = Theme | 'system';
 export const THEME_STORAGE_KEY = 'vendylio-theme';
 
 /**
- * Only the signed-in app surface (dashboards + account pages) follows the
- * light/dark choice. Everything else — the marketing/landing pages, the legal
- * pages, and the public storefront — always renders light. This is an
- * allowlist, not a denylist: a new marketing page is light by default.
+ * Only the signed-in app surface follows the light/dark choice. Everything
+ * else — the landing / marketing / legal pages, the auth entry pages
+ * (login, register, verify-email, forgot/reset-password) and the public
+ * storefront — always renders light. Allowlist, not denylist: a new public
+ * page is light by default.
  */
-export const THEMED_PREFIXES = [
-  '/dashboard',
-  '/admin',
-  '/onboarding',
-  '/settings',
-  '/team',
-  '/login',
-  '/register',
-  '/verify-email',
-  '/forgot-password',
-  '/reset-password',
-  '/set-password',
-  '/change-password',
-  '/auth',
-] as const;
+export const THEMED_PREFIXES = ['/dashboard', '/admin', '/onboarding', '/settings'] as const;
 
 export function isThemedPath(pathname: string): boolean {
   return THEMED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
