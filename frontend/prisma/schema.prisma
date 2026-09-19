@@ -425,8 +425,8 @@ model Order {
   // exists for either, the SELLER confirms receipt via
   // POST /api/orders/[id]/confirm-payment; providerChargeId/paymentUrl stay
   // null for these two, see api/orders/route.ts's routing).
-  provider         String
-  providerChargeId String? @unique
+  provider              String
+  providerChargeId      String? @unique
   // Stripe PaymentIntent id (pi_...), captured from the checkout.session on
   // the paid webhook. `providerChargeId` above is the Checkout Session id
   // (cs_...), which `charge.refunded` events do NOT carry — this is what the
@@ -435,11 +435,31 @@ model Order {
   // scripts/backfill-payment-intent-ids.ts).
   stripePaymentIntentId String? @unique
   paymentUrl            String? // Stripe Checkout Session URL — null for manual payment methods
-  paymentMethod        String? // set on PAID (e.g. Stripe's payment_method_types entry, or "cashapp"/"zelle")
+  paymentMethod         String? // set on PAID (e.g. Stripe's payment_method_types entry, or "cashapp"/"zelle")
 
   // Marketplace commission (Phase 3 uses this to split platform vs. seller take)
-  commissionAmount Int?
-  netAmount        Int?
+  commissionAmount   Int?
+  netAmount          Int?
+  // Financial architecture (Phase 2A) — the commission decision is made
+  // exactly ONCE, at order creation (api/orders/route.ts), and frozen here so
+  // the Stripe Connect application fee and the markPaid ledger write can
+  // never diverge (the bug this column pair exists to make structurally
+  // impossible — see docs/finance/architecture-lock.md). taxableAmountCents =
+  // subtotalCents minus the MERCHANDISE-attributable discount
+  // (evaluateDiscount()'s subtotalDiscountCents) — excludes delivery and tax,
+  // per the locked commission-base decision. commissionRateBp is the
+  // resolved Free/Pro rate (PlatformSettings) at that same instant. Both null
+  // on orders that predate this column — never backfilled (historical
+  // commissionAmount/netAmount remain authoritative and untouched). markPaid
+  // and the Cash App/Zelle CommissionCharge write both read these instead of
+  // re-resolving the rate or recomputing the base.
+  taxableAmountCents Int?
+  commissionRateBp   Int?
+  // Best-effort, populated post-payment from Stripe's balance_transaction —
+  // never blocks payment processing, never used to derive the platform's own
+  // commission. Null until a follow-up job captures it, or permanently null
+  // on manual-money orders (no Stripe charge to ask).
+  stripeFeeCents     Int?
 
   // Lifecycle
   expiresAt DateTime // PENDING expiry; not cleared on PAID (history)
@@ -451,6 +471,7 @@ model Order {
   delivery          Delivery?
   review            Review?
   commissionCharges CommissionCharge[]
+  disputes          Dispute[]
 
   @@index([storeId, createdAt])
   @@index([userId, createdAt])
@@ -497,6 +518,93 @@ model CommissionCharge {
   @@unique([orderId, kind])
   @@index([storeId, status])
   @@index([stripeInvoiceId])
+}
+
+// Financial architecture (Phase 2A) — append-only financial audit/event
+// trail. This is explicitly NOT event sourcing: Order, CommissionCharge,
+// Withdrawal, and Dispute remain the authoritative OPERATIONAL state for
+// their own domains (what a route can act on right now); this table only
+// answers "what financial fact happened, when, on what, for how much, and
+// via which external reference" for admin reporting and reconciliation. Rows
+// are never updated or deleted — a correction is a new row, never a mutation
+// of history.
+//
+// `sourceType`/`sourceId` is a polymorphic reference (Order | Withdrawal |
+// CommissionCharge | Dispute), deliberately a plain string pair with no
+// Prisma relation — the same pattern AdminAction already uses for its own
+// polymorphic `targetType`/`targetId`, since one relation field can't point
+// at four different models. `orderId`/`storeId` are denormalized convenience
+// filters (also plain, no relation) for the two dimensions almost every
+// admin query filters by.
+//
+// `amountCents` is signed: positive = value moving toward/being earned by
+// the platform, negative = a reversal/credit — consistent with how
+// CommissionCharge.amountCents already encodes a REFUND_CREDIT as negative,
+// rather than introducing a second debit/credit vocabulary for one table.
+// Null when the event carries no monetary amount (e.g. a DISPUTE_UPDATED
+// that only changes status).
+//
+// `@@unique([eventType, sourceType, sourceId])` is the idempotency gate: the
+// same fact about the same source can only be recorded once. A genuinely
+// repeated event (e.g. a second refund on the same order) has a different
+// `sourceId` (the new refund's own Stripe id) or a different `eventType`, so
+// legitimate multiple events per order are never blocked.
+//
+// `eventType` is a documented, closed vocabulary — validated at the
+// application layer, not a DB enum, so adding a new type later is a code
+// change, not a migration (matching how OutboxEvent.kind / AdminAction.action
+// already do this): PAYMENT_CREATED | PAYMENT_SUCCEEDED | PAYMENT_FAILED |
+// APPLICATION_FEE_CREATED | APPLICATION_FEE_REVERSED | REFUND_CREATED |
+// REFUND_COMPLETED | COMMISSION_CHARGE_CREATED | COMMISSION_SETTLED |
+// COMMISSION_WAIVED | DISPUTE_OPENED | DISPUTE_UPDATED | DISPUTE_CLOSED |
+// STRIPE_FEE_RECORDED | PAYOUT_CREATED | PAYOUT_PAID | PAYOUT_FAILED |
+// RECONCILIATION_DISCREPANCY | ADJUSTMENT_CREATED.
+model FinancialEvent {
+  id          String   @id @default(cuid())
+  eventType   String
+  sourceType  String // "Order" | "Withdrawal" | "CommissionCharge" | "Dispute"
+  sourceId    String
+  storeId     String?
+  orderId     String?
+  amountCents Int? // signed — see field comment above
+  currency    String   @default("USD")
+  provider    String? // "stripe" | "manual" | null
+  externalId  String? // pi_/ch_/re_/dp_/tr_/in_ — whichever Stripe object caused this fact
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@unique([eventType, sourceType, sourceId])
+  @@index([orderId, createdAt])
+  @@index([storeId, createdAt])
+}
+
+// Financial architecture (Phase 2A) — a Stripe dispute (chargeback), tracked
+// as a financial/risk event. Deliberately does NOT mutate Order.status: a
+// dispute is exposure tracking, not a fulfillment-lifecycle transition — the
+// merchant keeps managing PREPARING/READY/DELIVERED normally regardless of a
+// concurrent dispute (whether a LOST dispute should later claw back an
+// already-paid-out commission is an open business decision, not decided by
+// this model). `status` follows Stripe's own dispute lifecycle:
+// NEEDS_RESPONSE (created) → UNDER_REVIEW (updated, evidence submitted) →
+// WON | LOST | WARNING_CLOSED (closed). `order` uses onDelete: Restrict (same
+// as CommissionCharge.order) — a disputed order can never vanish out from
+// under its dispute record.
+model Dispute {
+  id              String    @id @default(cuid())
+  orderId         String
+  order           Order     @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  storeId         String
+  store           Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  stripeDisputeId String    @unique
+  amountCents     Int
+  currency        String    @default("USD")
+  reason          String?
+  status          String    @default("NEEDS_RESPONSE") // NEEDS_RESPONSE | UNDER_REVIEW | WON | LOST | WARNING_CLOSED
+  evidenceDueBy   DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([storeId, status])
 }
 
 // Phase 4 — lightweight audit trail for the order lifecycle. One row per
@@ -710,6 +818,14 @@ model Store {
   // stripeOnboardingStatus === 'ACTIVE'.
   stripeAccountId              String?      @unique
   stripeOnboardingStatus       String       @default("NOT_STARTED") // NOT_STARTED|PENDING|ACTIVE|RESTRICTED
+  // Financial architecture (Phase 2A) — the subset of Stripe's
+  // account.requirements object that has actual downstream use, captured
+  // from the account.updated webhook (webhooks/stripe-connect/route.ts):
+  // { currentlyDue: string[], pastDue: string[], disabledReason: string|null }.
+  // Deliberately excludes `eventually_due` (not actionable today). Display-only
+  // — never drives a routing/authorization decision, those stay on
+  // stripeOnboardingStatus above.
+  stripeAccountRequirements    Json?
   // Manual payment methods — no webhook/API exists for either of these to
   // confirm a peer-to-peer payment automatically, so a buyer who checks out
   // this way sees the seller's Cash App QR / Zelle contact, the order stays
@@ -827,6 +943,7 @@ model Store {
   discounts            Discount[]
   quotes               Quote[]
   commissionCharges    CommissionCharge[]
+  disputes             Dispute[]
   storefrontDayStats   StorefrontDayStat[]
   productViewDayStats  ProductViewDayStat[]
   withdrawalStatements WithdrawalStatement[]
