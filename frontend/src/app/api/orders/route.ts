@@ -42,7 +42,8 @@ import { resolveOwnStore } from '@/lib/server/org';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 import { prisma } from '@/lib/server/prisma';
 import { CircuitOpenError } from '@/lib/server/payments/circuit-breaker';
-import { computeCommission } from '@/lib/server/payments/commission';
+import { resolveCommissionRateBp } from '@/lib/server/payments/commission';
+import { calculateMarketplaceFee } from '@/lib/server/payments/marketplace-fee';
 import { getPlatformCommissionRates } from '@/lib/server/payments/platform-settings';
 import {
   breaker,
@@ -456,6 +457,24 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const taxCents = 0; // no tax engine in the MVP
     const amount = subtotalCents - subtotalDiscountCents + deliveryFeeCents + taxCents;
 
+    // Financial architecture (Phase 2B) — the commission decision is made
+    // exactly ONCE, here, and frozen on the Order row below. taxableAmountCents
+    // is merchandise only: subtotalCents minus the merchandise-attributable
+    // discount. `subtotalDiscountCents` (from evaluateDiscount above) is
+    // already exactly that number — 0 for FREE_DELIVERY (that discount only
+    // ever touches deliveryFeeCents, never subtotalCents), the full cut for
+    // PERCENT. Delivery and tax never enter this base, by construction — they
+    // simply aren't inputs to it. commissionRateBp is resolved from the live
+    // PlatformSettings + the store's plan at this exact instant, then frozen:
+    // markPaid() and the Cash App/Zelle CommissionCharge write read these
+    // columns back off the Order later instead of re-resolving anything, so
+    // the Stripe Connect application fee and the ledger can never diverge.
+    const taxableAmountCents = subtotalCents - subtotalDiscountCents;
+    const { baseRateBp, proRateBp } = await getPlatformCommissionRates(prisma);
+    const commissionRateBp = resolveCommissionRateBp({ plan: store.plan, baseRateBp, proRateBp });
+    const commissionAmount = calculateMarketplaceFee({ taxableAmountCents, commissionRateBp });
+    const netAmount = amount - commissionAmount;
+
     // Shared across both branches below — only `provider` (and, for Stripe,
     // the later providerChargeId/paymentUrl update) differs.
     const baseOrderData = {
@@ -468,6 +487,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       deliveryFeeCents,
       taxCents,
       discountCents,
+      taxableAmountCents,
+      commissionRateBp,
+      commissionAmount,
+      netAmount,
       ...(appliedDiscountCode ? { discountCode: appliedDiscountCode } : {}),
       fulfillmentMethod: fulfillmentMethod.toUpperCase(),
       ...(deliveryProviderType ? { deliveryProviderType } : {}),
@@ -552,12 +575,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
       const result = await breaker.execute(async () => {
         if (isConnected) {
-          const { baseRateBp } = await getPlatformCommissionRates(prisma);
-          const { commission } = computeCommission(amount, baseRateBp);
           return provider.chargeConnected({
             ...chargeInput,
             destinationAccountId: store.stripeAccountId!,
-            applicationFeeAmount: commission,
+            // Financial architecture (Phase 2B) — the value frozen on the
+            // Order at creation (above), never recomputed here. Guaranteed
+            // non-null: every order created by this route sets
+            // commissionAmount unconditionally.
+            applicationFeeAmount: order.commissionAmount!,
           });
         }
         return provider.charge(chargeInput);

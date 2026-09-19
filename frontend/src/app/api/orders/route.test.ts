@@ -93,6 +93,7 @@ const STORE = {
   id: 'store-1',
   slug: 'shea-store',
   published: true,
+  plan: 'FREE',
   stripeAccountId: null,
   stripeOnboardingStatus: 'NOT_STARTED',
   deliveryFeeCents: 0,
@@ -165,6 +166,8 @@ function seededOrder(over: Partial<Record<string, unknown>> = {}) {
     providerChargeId: null,
     paymentUrl: null,
     paymentMethod: null,
+    taxableAmountCents: null,
+    commissionRateBp: null,
     commissionAmount: null,
     netAmount: null,
     expiresAt: new Date('2026-05-09T12:00:00Z'),
@@ -718,6 +721,137 @@ describe('POST /api/orders — promo code (Phase D)', () => {
   });
 });
 
+describe('POST /api/orders — commission freeze (Financial Architecture Phase 2B)', () => {
+  const ACTIVE_FREE_DELIVERY = {
+    kind: 'FREE_DELIVERY',
+    active: true,
+    startsAt: null,
+    endsAt: null,
+    minSubtotalCents: 0,
+    maxRedemptions: null,
+    redemptionCount: 0,
+  };
+
+  it('delivery fee does not change the commission base or amount', async () => {
+    // Store charges a flat $5 delivery fee, no promo code. subtotal 3600,
+    // delivery 500 → amount 4100 — but taxableAmountCents must stay 3600
+    // (merchandise only) and commissionAmount must be computed off THAT, not
+    // off the 4100 grand total. taxCents is hardcoded 0 in this route and
+    // never an input to the base either — its exclusion is structural, not a
+    // branch to get right, so it needs no separate test.
+    prismaMock.store.findFirst.mockResolvedValue({ ...STORE, deliveryFeeCents: 500 } as never);
+    prismaMock.order.create.mockResolvedValue(seededOrder() as never);
+    prismaMock.order.update.mockResolvedValue(seededOrder() as never);
+    prismaMock.platformSettings.findUnique.mockResolvedValueOnce({
+      id: 'default',
+      commissionRateBp: 500, // 5%
+      commissionRateBpPro: null,
+      updatedAt: new Date(),
+    } as never);
+
+    await POST(makePost(validBody));
+
+    const data = prismaMock.order.create.mock.calls[0]?.[0]?.data;
+    expect(data).toMatchObject({
+      subtotalCents: 3600,
+      deliveryFeeCents: 500,
+      taxCents: 0,
+      amount: 4100,
+      taxableAmountCents: 3600, // unaffected by the delivery fee
+      commissionRateBp: 500,
+      commissionAmount: 180, // floor(3600 * 500 / 10000) — NOT floor(4100 * 500 / 10000)
+      netAmount: 3920, // 4100 - 180
+    });
+  });
+
+  it('a PERCENT discount reduces the commission base (merchandise-attributable)', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({ ...STORE, deliveryFeeCents: 500 } as never);
+    prismaMock.discount.findUnique.mockResolvedValue({
+      ...ACTIVE_FREE_DELIVERY,
+      kind: 'PERCENT',
+      percentOff: 25,
+    } as never);
+    prismaMock.order.create.mockResolvedValue(seededOrder() as never);
+    prismaMock.order.update.mockResolvedValue(seededOrder() as never);
+    prismaMock.platformSettings.findUnique.mockResolvedValueOnce({
+      id: 'default',
+      commissionRateBp: 500,
+      commissionRateBpPro: null,
+      updatedAt: new Date(),
+    } as never);
+
+    await POST(makePost({ ...validBody, discountCode: 'save25' }));
+
+    const data = prismaMock.order.create.mock.calls[0]?.[0]?.data;
+    // subtotal 3600, 25% off = 900 → taxable base 2700; delivery 500 kept
+    // (never part of the base) → amount 3600 - 900 + 500 = 3200.
+    expect(data).toMatchObject({
+      discountCents: 900,
+      deliveryFeeCents: 500,
+      amount: 3200,
+      taxableAmountCents: 2700,
+      commissionAmount: 135, // floor(2700 * 500 / 10000)
+      netAmount: 3065, // 3200 - 135
+    });
+  });
+
+  it('a FREE_DELIVERY discount does NOT reduce the merchandise commission base', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({ ...STORE, deliveryFeeCents: 500 } as never);
+    prismaMock.discount.findUnique.mockResolvedValue(ACTIVE_FREE_DELIVERY as never);
+    prismaMock.order.create.mockResolvedValue(seededOrder() as never);
+    prismaMock.order.update.mockResolvedValue(seededOrder() as never);
+    prismaMock.platformSettings.findUnique.mockResolvedValueOnce({
+      id: 'default',
+      commissionRateBp: 500,
+      commissionRateBpPro: null,
+      updatedAt: new Date(),
+    } as never);
+
+    await POST(makePost({ ...validBody, discountCode: 'freeship' }));
+
+    const data = prismaMock.order.create.mock.calls[0]?.[0]?.data;
+    // The $5 fee is waived (discountCents 500) but the base is untouched —
+    // it was never derived from delivery to begin with.
+    expect(data).toMatchObject({
+      deliveryFeeCents: 0,
+      discountCents: 500,
+      amount: 3600,
+      taxableAmountCents: 3600, // NOT 3100 — this discount never touched merchandise
+      commissionAmount: 180, // floor(3600 * 500 / 10000)
+    });
+  });
+
+  it('a PRO store resolves commissionRateBpPro instead of the base rate, at creation', async () => {
+    prismaMock.store.findFirst.mockResolvedValue({ ...STORE, plan: 'PRO' } as never);
+    prismaMock.order.create.mockResolvedValue(seededOrder() as never);
+    prismaMock.order.update.mockResolvedValue(seededOrder() as never);
+    prismaMock.platformSettings.findUnique.mockResolvedValueOnce({
+      id: 'default',
+      commissionRateBp: 500,
+      commissionRateBpPro: 150,
+      updatedAt: new Date(),
+    } as never);
+
+    await POST(makePost(validBody));
+
+    const data = prismaMock.order.create.mock.calls[0]?.[0]?.data;
+    expect(data).toMatchObject({
+      commissionRateBp: 150,
+      commissionAmount: 54, // floor(3600 * 150 / 10000)
+    });
+  });
+
+  it('resolves PlatformSettings exactly once per checkout request', async () => {
+    prismaMock.store.findFirst.mockResolvedValue(STORE as never);
+    prismaMock.order.create.mockResolvedValue(seededOrder() as never);
+    prismaMock.order.update.mockResolvedValue(seededOrder() as never);
+
+    await POST(makePost(validBody));
+
+    expect(prismaMock.platformSettings.findUnique).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('POST /api/orders — idempotency (CR-02)', () => {
   it('replays the prior outcome on the same Idempotency-Key + same cart', async () => {
     const hash = fingerprintBody({
@@ -870,7 +1004,19 @@ describe('POST /api/orders — Stripe Connect routing (Phase 3)', () => {
       stripeAccountId: 'acct_seller_1',
       stripeOnboardingStatus: 'ACTIVE',
     } as never);
-    prismaMock.order.create.mockResolvedValue(seededOrder({ provider: 'stripe_connect' }) as never);
+    // Financial architecture (Phase 2B) — the commission is now frozen at
+    // creation (before Stripe is ever called), so the mocked create() must
+    // return the same numbers the route itself computed and persisted,
+    // exactly like the real Prisma client would.
+    prismaMock.order.create.mockResolvedValue(
+      seededOrder({
+        provider: 'stripe_connect',
+        taxableAmountCents: 3600,
+        commissionRateBp: 600,
+        commissionAmount: 216, // floor(3600 * 600 / 10000)
+        netAmount: 3384,
+      }) as never,
+    );
     prismaMock.order.update.mockResolvedValue(
       seededOrder({
         provider: 'stripe_connect',
@@ -897,11 +1043,23 @@ describe('POST /api/orders — Stripe Connect routing (Phase 3)', () => {
     const chargeArgs = provider.chargeConnected.mock.calls[0]?.[0];
     expect(chargeArgs).toMatchObject({
       destinationAccountId: 'acct_seller_1',
-      applicationFeeAmount: 216, // floor(3600 * 600 / 10000)
+      // Sourced from order.commissionAmount (the frozen value), not
+      // recomputed inline against order.amount — proven below by asserting
+      // PlatformSettings is read exactly once for the whole request.
+      applicationFeeAmount: 216,
     });
 
     const createArgs = prismaMock.order.create.mock.calls[0]?.[0];
     expect(createArgs?.data?.provider).toBe('stripe_connect');
+    expect(createArgs?.data).toMatchObject({
+      taxableAmountCents: 3600,
+      commissionRateBp: 600,
+      commissionAmount: 216,
+      netAmount: 3384,
+    });
+    // The freeze reads PlatformSettings exactly once, before order.create —
+    // never again inside the Connect charge closure.
+    expect(prismaMock.platformSettings.findUnique).toHaveBeenCalledTimes(1);
   });
 
   it('still routes as platform when stripeOnboardingStatus is PENDING/RESTRICTED, not just ACTIVE', async () => {

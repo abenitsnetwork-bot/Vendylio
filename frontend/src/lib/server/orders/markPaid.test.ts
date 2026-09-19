@@ -339,6 +339,117 @@ describe('applyOrderPaidEffects', () => {
     expect(kinds).not.toContain('notification.low_stock');
   });
 
+  describe('commission freeze (Financial Architecture Phase 2B)', () => {
+    const FROZEN_ORDER: OrderForPaidEffects = {
+      ...BASE_ORDER,
+      // Simulates what api/orders/route.ts already computed and persisted at
+      // creation: taxable base 3600 at 500bp → commission 180, net 3420.
+      taxableAmountCents: 3600,
+      commissionRateBp: 500,
+      commissionAmount: 180,
+      netAmount: 3420,
+    };
+
+    it('uses the frozen commission/net and never touches PlatformSettings', async () => {
+      prismaMock.store.findUnique.mockResolvedValueOnce({
+        plan: 'FREE',
+        organization: { ownerId: 'seller-1' },
+      } as never);
+      prismaMock.product.findUnique.mockResolvedValueOnce({ quantity: 10 } as never);
+
+      await applyOrderPaidEffects(prismaMock, FROZEN_ORDER, { paymentMethod: 'card' });
+
+      expect(prismaMock.order.update).toHaveBeenCalledWith({
+        where: { id: 'order-1' },
+        data: expect.objectContaining({
+          status: 'PAID',
+          commissionAmount: 180,
+          netAmount: 3420,
+        }),
+      });
+      // The whole point of freezing: markPaid must never re-resolve the rate.
+      expect(prismaMock.platformSettings.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('rate freeze holds even if PlatformSettings changes between order creation and payment', async () => {
+      // If markPaid recomputed instead of trusting the frozen values, this
+      // would flip the result to a rate B commission — proving it doesn't.
+      prismaMock.store.findUnique.mockResolvedValueOnce({
+        plan: 'FREE',
+        organization: { ownerId: 'seller-1' },
+      } as never);
+      prismaMock.product.findUnique.mockResolvedValueOnce({ quantity: 10 } as never);
+      prismaMock.platformSettings.findUnique.mockResolvedValueOnce({
+        id: 'default',
+        commissionRateBp: 999, // rate B — deliberately different from the frozen 500bp (rate A)
+        commissionRateBpPro: null,
+        updatedAt: new Date(),
+      } as never);
+
+      await applyOrderPaidEffects(prismaMock, FROZEN_ORDER, { paymentMethod: 'card' });
+
+      expect(prismaMock.order.update).toHaveBeenCalledWith({
+        where: { id: 'order-1' },
+        data: expect.objectContaining({ commissionAmount: 180, netAmount: 3420 }),
+      });
+      expect(prismaMock.platformSettings.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('a Cash App/Zelle CommissionCharge uses the frozen commissionAmount, not a recompute', async () => {
+      prismaMock.store.findUnique.mockResolvedValueOnce({
+        plan: 'FREE',
+        organization: { ownerId: 'seller-1' },
+      } as never);
+      prismaMock.product.findUnique.mockResolvedValueOnce({ quantity: 10 } as never);
+
+      await applyOrderPaidEffects(
+        prismaMock,
+        { ...FROZEN_ORDER, provider: 'zelle_manual' },
+        { paymentMethod: 'zelle' },
+      );
+
+      expect(prismaMock.commissionCharge.upsert).toHaveBeenCalledWith({
+        where: { orderId_kind: { orderId: 'order-1', kind: 'SALE' } },
+        create: {
+          storeId: 'store-1',
+          orderId: 'order-1',
+          amountCents: 180,
+          currency: 'USD',
+          status: 'OWED',
+          kind: 'SALE',
+        },
+        update: {},
+      });
+      expect(prismaMock.platformSettings.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('a legacy Order (no frozen values) still recomputes exactly as before Phase 2B', async () => {
+      // BASE_ORDER carries no taxableAmountCents/commissionRateBp — the
+      // historical-compatibility branch, unchanged from pre-Phase-2B
+      // behavior. This is the same assertion as the very first test in this
+      // file, restated here to make the legacy/frozen split explicit.
+      prismaMock.store.findUnique.mockResolvedValueOnce({
+        plan: 'FREE',
+        organization: { ownerId: 'seller-1' },
+      } as never);
+      prismaMock.product.findUnique.mockResolvedValueOnce({ quantity: 10 } as never);
+      prismaMock.platformSettings.findUnique.mockResolvedValueOnce({
+        id: 'default',
+        commissionRateBp: 600,
+        commissionRateBpPro: null,
+        updatedAt: new Date(),
+      } as never);
+
+      await applyOrderPaidEffects(prismaMock, BASE_ORDER, { paymentMethod: 'card' });
+
+      expect(prismaMock.order.update).toHaveBeenCalledWith({
+        where: { id: 'order-1' },
+        data: expect.objectContaining({ commissionAmount: 216, netAmount: 3384 }),
+      });
+      expect(prismaMock.platformSettings.findUnique).toHaveBeenCalledOnce();
+    });
+  });
+
   it('applies the Phase 12 PRO commission discount when the store is on PRO', async () => {
     prismaMock.store.findUnique.mockResolvedValueOnce({
       plan: 'PRO',

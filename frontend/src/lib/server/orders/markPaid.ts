@@ -64,6 +64,14 @@ export interface OrderForPaidEffects {
   deliveryQuoteId?: string | null;
   providerQuoteId?: string | null;
   deliveryQuoteExpiresAt?: Date | null;
+  /** Financial architecture (Phase 2B) — the commission decision frozen at
+   * order creation (api/orders/route.ts). Absent/null only for an Order
+   * created before this freeze shipped — see the historical-compatibility
+   * branch below; never backfilled. */
+  taxableAmountCents?: number | null;
+  commissionRateBp?: number | null;
+  commissionAmount?: number | null;
+  netAmount?: number | null;
 }
 
 export async function applyOrderPaidEffects(
@@ -86,13 +94,31 @@ export async function applyOrderPaidEffects(
     },
   });
 
-  const { baseRateBp, proRateBp } = await getPlatformCommissionRates(tx);
-  const rateBp = resolveCommissionRateBp({ plan: store?.plan ?? 'FREE', baseRateBp, proRateBp });
-  // Phase 1b — commission is computed the same for every provider now. For
-  // Cash App / Zelle the money went straight to the merchant, so the cut is a
-  // receivable (the CommissionCharge written below), not something already in
-  // Vendylio's hands.
-  const { commission, net } = computeCommission(order.amount, rateBp);
+  // Financial architecture (Phase 2B) — the commission decision was already
+  // made exactly once, at order creation (api/orders/route.ts), and frozen
+  // on taxableAmountCents/commissionRateBp/commissionAmount/netAmount. A new
+  // Order NEVER recomputes here or re-resolves PlatformSettings — that is
+  // precisely the divergence bug (Stripe charging one rate, the ledger
+  // recording another) the freeze exists to make structurally impossible.
+  //
+  // An Order created before this freeze shipped carries no frozen values
+  // (taxableAmountCents/commissionRateBp absent or null) — for that narrow,
+  // time-bounded case only, preserve the exact pre-Phase-2B behavior
+  // (recompute from the order's full amount and the CURRENT plan-resolved
+  // rate) rather than inventing a frozen decision that was never actually
+  // made for that order. Historical commissionAmount/netAmount already on
+  // record are never rewritten by this branch either way.
+  let commission: number;
+  let net: number;
+  const isFrozen = order.taxableAmountCents != null && order.commissionRateBp != null;
+  if (isFrozen) {
+    commission = order.commissionAmount ?? 0;
+    net = order.netAmount ?? order.amount - commission;
+  } else {
+    const { baseRateBp, proRateBp } = await getPlatformCommissionRates(tx);
+    const rateBp = resolveCommissionRateBp({ plan: store?.plan ?? 'FREE', baseRateBp, proRateBp });
+    ({ commission, net } = computeCommission(order.amount, rateBp));
+  }
   const isManualMoney = MANUAL_MONEY_PROVIDERS.has(order.provider);
   const paymentMethod = opts.paymentMethod ?? null;
   const stripePaymentIntentId = opts.stripePaymentIntentId ?? null;
