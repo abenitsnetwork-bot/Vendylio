@@ -14,13 +14,38 @@ interface ReportMeta {
   description: string;
   usesDateRange: boolean;
   usesStoreFilter: boolean;
+  usesEventTypeFilter?: boolean;
 }
 interface Catalogue {
   reports: ReportMeta[];
   stores: { id: string; name: string }[];
 }
 
-type Preset = 'this-month' | 'last-month' | 'last-30' | 'qtd' | 'ytd' | 'custom';
+type Preset =
+  | 'today'
+  | 'yesterday'
+  | 'last-7'
+  | 'this-month'
+  | 'last-month'
+  | 'last-30'
+  | 'qtd'
+  | 'ytd'
+  | 'custom';
+
+// Phase 2G §11 — the Financial Event Explorer's filter options. The real,
+// currently-written vocabulary (see reports/builders/financialEvents.ts's
+// KNOWN_FINANCIAL_EVENT_TYPES) — not a bigger aspirational list.
+const FINANCIAL_EVENT_TYPES = [
+  'PAYMENT_SUCCEEDED',
+  'REFUND_COMPLETED',
+  'APPLICATION_FEE_CREATED',
+  'APPLICATION_FEE_REVERSED',
+  'DISPUTE_OPENED',
+  'DISPUTE_UPDATED',
+  'DISPUTE_CLOSED',
+  'STRIPE_FEE_RECORDED',
+  'RECONCILIATION_DISCREPANCY',
+];
 
 /** Per-report card icon — falls back to a generic chart glyph. */
 const REPORT_ICON: Record<string, IconName> = {
@@ -38,6 +63,9 @@ const REPORT_ICON: Record<string, IconName> = {
   'admin-activity': 'shield',
   'seller-tax-summary': 'file-text',
   'suspended-accounts': 'lock',
+  disputes: 'alert-circle',
+  'reconciliation-discrepancies': 'search',
+  'financial-events': 'list',
 };
 
 function isoDay(d: Date): string {
@@ -47,8 +75,17 @@ function rangeForPreset(p: Preset): { from: string; to: string } {
   const now = new Date();
   const y = now.getUTCFullYear();
   const m = now.getUTCMonth();
+  const d = now.getUTCDate();
   const endOfToday = new Date(Date.UTC(y, m, now.getUTCDate(), 23, 59, 59));
   switch (p) {
+    case 'today':
+      return { from: isoDay(new Date(Date.UTC(y, m, d))), to: isoDay(endOfToday) };
+    case 'yesterday': {
+      const yest = isoDay(new Date(Date.UTC(y, m, d - 1)));
+      return { from: yest, to: yest };
+    }
+    case 'last-7':
+      return { from: isoDay(new Date(now.getTime() - 7 * 86_400_000)), to: isoDay(endOfToday) };
     case 'this-month':
       return { from: isoDay(new Date(Date.UTC(y, m, 1))), to: isoDay(endOfToday) };
     case 'last-month':
@@ -71,6 +108,9 @@ function rangeForPreset(p: Preset): { from: string; to: string } {
 }
 
 const PRESET_LABELS: Record<Exclude<Preset, 'custom'>, string> = {
+  today: 'Today',
+  yesterday: 'Yesterday',
+  'last-7': 'Last 7 days',
   'this-month': 'This month',
   'last-month': 'Last month',
   'last-30': 'Last 30 days',
@@ -89,6 +129,7 @@ export default function AdminReportsPage() {
   const [preset, setPreset] = useState<Preset>('this-month');
   const [custom, setCustom] = useState(rangeForPreset('this-month'));
   const [storeId, setStoreId] = useState('');
+  const [eventType, setEventType] = useState('');
   const [report, setReport] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -113,8 +154,9 @@ export default function AdminReportsPage() {
       qs.set('to', new Date(range.to + 'T23:59:59Z').toISOString());
     }
     if (meta?.usesStoreFilter && storeId) qs.set('storeId', storeId);
+    if (meta?.usesEventTypeFilter && eventType) qs.set('eventType', eventType);
     return qs;
-  }, [meta, range.from, range.to, storeId]);
+  }, [meta, range.from, range.to, storeId, eventType]);
 
   useEffect(() => {
     api<Catalogue>('/api/admin/reports')
@@ -323,6 +365,23 @@ export default function AdminReportsPage() {
                     {cat?.stores.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {meta.usesEventTypeFilter && (
+                <label className="text-xs font-semibold text-muted-foreground">
+                  Event type
+                  <select
+                    value={eventType}
+                    onChange={(e) => setEventType(e.target.value)}
+                    className="mt-1 block max-w-[220px] rounded-lg border border-border bg-input px-3 py-2 text-sm text-foreground"
+                  >
+                    <option value="">All event types</option>
+                    {FINANCIAL_EVENT_TYPES.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
                       </option>
                     ))}
                   </select>

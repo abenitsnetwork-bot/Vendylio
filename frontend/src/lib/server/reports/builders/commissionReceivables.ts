@@ -9,10 +9,20 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * Snapshot (ignores the date range): the platform's outstanding Cash App /
  * Zelle commission receivable, per store, with OWED aged into buckets and
  * INVOICED (billed, awaiting payment) shown separately.
+ *
+ * Phase 2G (§21): also reports the two RESOLVED statuses — SETTLED (all-time
+ * total collected) and WAIVED (all-time total forgiven) — as summary KPIs,
+ * so all four CommissionCharge statuses are visible somewhere, without
+ * folding them into the outstanding/aging row structure they don't belong
+ * in. CommissionCharge stays the sole source read here — nothing is
+ * recreated from Order.
  */
 export async function buildCommissionReceivables({ storeId }: ReportArgs): Promise<ReportData> {
   const charges = await prisma.commissionCharge.findMany({
-    where: { status: { in: ['OWED', 'INVOICED'] }, ...(storeId ? { storeId } : {}) },
+    where: {
+      status: { in: ['OWED', 'INVOICED', 'SETTLED', 'WAIVED'] },
+      ...(storeId ? { storeId } : {}),
+    },
     select: { storeId: true, amountCents: true, status: true, createdAt: true },
   });
 
@@ -37,7 +47,19 @@ export async function buildCommissionReceivables({ storeId }: ReportArgs): Promi
   }
   const byStore = new Map<string, Agg>();
   const now = Date.now();
+  // SETTLED / WAIVED are resolved — global totals only (§21), not part of
+  // the outstanding/aging rows below (those are OWED + INVOICED only).
+  let totalSettled = 0;
+  let totalWaived = 0;
   for (const c of charges) {
+    if (c.status === 'SETTLED') {
+      totalSettled += c.amountCents;
+      continue;
+    }
+    if (c.status === 'WAIVED') {
+      totalWaived += c.amountCents;
+      continue;
+    }
     let a = byStore.get(c.storeId);
     if (!a) {
       a = {
@@ -93,6 +115,8 @@ export async function buildCommissionReceivables({ storeId }: ReportArgs): Promi
       { label: 'Invoiced (awaiting)', value: usd(totalInvoiced) },
       { label: 'Stores with a balance', value: String(rows.length) },
       { label: 'Owed 90+ days', value: usd(over90) },
+      { label: 'Settled (all-time)', value: usd(totalSettled) },
+      { label: 'Waived (all-time)', value: usd(totalWaived) },
     ],
     columns: [
       { key: 'store', label: 'Store' },
@@ -108,6 +132,7 @@ export async function buildCommissionReceivables({ storeId }: ReportArgs): Promi
     notes: [
       'OWED is collected by withholding it from the store’s next payout, or by a Stripe invoice once it clears the minimum. INVOICED is billed and awaiting invoice.paid.',
       'Aging is measured from each charge’s creation date.',
+      'Settled and waived are all-time totals across every store — resolved charges, not part of the outstanding aging above.',
     ],
   };
 }

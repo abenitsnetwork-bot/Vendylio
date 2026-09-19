@@ -23,6 +23,9 @@ import { buildCustomers } from './builders/customers';
 import { buildReviews } from './builders/reviews';
 import { buildWebhookHealth } from './builders/webhookHealth';
 import { buildEmailDelivery } from './builders/emailDelivery';
+import { buildDisputes } from './builders/disputes';
+import { buildReconciliationDiscrepancies } from './builders/reconciliationDiscrepancies';
+import { buildFinancialEvents } from './builders/financialEvents';
 
 export const REPORTS: Record<ReportType, ReportDef> = {
   'platform-revenue': {
@@ -227,6 +230,33 @@ export const REPORTS: Record<ReportType, ReportDef> = {
     usesStoreFilter: false,
     build: buildEmailDelivery,
   },
+  disputes: {
+    type: 'disputes',
+    label: 'Disputes',
+    description:
+      'Stripe disputes opened in the period — status, amount, evidence deadline, at-risk view.',
+    usesDateRange: true,
+    usesStoreFilter: true,
+    build: buildDisputes,
+  },
+  'reconciliation-discrepancies': {
+    type: 'reconciliation-discrepancies',
+    label: 'Reconciliation discrepancies',
+    description:
+      'Orders where Stripe reports paid but Vendylio still shows PENDING/EXPIRED — detection only.',
+    usesDateRange: true,
+    usesStoreFilter: true,
+    build: buildReconciliationDiscrepancies,
+  },
+  'financial-events': {
+    type: 'financial-events',
+    label: 'Financial event explorer',
+    description: 'Raw, filterable view of the FinancialEvent audit ledger — every recorded fact.',
+    usesDateRange: true,
+    usesStoreFilter: true,
+    usesEventTypeFilter: true,
+    build: buildFinancialEvents,
+  },
 };
 
 export const REPORT_LIST = Object.values(REPORTS).map((r) => ({
@@ -235,6 +265,7 @@ export const REPORT_LIST = Object.values(REPORTS).map((r) => ({
   description: r.description,
   usesDateRange: r.usesDateRange,
   usesStoreFilter: r.usesStoreFilter,
+  usesEventTypeFilter: r.usesEventTypeFilter ?? false,
 }));
 
 export function isReportType(v: string): v is ReportType {

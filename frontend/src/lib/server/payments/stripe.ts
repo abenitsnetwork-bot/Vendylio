@@ -223,7 +223,11 @@ export function createStripeProvider(env: StripeEnv): StripeProviderHandle {
           ? 'paid'
           : event.type === 'charge.refunded'
             ? 'refunded'
-            : 'other';
+            : event.type === 'charge.dispute.created' ||
+                event.type === 'charge.dispute.updated' ||
+                event.type === 'charge.dispute.closed'
+              ? 'dispute'
+              : 'other';
       return { externalId, eventType, kind };
     },
   };

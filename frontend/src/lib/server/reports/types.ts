@@ -28,7 +28,10 @@ export type ReportType =
   | 'customers'
   | 'reviews'
   | 'webhook-health'
-  | 'email-delivery';
+  | 'email-delivery'
+  | 'disputes'
+  | 'reconciliation-discrepancies'
+  | 'financial-events';
 
 export type ColumnFormat = 'text' | 'usd' | 'number' | 'percent' | 'date';
 
@@ -64,6 +67,17 @@ export interface ReportArgs {
   to: Date;
   /** Optional single-store filter (Store.id). */
   storeId?: string | undefined;
+  /** Phase 2G — Financial Event Explorer filters. Only 'financial-events'
+   *  reads these; every other builder ignores them. FinancialEvent.eventType
+   *  is a free-text column (no DB enum), so this stays a plain string rather
+   *  than a closed union — the explorer only offers the eventTypes the
+   *  architecture actually writes (see financialEvents.ts), never invents
+   *  new ones. */
+  eventType?: string | undefined;
+  provider?: string | undefined;
+  sourceType?: string | undefined;
+  sourceId?: string | undefined;
+  orderId?: string | undefined;
 }
 
 export interface ReportDef {
@@ -74,5 +88,8 @@ export interface ReportDef {
   usesDateRange: boolean;
   /** true = the UI offers the optional store filter. */
   usesStoreFilter: boolean;
+  /** true = the UI offers the optional FinancialEvent.eventType filter
+   *  (Phase 2G — the Financial Event Explorer is the only report using it). */
+  usesEventTypeFilter?: boolean;
   build: (args: ReportArgs) => Promise<ReportData>;
 }

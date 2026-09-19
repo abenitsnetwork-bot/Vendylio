@@ -74,10 +74,22 @@ export async function GET(
 
     const storeId = url.searchParams.get('storeId') || undefined;
 
+    // Phase 2G — the Financial Event Explorer's extra filters. Harmless
+    // no-ops for every other builder (they destructure only the args they
+    // use); gated the same way storeId already is, on the report's own
+    // declared capability, so an unrelated report can't be filtered by
+    // eventType just because the query string happened to carry one.
     const report = await def.build({
       from,
       to,
       storeId: def.usesStoreFilter ? storeId : undefined,
+      eventType: def.usesEventTypeFilter
+        ? (url.searchParams.get('eventType') ?? undefined)
+        : undefined,
+      provider: url.searchParams.get('provider') ?? undefined,
+      sourceType: url.searchParams.get('sourceType') ?? undefined,
+      sourceId: url.searchParams.get('sourceId') ?? undefined,
+      orderId: url.searchParams.get('orderId') ?? undefined,
     });
 
     if (format === 'csv') {

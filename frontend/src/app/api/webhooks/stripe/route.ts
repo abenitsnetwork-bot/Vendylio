@@ -47,6 +47,16 @@ import { createWebhookHandler } from '@/lib/server/webhook/handler';
 import { stripeWebhookProvider } from '@/lib/server/webhook/stripe';
 import { applyOrderPaidEffects } from '@/lib/server/orders/markPaid';
 import { applyOrderRefundedEffects } from '@/lib/server/orders/refund';
+import { recordStripeFee } from '@/lib/server/payments/stripe-fee-capture';
+import {
+  recordPaymentSucceeded,
+  recordApplicationFeeCreated,
+} from '@/lib/server/payments/financial-events';
+import {
+  handleDisputeCreated,
+  handleDisputeUpdated,
+  handleDisputeClosed,
+} from '@/lib/server/payments/disputes';
 import { prisma } from '@/lib/server/prisma';
 import { createLogger } from '@/lib/server/logger';
 
@@ -101,11 +111,78 @@ export const POST = createWebhookHandler<Stripe.Event>({
     }
 
     const paymentMethod = session.payment_method_types?.[0] ?? null;
+    const stripePaymentIntentId = paymentIntentId(session.payment_intent);
     await applyOrderPaidEffects(tx, order, {
       paymentMethod,
-      stripePaymentIntentId: paymentIntentId(session.payment_intent),
+      stripePaymentIntentId,
     });
 
+    // Financial architecture (Phase 2E) — the audit fact that this payment
+    // succeeded. Scoped to this Stripe checkout.session.completed flow only
+    // — Cash App / Zelle manual confirmations (no webhook of their own)
+    // never reach this handler, so they never emit PAYMENT_SUCCEEDED.
+    await recordPaymentSucceeded(tx, order, {
+      stripeSessionId: session.id,
+      stripePaymentIntentId,
+    });
+
+    // Stripe Connect destination charges only — order.commissionAmount was
+    // already frozen at Order creation (Phase 2B, api/orders/route.ts) and
+    // is exactly what was sent as application_fee_amount; never
+    // recalculated or re-resolved here.
+    if (order.provider === 'stripe_connect' && order.commissionAmount != null) {
+      await recordApplicationFeeCreated(
+        tx,
+        {
+          id: order.id,
+          storeId: order.storeId,
+          commissionAmount: order.commissionAmount,
+          currency: order.currency,
+        },
+        { stripePaymentIntentId },
+      );
+    }
+
+    // Financial architecture (Phase 2D) — best-effort, opportunistic Stripe
+    // processing-fee capture. Runs AFTER the transaction commits, on the
+    // standalone `prisma` client, never inside `tx`: an external Stripe call
+    // has no place holding a Serializable transaction open, and a Balance
+    // Transaction that isn't ready yet must never fail or roll back the
+    // payment that already succeeded. Errors are caught + logged by the
+    // webhook factory itself; the stripe-fee-capture-sweep cron is the
+    // guaranteed-eventually-consistent fallback for whatever this misses.
+    return {
+      postCommit: async () => {
+        await recordStripeFee(prisma, order.id);
+      },
+    };
+  },
+
+  // Financial architecture (Phase 2E) — charge.dispute.{created,updated,
+  // closed} all funnel through the factory's 'dispute' kind (see
+  // lib/server/webhook/handler.ts) to this one handler; the three Stripe
+  // event types share nothing else in common with onPaid/onRefunded, so a
+  // single slot with an internal switch mirrors how onRefunded already
+  // owns everything about the refund lifecycle. Deliberately does NOT
+  // touch Order.status, computeBalance(), or create any withdrawal/payout —
+  // disputes are audit/risk tracking only (see disputes.ts header).
+  async onDispute(event, tx) {
+    const dispute = event.data.object as Stripe.Dispute;
+    switch (event.type) {
+      case 'charge.dispute.created':
+        await handleDisputeCreated(tx, dispute);
+        break;
+      case 'charge.dispute.updated':
+        await handleDisputeUpdated(tx, dispute);
+        break;
+      case 'charge.dispute.closed':
+        await handleDisputeClosed(tx, dispute);
+        break;
+      default:
+        log.warn('stripe webhook: onDispute received an unexpected event type', {
+          eventType: event.type,
+        });
+    }
     return {};
   },
 

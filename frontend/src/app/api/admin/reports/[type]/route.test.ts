@@ -6,12 +6,19 @@ vi.mock('@/lib/server/middleware/rate-limit-by-userid', () => ({ enforceAdminRat
 
 const build = vi.fn();
 vi.mock('@/lib/server/reports/registry', () => ({
-  isReportType: (v: string) => v === 'payouts',
+  isReportType: (v: string) => v === 'payouts' || v === 'financial-events',
   REPORTS: {
     payouts: {
       type: 'payouts',
       usesStoreFilter: true,
       usesDateRange: true,
+      build: (...a: unknown[]) => build(...a),
+    },
+    'financial-events': {
+      type: 'financial-events',
+      usesStoreFilter: true,
+      usesDateRange: true,
+      usesEventTypeFilter: true,
       build: (...a: unknown[]) => build(...a),
     },
   },
@@ -106,5 +113,31 @@ describe('GET /api/admin/reports/[type]', () => {
     const arg = build.mock.calls[0]?.[0];
     expect(arg.storeId).toBe('s1');
     expect(arg.from.toISOString()).toBe('2026-08-01T00:00:00.000Z');
+  });
+
+  it('Phase 2G — passes eventType through only for a report that declares usesEventTypeFilter', async () => {
+    await GET(req('?eventType=STRIPE_FEE_RECORDED&format=preview'), params('financial-events'));
+    const arg = build.mock.calls[0]?.[0];
+    expect(arg.eventType).toBe('STRIPE_FEE_RECORDED');
+  });
+
+  it('Phase 2G — omits eventType for a report that does not declare usesEventTypeFilter', async () => {
+    await GET(req('?eventType=STRIPE_FEE_RECORDED&format=preview'), params('payouts'));
+    const arg = build.mock.calls[0]?.[0];
+    expect(arg.eventType).toBeUndefined();
+  });
+
+  it('Phase 2G — passes provider/sourceType/sourceId/orderId through regardless', async () => {
+    await GET(
+      req('?provider=stripe&sourceType=Order&sourceId=order-9&orderId=order-9&format=preview'),
+      params('financial-events'),
+    );
+    const arg = build.mock.calls[0]?.[0];
+    expect(arg).toMatchObject({
+      provider: 'stripe',
+      sourceType: 'Order',
+      sourceId: 'order-9',
+      orderId: 'order-9',
+    });
   });
 });

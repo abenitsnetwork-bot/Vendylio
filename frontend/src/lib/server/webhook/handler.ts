@@ -28,7 +28,7 @@ import { NextResponse } from 'next/server';
 import type { PrismaClient, Prisma } from '@prisma/client';
 import { createLogger } from '../logger';
 
-export type WebhookEventType = 'paid' | 'refunded' | 'failed' | 'other';
+export type WebhookEventType = 'paid' | 'refunded' | 'failed' | 'dispute' | 'other';
 
 export interface ParsedIds {
   externalId: string;
@@ -66,6 +66,10 @@ export interface WebhookHandlerOptions<TPayload> {
   onPaid?: WebhookEventHandler<TPayload>;
   onRefunded?: WebhookEventHandler<TPayload>;
   onFailed?: WebhookEventHandler<TPayload>;
+  /** Financial architecture (Phase 2E) — a risk/audit-only event kind (e.g.
+   *  Stripe disputes). Never mutates Order.status or balance-affecting state
+   *  itself; that stays the job of onPaid/onRefunded/onFailed. */
+  onDispute?: WebhookEventHandler<TPayload>;
 }
 
 const logger = createLogger();
@@ -141,6 +145,7 @@ export function createWebhookHandler<TPayload>(
           if (kind === 'paid') handler = opts.onPaid;
           else if (kind === 'refunded') handler = opts.onRefunded;
           else if (kind === 'failed') handler = opts.onFailed;
+          else if (kind === 'dispute') handler = opts.onDispute;
 
           if (handler) {
             const result = await handler(payload, tx as unknown as PrismaTransactionClient);

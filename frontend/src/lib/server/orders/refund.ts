@@ -10,6 +10,7 @@ import { Prisma } from '@prisma/client';
 import type { PrismaTransactionClient } from '@/lib/server/webhook/handler';
 import { enqueueOutbox } from '@/lib/server/outbox';
 import { applyStockChange } from '@/lib/server/inventory/adjust';
+import { recordRefundCompleted } from '@/lib/server/payments/financial-events';
 
 interface OrderLineItem {
   productId: string;
@@ -57,6 +58,15 @@ export async function applyOrderRefundedEffects(
   await tx.orderStatusEvent.create({
     data: { orderId: order.id, status: 'REFUNDED', actorType: 'SELLER' },
   });
+
+  // Financial architecture (Phase 2E) — the audit fact that this refund
+  // completed. Idempotent via (REFUND_COMPLETED, Order, order.id) — the
+  // status guard above already prevents this function from running twice
+  // to completion for the same order within one call, and a genuine
+  // concurrent race between the in-app refund route and this webhook (two
+  // separate Serializable transactions) is resolved by Postgres aborting
+  // one of them wholesale.
+  await recordRefundCompleted(tx, order);
 
   // Phase 1b — unwind the platform's Cash App / Zelle commission receivable.
   // OWED and never collected → WAIVE it (the merchant refunds the buyer from

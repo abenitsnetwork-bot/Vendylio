@@ -20,6 +20,12 @@ const PAYMENT_LABEL: Record<string, string> = {
  * Every checkout created in the window — one row per order, regardless of
  * payment outcome. Answers "how many orders, how many paid, what did buyers
  * abandon" across the platform (or one store).
+ *
+ * Phase 2G (§13/§24): adds the full frozen financial breakdown per order —
+ * taxable base, commission rate/amount, net amount, Stripe fee, PaymentIntent
+ * / Checkout Session ids, refund status, dispute status. All read from the
+ * Order row itself (or a Dispute join) — nothing here recalculates or
+ * overwrites anything.
  */
 export async function buildOrders({ from, to, storeId }: ReportArgs): Promise<ReportData> {
   const where: Prisma.OrderWhereInput = {
@@ -32,6 +38,7 @@ export async function buildOrders({ from, to, storeId }: ReportArgs): Promise<Re
     orderBy: { createdAt: 'desc' },
     take: TAKE,
     select: {
+      id: true,
       orderNumber: true,
       createdAt: true,
       storeId: true,
@@ -42,17 +49,37 @@ export async function buildOrders({ from, to, storeId }: ReportArgs): Promise<Re
       deliveryFeeCents: true,
       discountCents: true,
       amount: true,
+      taxableAmountCents: true,
+      commissionRateBp: true,
+      commissionAmount: true,
+      netAmount: true,
+      stripeFeeCents: true,
+      stripePaymentIntentId: true,
+      providerChargeId: true,
     },
   });
 
   const storeIds = [...new Set(orders.map((o) => o.storeId))];
-  const stores = storeIds.length
-    ? await prisma.store.findMany({
-        where: { id: { in: storeIds } },
-        select: { id: true, name: true },
-      })
-    : [];
+  const orderIds = orders.map((o) => o.id);
+  const [stores, disputes] = await Promise.all([
+    storeIds.length
+      ? prisma.store.findMany({ where: { id: { in: storeIds } }, select: { id: true, name: true } })
+      : Promise.resolve([]),
+    orderIds.length
+      ? prisma.dispute.findMany({
+          where: { orderId: { in: orderIds } },
+          orderBy: { createdAt: 'desc' },
+          select: { orderId: true, status: true },
+        })
+      : Promise.resolve([]),
+  ]);
   const nameById = new Map(stores.map((s) => [s.id, s.name]));
+  // One row per order — an order re-disputed more than once (rare) keeps
+  // only its most recent dispute status, matching the `orderBy` above.
+  const disputeStatusByOrder = new Map<string, string>();
+  for (const d of disputes) {
+    if (!disputeStatusByOrder.has(d.orderId)) disputeStatusByOrder.set(d.orderId, d.status);
+  }
 
   const rows = orders.map((o) => ({
     order: formatOrderNumber(o.orderNumber),
@@ -65,6 +92,15 @@ export async function buildOrders({ from, to, storeId }: ReportArgs): Promise<Re
     delivery: o.deliveryFeeCents,
     discount: o.discountCents,
     total: o.amount,
+    taxableAmount: o.taxableAmountCents,
+    commissionRate: o.commissionRateBp !== null ? o.commissionRateBp / 100 : null,
+    commission: o.commissionAmount,
+    netAmount: o.netAmount,
+    stripeFee: o.stripeFeeCents,
+    paymentIntentId: o.stripePaymentIntentId,
+    checkoutSessionId: o.providerChargeId,
+    refundStatus: o.status === 'REFUNDED' ? 'REFUNDED' : 'NOT_REFUNDED',
+    disputeStatus: disputeStatusByOrder.get(o.id) ?? 'NONE',
   }));
 
   const paid = orders.filter((o) => (PAID_ORDER_STATUSES as readonly string[]).includes(o.status));
@@ -101,10 +137,22 @@ export async function buildOrders({ from, to, storeId }: ReportArgs): Promise<Re
       { key: 'delivery', label: 'Delivery', format: 'usd' },
       { key: 'discount', label: 'Discount', format: 'usd' },
       { key: 'total', label: 'Total', format: 'usd' },
+      { key: 'taxableAmount', label: 'Taxable amount', format: 'usd' },
+      { key: 'commissionRate', label: 'Commission rate', format: 'percent' },
+      { key: 'commission', label: 'Commission', format: 'usd' },
+      { key: 'netAmount', label: 'Net amount', format: 'usd' },
+      { key: 'stripeFee', label: 'Stripe fee', format: 'usd' },
+      { key: 'paymentIntentId', label: 'PaymentIntent' },
+      { key: 'checkoutSessionId', label: 'Checkout Session' },
+      { key: 'refundStatus', label: 'Refund status' },
+      { key: 'disputeStatus', label: 'Dispute status' },
     ],
     rows,
     notes: [
       'Listed by the date the checkout was created, regardless of payment outcome. A PENDING row may still convert.',
+      'Taxable amount, commission rate/amount, and net amount are the values frozen on the Order at checkout (Phase 2B) — never recalculated. They are null for an order that predates that freeze.',
+      'Stripe fee is null until Stripe’s Balance Transaction has been captured (Phase 2D) — never estimated.',
+      'Dispute status is the most recent dispute on the order, or NONE if it has never been disputed.',
       orders.length >= TAKE
         ? `Truncated to the ${TAKE.toLocaleString('en-US')} most recent orders.`
         : '',

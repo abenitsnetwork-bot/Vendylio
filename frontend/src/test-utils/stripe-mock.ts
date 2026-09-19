@@ -15,7 +15,13 @@ import { NextRequest } from 'next/server';
 const stripe = new Stripe('sk_test_fixture_only', { apiVersion: '2026-07-29.dahlia' });
 
 export interface StripeFixtureOpts {
-  type?: 'checkout.session.completed' | 'charge.refunded' | 'checkout.session.expired';
+  type?:
+    | 'checkout.session.completed'
+    | 'charge.refunded'
+    | 'checkout.session.expired'
+    | 'charge.dispute.created'
+    | 'charge.dispute.updated'
+    | 'charge.dispute.closed';
   sessionId?: string;
   amountTotal?: number;
   customerEmail?: string | null;
@@ -28,6 +34,13 @@ export interface StripeFixtureOpts {
   /** charge.refunded only — `charge.refunded` bool (true = fully refunded). */
   chargeRefunded?: boolean;
   chargeId?: string;
+  /** charge.dispute.* only. */
+  disputeId?: string;
+  disputeAmount?: number;
+  disputeCurrency?: string;
+  disputeReason?: string;
+  disputeStatus?: string;
+  disputeEvidenceDueBy?: number | null;
 }
 
 export function stripeFixture(opts: StripeFixtureOpts = {}): {
@@ -49,15 +62,32 @@ export function stripeFixture(opts: StripeFixtureOpts = {}): {
           amount: opts.amountTotal ?? 3600,
           amount_refunded: opts.amountTotal ?? 3600,
         }
-      : {
-          id: sessionId,
-          object: 'checkout.session',
-          amount_total: opts.amountTotal ?? 3600,
-          customer_email: opts.customerEmail ?? null,
-          payment_method_types: opts.paymentMethodTypes ?? ['card'],
-          payment_status: opts.paymentStatus ?? 'paid',
-          payment_intent: paymentIntentId,
-        };
+      : type === 'charge.dispute.created' ||
+          type === 'charge.dispute.updated' ||
+          type === 'charge.dispute.closed'
+        ? {
+            id: opts.disputeId ?? 'dp_test_001',
+            object: 'dispute',
+            charge: opts.chargeId ?? 'ch_test_001',
+            payment_intent: paymentIntentId,
+            amount: opts.disputeAmount ?? 3600,
+            currency: opts.disputeCurrency ?? 'usd',
+            reason: opts.disputeReason ?? 'fraudulent',
+            status: opts.disputeStatus ?? 'needs_response',
+            evidence_details: {
+              due_by:
+                opts.disputeEvidenceDueBy === undefined ? 1893456000 : opts.disputeEvidenceDueBy,
+            },
+          }
+        : {
+            id: sessionId,
+            object: 'checkout.session',
+            amount_total: opts.amountTotal ?? 3600,
+            customer_email: opts.customerEmail ?? null,
+            payment_method_types: opts.paymentMethodTypes ?? ['card'],
+            payment_status: opts.paymentStatus ?? 'paid',
+            payment_intent: paymentIntentId,
+          };
 
   const event = {
     id: opts.eventId ?? 'evt_test_001',

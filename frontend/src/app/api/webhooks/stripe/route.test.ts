@@ -23,6 +23,11 @@ const productVariantFindUnique = vi.fn();
 const productVariantUpdate = vi.fn();
 const platformSettingsFindUnique = vi.fn();
 const deliveryUpsert = vi.fn();
+const financialEventFindUnique = vi.fn();
+const financialEventCreate = vi.fn();
+const disputeFindUnique = vi.fn();
+const disputeCreate = vi.fn();
+const disputeUpdate = vi.fn();
 
 const $transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>, _opts?: unknown) =>
   fn({
@@ -45,6 +50,8 @@ const $transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>, _opts?:
     orderStatusEvent: { create: orderStatusEventCreate },
     customer: { findUnique: customerFindUnique, create: customerCreate, update: customerUpdate },
     delivery: { upsert: deliveryUpsert },
+    financialEvent: { findUnique: financialEventFindUnique, create: financialEventCreate },
+    dispute: { findUnique: disputeFindUnique, create: disputeCreate, update: disputeUpdate },
   }),
 );
 
@@ -58,6 +65,14 @@ vi.mock('@/lib/server/prisma', () => ({
 const applyStockChange = vi.fn();
 vi.mock('@/lib/server/inventory/adjust', () => ({
   applyStockChange: (...args: unknown[]) => applyStockChange(...args),
+}));
+
+// Financial architecture (Phase 2D) — recordStripeFee is exhaustively
+// unit-tested on its own (stripe-fee-capture.test.ts); here we only assert
+// the route wires it into the postCommit hook with the right order id.
+const recordStripeFee = vi.fn();
+vi.mock('@/lib/server/payments/stripe-fee-capture', () => ({
+  recordStripeFee: (...args: unknown[]) => recordStripeFee(...args),
 }));
 
 beforeEach(() => {
@@ -83,6 +98,14 @@ beforeEach(() => {
   customerUpdate.mockReset();
   productVariantFindUnique.mockReset();
   productVariantUpdate.mockReset();
+  financialEventFindUnique.mockReset().mockResolvedValue(null);
+  financialEventCreate.mockReset();
+  disputeFindUnique.mockReset().mockResolvedValue(null);
+  disputeCreate.mockReset().mockResolvedValue({ id: 'dispute-1' });
+  disputeUpdate.mockReset().mockResolvedValue({ id: 'dispute-1' });
+  recordStripeFee
+    .mockReset()
+    .mockResolvedValue({ status: 'SKIPPED_NOT_APPLICABLE', reason: 'test' });
   applyStockChange.mockReset().mockResolvedValue({
     before: 0,
     after: 0,
@@ -102,6 +125,7 @@ const PAID_ORDER = {
   id: 'order-1',
   storeId: 'store-1',
   status: 'PENDING',
+  provider: 'stripe_platform',
   amount: 3600,
   currency: 'USD',
   customerEmail: 'buyer@example.com',
@@ -199,6 +223,27 @@ describe('POST /api/webhooks/stripe', () => {
     const notifPayload = (notifPayloadCall![0] as { data: { payload: { userId: string } } }).data
       .payload;
     expect(notifPayload.userId).toBe('seller-1');
+  });
+
+  it('Phase 2D — the postCommit hook attempts Stripe fee capture for the paid order', async () => {
+    orderFindFirst.mockResolvedValueOnce(PAID_ORDER);
+    productFindUnique.mockResolvedValueOnce({ quantity: 10 });
+    storeFindUnique.mockResolvedValueOnce({ organization: { ownerId: 'seller-1' } });
+    outboxCreate.mockResolvedValue({ id: 'ob1' });
+    platformSettingsFindUnique.mockResolvedValueOnce({
+      commissionRateBp: 600,
+      commissionRateBpPro: null,
+    });
+
+    const { POST } = await import('./route');
+    const { req } = stripeFixtureRequest();
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+    // Runs on the standalone prisma client, after the transaction has
+    // already committed — by the time POST() resolves, the factory has
+    // already awaited postCommit().
+    expect(recordStripeFee).toHaveBeenCalledWith(expect.anything(), 'order-1');
   });
 
   it('Phase 12 — a PRO store gets the discounted commissionRateBpPro rate', async () => {
@@ -584,6 +629,159 @@ describe('POST /api/webhooks/stripe', () => {
 
       expect(await res.json()).toEqual({ ok: true, deduped: true });
       expect(orderFindFirst).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Phase 2E — PAYMENT_SUCCEEDED / APPLICATION_FEE_CREATED', () => {
+    it('writes a PAYMENT_SUCCEEDED FinancialEvent on a successful payment', async () => {
+      orderFindFirst.mockResolvedValueOnce(PAID_ORDER);
+      productFindUnique.mockResolvedValueOnce({ quantity: 10 });
+      storeFindUnique.mockResolvedValueOnce({ organization: { ownerId: 'seller-1' } });
+
+      const { POST } = await import('./route');
+      const { req } = stripeFixtureRequest();
+      const res = await POST(req);
+
+      expect(res.status).toBe(200);
+      expect(financialEventCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          eventType: 'PAYMENT_SUCCEEDED',
+          sourceType: 'Order',
+          sourceId: 'order-1',
+          amountCents: 3600,
+          provider: 'stripe_platform',
+        }),
+      });
+    });
+
+    it('writes APPLICATION_FEE_CREATED using the frozen commissionAmount for a stripe_connect order', async () => {
+      orderFindFirst.mockResolvedValueOnce({
+        ...PAID_ORDER,
+        provider: 'stripe_connect',
+        commissionAmount: 216,
+      });
+      productFindUnique.mockResolvedValueOnce({ quantity: 10 });
+      storeFindUnique.mockResolvedValueOnce({ organization: { ownerId: 'seller-1' } });
+
+      const { POST } = await import('./route');
+      const { req } = stripeFixtureRequest();
+      await POST(req);
+
+      expect(financialEventCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          eventType: 'APPLICATION_FEE_CREATED',
+          sourceType: 'Order',
+          sourceId: 'order-1',
+          amountCents: 216,
+          provider: 'stripe',
+        }),
+      });
+    });
+
+    it('does NOT write APPLICATION_FEE_CREATED for a stripe_platform order', async () => {
+      orderFindFirst.mockResolvedValueOnce(PAID_ORDER); // provider: implicit stripe_platform below
+      productFindUnique.mockResolvedValueOnce({ quantity: 10 });
+      storeFindUnique.mockResolvedValueOnce({ organization: { ownerId: 'seller-1' } });
+
+      const { POST } = await import('./route');
+      const { req } = stripeFixtureRequest();
+      await POST(req);
+
+      const eventTypes = financialEventCreate.mock.calls.map(
+        (c) => (c[0] as { data: { eventType: string } }).data.eventType,
+      );
+      expect(eventTypes).not.toContain('APPLICATION_FEE_CREATED');
+    });
+  });
+
+  describe('charge.dispute.* (onDispute)', () => {
+    it('charge.dispute.created upserts a Dispute row and writes DISPUTE_OPENED', async () => {
+      orderFindFirst.mockResolvedValueOnce({ id: 'order-9', storeId: 'store-1' });
+
+      const { POST } = await import('./route');
+      const { req } = stripeFixtureRequest({ type: 'charge.dispute.created' });
+      const res = await POST(req);
+
+      expect(res.status).toBe(200);
+      expect(disputeCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ orderId: 'order-9', storeId: 'store-1' }),
+        }),
+      );
+      expect(financialEventCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({ eventType: 'DISPUTE_OPENED', sourceType: 'Dispute' }),
+      });
+      // Disputes are audit/risk-only — never touch Order.status.
+      expect(orderUpdate).not.toHaveBeenCalled();
+    });
+
+    it('charge.dispute.updated updates the existing Dispute and writes DISPUTE_UPDATED', async () => {
+      orderFindFirst.mockResolvedValueOnce({ id: 'order-9', storeId: 'store-1' });
+      disputeFindUnique.mockResolvedValueOnce({ id: 'dispute-row-1', status: 'NEEDS_RESPONSE' });
+
+      const { POST } = await import('./route');
+      const { req } = stripeFixtureRequest({
+        type: 'charge.dispute.updated',
+        disputeStatus: 'under_review',
+      });
+      const res = await POST(req);
+
+      expect(res.status).toBe(200);
+      expect(disputeUpdate).toHaveBeenCalledWith({
+        where: { id: 'dispute-row-1' },
+        data: expect.objectContaining({ status: 'UNDER_REVIEW' }),
+      });
+      expect(financialEventCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          eventType: 'DISPUTE_UPDATED',
+          sourceId: 'dispute-row-1:UNDER_REVIEW',
+        }),
+      });
+    });
+
+    it('charge.dispute.closed updates the Dispute to its terminal status and writes DISPUTE_CLOSED', async () => {
+      orderFindFirst.mockResolvedValueOnce({ id: 'order-9', storeId: 'store-1' });
+      disputeFindUnique.mockResolvedValueOnce({ id: 'dispute-row-1', status: 'UNDER_REVIEW' });
+
+      const { POST } = await import('./route');
+      const { req } = stripeFixtureRequest({
+        type: 'charge.dispute.closed',
+        disputeStatus: 'lost',
+      });
+      const res = await POST(req);
+
+      expect(res.status).toBe(200);
+      expect(disputeUpdate).toHaveBeenCalledWith({
+        where: { id: 'dispute-row-1' },
+        data: expect.objectContaining({ status: 'LOST' }),
+      });
+      expect(financialEventCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({ eventType: 'DISPUTE_CLOSED', sourceId: 'dispute-row-1' }),
+      });
+    });
+
+    it('a duplicate charge.dispute.created delivery is deduped by WebhookLog before onDispute even runs', async () => {
+      webhookLogFindUnique.mockResolvedValueOnce({ id: 'wl1', processedAt: new Date() });
+
+      const { POST } = await import('./route');
+      const { req } = stripeFixtureRequest({ type: 'charge.dispute.created' });
+      const res = await POST(req);
+
+      expect(await res.json()).toEqual({ ok: true, deduped: true });
+      expect(orderFindFirst).not.toHaveBeenCalled();
+      expect(disputeCreate).not.toHaveBeenCalled();
+    });
+
+    it('logs and drops a dispute for an unmapped payment_intent — no orphan Dispute row', async () => {
+      orderFindFirst.mockResolvedValueOnce(null);
+
+      const { POST } = await import('./route');
+      const { req } = stripeFixtureRequest({ type: 'charge.dispute.created' });
+      const res = await POST(req);
+
+      expect(res.status).toBe(200);
+      expect(disputeCreate).not.toHaveBeenCalled();
+      expect(financialEventCreate).not.toHaveBeenCalled();
     });
   });
 });
