@@ -563,9 +563,11 @@
   font-size: 12px;
 }
 .vendylio-landing .plan-cta {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  overflow: hidden;
   background: var(--v-forest);
   color: var(--v-ivory) !important;
   padding: 17px 20px;
@@ -574,6 +576,30 @@
 }
 .vendylio-landing .plan-cta span {
   font-size: 22px;
+}
+/* Shine sweep on hover — a soft diagonal highlight glides across the button.
+ * `.plan-cta` needs `overflow: hidden` (above) to clip it to the button's
+ * edges; reduced-motion already disables all transitions under
+ * `.vendylio-landing`, so this stays a static button there. */
+.vendylio-landing .plan-cta::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -60%;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(
+    75deg,
+    transparent 0%,
+    rgba(243, 241, 234, 0.5) 50%,
+    transparent 100%
+  );
+  transform: skewX(-20deg);
+  transition: left 0.7s ease;
+  pointer-events: none;
+}
+.vendylio-landing .plan-cta:hover::after {
+  left: 130%;
 }
 .vendylio-landing .plan ul {
   list-style: none;
