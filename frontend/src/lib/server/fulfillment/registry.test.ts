@@ -22,11 +22,20 @@ describe('getDeliveryProvider', () => {
 
   it('passes merchant config through for the quote path', async () => {
     const p = getDeliveryProvider('MERCHANT', {
-      merchant: { enabled: true, feeCents: 799, minOrderCents: 0, instructions: null },
+      merchant: {
+        enabled: true,
+        feeCents: 799,
+        minOrderCents: 0,
+        instructions: null,
+        pricingMode: 'FLAT',
+        mileage: { baseFeeCents: 0, perMileCents: 0, maxMiles: null },
+      },
     });
     const q = await p.quote({
       pickupAddress: null,
       pickupPhone: null,
+      pickupLat: null,
+      pickupLng: null,
       dropoffAddress: null,
       dropoffPhone: null,
       subtotalCents: 5000,

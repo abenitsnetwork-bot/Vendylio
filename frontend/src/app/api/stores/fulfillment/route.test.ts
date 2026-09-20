@@ -88,6 +88,32 @@ describe('PATCH /api/stores/fulfillment', () => {
     expect(res.status).toBe(400);
   });
 
+  it('persists MILEAGE pricing mode + mileage fields', async () => {
+    const res = await PATCH(
+      req('PATCH', {
+        merchant: {
+          pricingMode: 'MILEAGE',
+          mileage: { baseFeeCents: 300, perMileCents: 150, maxMiles: 10 },
+        },
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.config.merchant.pricingMode).toBe('MILEAGE');
+    expect(body.config.merchant.mileage).toEqual({
+      baseFeeCents: 300,
+      perMileCents: 150,
+      maxMiles: 10,
+    });
+  });
+
+  it('400s on a malformed mileage field', async () => {
+    const res = await PATCH(
+      req('PATCH', { merchant: { pricingMode: 'MILEAGE', mileage: { perMileCents: -1 } } }),
+    );
+    expect(res.status).toBe(400);
+  });
+
   // Courier delivery is available on every plan — a FREE store can enable it.
   it('lets a FREE store enable a courier (no plan gate)', async () => {
     mockResolveOwnStore.mockResolvedValueOnce({ ...STORE, plan: 'FREE' } as never);

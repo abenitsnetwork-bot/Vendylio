@@ -19,6 +19,8 @@ function mockFetchOnce(status: number, body: unknown) {
 const input = {
   pickupAddress: '1 Main St, Springfield, IL',
   pickupPhone: '+15550000000',
+  pickupLat: null,
+  pickupLng: null,
   dropoffAddress: { street: '2 Elm St', city: 'Springfield', state: 'IL', zip: '62704' },
   dropoffPhone: '+15551111111',
   subtotalCents: 4200,

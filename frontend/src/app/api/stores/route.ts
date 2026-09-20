@@ -19,6 +19,7 @@ import { resolveOwnStore } from '@/lib/server/org';
 import { slugify, ensureUniqueSlug } from '@/lib/server/slug';
 import { DEFAULT_CATEGORIES } from '@/lib/productCategories';
 import { checkPickupAddressDeliverable } from '@/lib/server/delivery/uber-direct';
+import { geocodeAddress } from '@/lib/server/geocoding/google';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 import { STORE_TEMPLATE_VALUES } from '@/lib/storeTemplates';
 import { MAX_HERO_IMAGES as HERO_MAX } from '@/lib/storeHero';
@@ -298,6 +299,34 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
       where: { id: existing.id },
       data,
     });
+
+    // Best-effort, non-blocking: refresh the cached geocode powering MERCHANT
+    // mileage-based delivery pricing (fulfillment/config.ts) whenever the
+    // pickup address is actually touched by this PATCH. A cleared address or
+    // a failed/unconfigured geocode just nulls both columns out — mileage
+    // pricing then degrades to "unserviceable" rather than the save failing.
+    if ('pickupAddress' in data) {
+      const addr = data.pickupAddress as string | null;
+      let lat: number | null = null;
+      let lng: number | null = null;
+      if (addr) {
+        try {
+          const geo = await geocodeAddress(addr);
+          if (geo) {
+            lat = geo.lat;
+            lng = geo.lng;
+          }
+        } catch {
+          // Geocoding unconfigured — leave lat/lng null.
+        }
+      }
+      await prisma.store.update({
+        where: { id: existing.id },
+        data: { pickupLat: lat, pickupLng: lng },
+      });
+      store.pickupLat = lat;
+      store.pickupLng = lng;
+    }
 
     // Best-effort, non-blocking: warn the seller immediately if their Uber
     // Direct pickup address looks undeliverable, instead of them finding

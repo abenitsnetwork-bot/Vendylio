@@ -38,6 +38,14 @@ const PatchBody = z.object({
       feeCents: z.number().int().min(0).max(100_000).optional(),
       minOrderCents: z.number().int().min(0).max(1_000_000).optional(),
       instructions: z.string().trim().max(280).nullable().optional(),
+      pricingMode: z.enum(['FLAT', 'MILEAGE']).optional(),
+      mileage: z
+        .object({
+          baseFeeCents: z.number().int().min(0).max(100_000).optional(),
+          perMileCents: z.number().int().min(0).max(50_000).optional(),
+          maxMiles: z.number().min(0).max(500).nullable().optional(),
+        })
+        .optional(),
     })
     .optional(),
   uberDirect: z.object({ enabled: z.boolean() }).optional(),
@@ -131,6 +139,15 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
           p.merchant?.instructions === undefined
             ? current.merchant.instructions
             : (p.merchant.instructions ?? null),
+        pricingMode: p.merchant?.pricingMode ?? current.merchant.pricingMode,
+        mileage: {
+          baseFeeCents: p.merchant?.mileage?.baseFeeCents ?? current.merchant.mileage.baseFeeCents,
+          perMileCents: p.merchant?.mileage?.perMileCents ?? current.merchant.mileage.perMileCents,
+          maxMiles:
+            p.merchant?.mileage?.maxMiles === undefined
+              ? current.merchant.mileage.maxMiles
+              : p.merchant.mileage.maxMiles,
+        },
       },
       uberDirect: { enabled: p.uberDirect?.enabled ?? current.uberDirect.enabled },
       doordash: { enabled: p.doordash?.enabled ?? current.doordash.enabled },

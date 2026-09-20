@@ -17,11 +17,15 @@ vi.mock('@/lib/server/billing/stripe-billing', () => ({
   isBillingConfigured: vi.fn(() => false),
   hasBillablePaymentMethod: vi.fn(async () => false),
 }));
+vi.mock('@/lib/server/geocoding/google', () => ({
+  geocodeAddress: vi.fn(),
+}));
 
 import { requireAuth } from '@/lib/server/middleware';
 import { resolveOwnStore } from '@/lib/server/org';
 import { checkPickupAddressDeliverable } from '@/lib/server/delivery/uber-direct';
 import { isBillingConfigured, hasBillablePaymentMethod } from '@/lib/server/billing/stripe-billing';
+import { geocodeAddress } from '@/lib/server/geocoding/google';
 import { POST, PATCH } from './route';
 
 const mockRequireAuth = vi.mocked(requireAuth);
@@ -29,6 +33,7 @@ const mockResolveOwnStore = vi.mocked(resolveOwnStore);
 const mockCheckPickupAddressDeliverable = vi.mocked(checkPickupAddressDeliverable);
 const mockIsBillingConfigured = vi.mocked(isBillingConfigured);
 const mockHasBillablePaymentMethod = vi.mocked(hasBillablePaymentMethod);
+const mockGeocodeAddress = vi.mocked(geocodeAddress);
 const authedCtx = { user: { sub: 'user-1', email: 'me@example.com' } };
 
 function makeReq(
@@ -62,6 +67,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockRequireAuth.mockResolvedValue(authedCtx);
   mockCheckPickupAddressDeliverable.mockResolvedValue(null);
+  mockGeocodeAddress.mockResolvedValue(null);
   // Default $transaction passes the prismaMock as `tx` so writes within the
   // callback hit the same mocks as the outer client (mockDeep proxies them).
   prismaMock.$transaction.mockImplementation((cb: unknown) => {
@@ -592,6 +598,53 @@ describe('PATCH /api/stores', () => {
 
     await PATCH(makeReq('PATCH', { pickupAddress: '5329 w ian dr, laveen, az, 85339' }));
     expect(mockCheckPickupAddressDeliverable).not.toHaveBeenCalled();
+  });
+
+  it('geocodes a new pickupAddress and caches pickupLat/pickupLng (MERCHANT mileage pricing)', async () => {
+    mockResolveOwnStore.mockResolvedValue({ id: 'store-1', organizationId: 'org-1' } as never);
+    prismaMock.store.update.mockResolvedValue({ id: 'store-1' } as never);
+    mockGeocodeAddress.mockResolvedValueOnce({ lat: 40.7128, lng: -74.006 });
+
+    await PATCH(makeReq('PATCH', { pickupAddress: '1 Main St' }));
+    expect(mockGeocodeAddress).toHaveBeenCalledWith('1 Main St');
+    expect(prismaMock.store.update.mock.calls[1]?.[0]?.data).toEqual({
+      pickupLat: 40.7128,
+      pickupLng: -74.006,
+    });
+  });
+
+  it('clears pickupLat/pickupLng when pickupAddress is cleared', async () => {
+    mockResolveOwnStore.mockResolvedValue({ id: 'store-1', organizationId: 'org-1' } as never);
+    prismaMock.store.update.mockResolvedValue({ id: 'store-1' } as never);
+
+    await PATCH(makeReq('PATCH', { pickupAddress: null }));
+    expect(mockGeocodeAddress).not.toHaveBeenCalled();
+    expect(prismaMock.store.update.mock.calls[1]?.[0]?.data).toEqual({
+      pickupLat: null,
+      pickupLng: null,
+    });
+  });
+
+  it('does not touch pickupLat/pickupLng when the save leaves pickupAddress alone', async () => {
+    mockResolveOwnStore.mockResolvedValue({ id: 'store-1', organizationId: 'org-1' } as never);
+    prismaMock.store.update.mockResolvedValue({ id: 'store-1' } as never);
+
+    await PATCH(makeReq('PATCH', { deliveryFeeCents: 500 }));
+    expect(mockGeocodeAddress).not.toHaveBeenCalled();
+    expect(prismaMock.store.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves pickupLat/pickupLng null when geocoding is unconfigured (never blocks the save)', async () => {
+    mockResolveOwnStore.mockResolvedValue({ id: 'store-1', organizationId: 'org-1' } as never);
+    prismaMock.store.update.mockResolvedValue({ id: 'store-1' } as never);
+    mockGeocodeAddress.mockRejectedValueOnce(new Error('not configured'));
+
+    const res = await PATCH(makeReq('PATCH', { pickupAddress: '1 Main St' }));
+    expect(res.status).toBe(200);
+    expect(prismaMock.store.update.mock.calls[1]?.[0]?.data).toEqual({
+      pickupLat: null,
+      pickupLng: null,
+    });
   });
 });
 

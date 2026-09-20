@@ -391,6 +391,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           deliveryProvider: store.deliveryProvider,
           deliveryFeeCents: store.deliveryFeeCents,
           pickupAddress: store.pickupAddress,
+          pickupLat: store.pickupLat,
+          pickupLng: store.pickupLng,
           phone: store.phone,
         },
         quoteId: quoteId ?? null,

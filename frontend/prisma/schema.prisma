@@ -857,9 +857,19 @@ model Store {
   deliveryProvider             String       @default("self_manual")
   deliveryFeeCents             Int          @default(0)
   pickupAddress                String?
+  // Best-effort geocode of `pickupAddress`, refreshed whenever the address is
+  // saved (PATCH /api/stores — see geocoding/google.ts). Powers MERCHANT
+  // mileage-based pricing (config.ts `merchant.pricingMode === 'MILEAGE'`)
+  // without a live geocode of the store's own address on every checkout
+  // quote — only the buyer's dropoff address is geocoded live. Null when
+  // geocoding is unconfigured/failed; mileage pricing degrades to
+  // "unserviceable" rather than guessing.
+  pickupLat                    Float?
+  pickupLng                    Float?
   // Prompt #12 — the fulfillment engine's per-method config. Shape:
   //   { pickup:   { enabled, instructions },
-  //     merchant: { enabled, feeCents, minOrderCents, instructions },
+  //     merchant: { enabled, feeCents, minOrderCents, instructions,
+  //                 pricingMode, mileage: { baseFeeCents, perMileCents, maxMiles } },
   //     uberDirect: { enabled }, doordash: { enabled },
   //     customerChoosesProvider: bool }
   // Normalised (with legacy `deliveryProvider`/`deliveryFeeCents` backfill)

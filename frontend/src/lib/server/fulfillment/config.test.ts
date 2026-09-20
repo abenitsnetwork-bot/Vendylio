@@ -19,6 +19,8 @@ describe('readFulfillmentConfig', () => {
       feeCents: 500,
       minOrderCents: 0,
       instructions: null,
+      pricingMode: 'FLAT',
+      mileage: { baseFeeCents: 0, perMileCents: 0, maxMiles: null },
     });
     expect(cfg.uberDirect.enabled).toBe(false);
     expect(cfg.doordash.enabled).toBe(false);
@@ -66,6 +68,34 @@ describe('readFulfillmentConfig', () => {
     expect(cfg.merchant.minOrderCents).toBe(0);
     expect(cfg.merchant.instructions).toBeNull();
     expect(cfg.pickup.enabled).toBe(true);
+  });
+
+  it('parses an explicit MILEAGE pricing config', () => {
+    const cfg = readFulfillmentConfig({
+      fulfillmentConfig: {
+        merchant: {
+          enabled: true,
+          pricingMode: 'MILEAGE',
+          mileage: { baseFeeCents: 300, perMileCents: 150, maxMiles: 10 },
+        },
+      },
+      deliveryProvider: 'self_manual',
+      deliveryFeeCents: 0,
+    });
+    expect(cfg.merchant.pricingMode).toBe('MILEAGE');
+    expect(cfg.merchant.mileage).toEqual({ baseFeeCents: 300, perMileCents: 150, maxMiles: 10 });
+  });
+
+  it('defaults pricingMode to FLAT and mileage to zero/uncapped on garbage input', () => {
+    const cfg = readFulfillmentConfig({
+      fulfillmentConfig: {
+        merchant: { pricingMode: 'BOGUS', mileage: { baseFeeCents: -5, maxMiles: 'far' } },
+      },
+      deliveryProvider: 'self_manual',
+      deliveryFeeCents: 0,
+    });
+    expect(cfg.merchant.pricingMode).toBe('FLAT');
+    expect(cfg.merchant.mileage).toEqual({ baseFeeCents: 0, perMileCents: 0, maxMiles: null });
   });
 
   it('round-trips through serializeFulfillmentConfig', () => {

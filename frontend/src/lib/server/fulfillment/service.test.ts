@@ -506,6 +506,8 @@ describe('quoteMethod', () => {
       {
         pickupAddress: null,
         pickupPhone: null,
+        pickupLat: null,
+        pickupLng: null,
         dropoffAddress: null,
         dropoffPhone: null,
         subtotalCents: 0,
@@ -523,12 +525,23 @@ describe('quoteMethod', () => {
       {
         pickupAddress: null,
         pickupPhone: null,
+        pickupLat: null,
+        pickupLng: null,
         dropoffAddress: null,
         dropoffPhone: null,
         subtotalCents: 4000,
         currency: 'USD',
       },
-      { merchant: { enabled: true, feeCents: 350, minOrderCents: 0, instructions: null } },
+      {
+        merchant: {
+          enabled: true,
+          feeCents: 350,
+          minOrderCents: 0,
+          instructions: null,
+          pricingMode: 'FLAT',
+          mileage: { baseFeeCents: 0, perMileCents: 0, maxMiles: null },
+        },
+      },
       1000,
     );
     expect(res).toMatchObject({ serviceable: true, feeCents: 350 });
@@ -803,6 +816,8 @@ describe('createQuote', () => {
       config,
       pickupAddress: '1 Main',
       pickupPhone: null,
+      pickupLat: null,
+      pickupLng: null,
       dropoffAddress: { street: '2 Elm' },
       dropoffPhone: null,
       subtotalCents: 4000,
@@ -836,6 +851,8 @@ describe('createQuote', () => {
       config: gated,
       pickupAddress: '1 Main',
       pickupPhone: null,
+      pickupLat: null,
+      pickupLng: null,
       dropoffAddress: { street: '2 Elm' },
       dropoffPhone: null,
       subtotalCents: 4000,
@@ -872,6 +889,8 @@ describe('priceDeliveryForOrder', () => {
     deliveryProvider: 'self_manual',
     deliveryFeeCents: 500,
     pickupAddress: '1 Main',
+    pickupLat: null,
+    pickupLng: null,
     phone: null,
   };
   const base = {

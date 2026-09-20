@@ -23,6 +23,8 @@ interface FulfillmentConfig {
     feeCents: number;
     minOrderCents: number;
     instructions: string | null;
+    pricingMode: 'FLAT' | 'MILEAGE';
+    mileage: { baseFeeCents: number; perMileCents: number; maxMiles: number | null };
   };
   uberDirect: { enabled: boolean };
   doordash: { enabled: boolean };
@@ -118,6 +120,9 @@ export default function DeliveryPage() {
   const [cfg, setCfg] = useState<FulfillmentConfig | null>(null);
   const [merchantFee, setMerchantFee] = useState('');
   const [merchantMin, setMerchantMin] = useState('');
+  const [mileageBase, setMileageBase] = useState('');
+  const [mileagePerMile, setMileagePerMile] = useState('');
+  const [mileageMaxMiles, setMileageMaxMiles] = useState('');
   const [needsDelivery, setNeedsDelivery] = useState<SellerOrder[] | null>(null);
   const [outForDelivery, setOutForDelivery] = useState<SellerOrder[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -140,6 +145,13 @@ export default function DeliveryPage() {
         setCfg(s.config);
         setMerchantFee((s.config.merchant.feeCents / 100).toFixed(2));
         setMerchantMin((s.config.merchant.minOrderCents / 100).toFixed(2));
+        setMileageBase((s.config.merchant.mileage.baseFeeCents / 100).toFixed(2));
+        setMileagePerMile((s.config.merchant.mileage.perMileCents / 100).toFixed(2));
+        setMileageMaxMiles(
+          s.config.merchant.mileage.maxMiles == null
+            ? ''
+            : String(s.config.merchant.mileage.maxMiles),
+        );
         setNeedsDelivery(readyRes.items.filter((o) => o.fulfillmentMethod !== 'PICKUP'));
         setOutForDelivery(outRes.items.filter((o) => o.fulfillmentMethod !== 'PICKUP'));
       })
@@ -158,6 +170,9 @@ export default function DeliveryPage() {
     if (!cfg) return;
     const feeCents = Math.round(Number(merchantFee) * 100);
     const minOrderCents = Math.round(Number(merchantMin) * 100);
+    const baseFeeCents = Math.round(Number(mileageBase) * 100);
+    const perMileCents = Math.round(Number(mileagePerMile) * 100);
+    const maxMiles = mileageMaxMiles.trim() === '' ? null : Number(mileageMaxMiles);
     if (
       !Number.isFinite(feeCents) ||
       feeCents < 0 ||
@@ -165,6 +180,17 @@ export default function DeliveryPage() {
       minOrderCents < 0
     ) {
       setError('Enter valid amounts for the merchant-delivery fee and minimum.');
+      return;
+    }
+    if (
+      cfg.merchant.pricingMode === 'MILEAGE' &&
+      (!Number.isFinite(baseFeeCents) ||
+        baseFeeCents < 0 ||
+        !Number.isFinite(perMileCents) ||
+        perMileCents < 0 ||
+        (maxMiles !== null && (!Number.isFinite(maxMiles) || maxMiles < 0)))
+    ) {
+      setError('Enter valid amounts for the mileage-based pricing fields.');
       return;
     }
     setSaving(true);
@@ -179,6 +205,8 @@ export default function DeliveryPage() {
             feeCents,
             minOrderCents,
             instructions: cfg.merchant.instructions,
+            pricingMode: cfg.merchant.pricingMode,
+            mileage: { baseFeeCents, perMileCents, maxMiles },
           },
           uberDirect: { enabled: cfg.uberDirect.enabled },
           doordash: { enabled: cfg.doordash.enabled },
@@ -367,43 +395,118 @@ export default function DeliveryPage() {
                     />
                   </div>
                   {cfg.merchant.enabled && (
-                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                      <Field label="Delivery fee ($)" htmlFor="mFee">
-                        <input
-                          id="mFee"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          className={inputClass}
-                          value={merchantFee}
-                          onChange={(e) => setMerchantFee(e.target.value)}
-                        />
-                      </Field>
-                      <Field label="Minimum order ($, 0 = none)" htmlFor="mMin">
-                        <input
-                          id="mMin"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          className={inputClass}
-                          value={merchantMin}
-                          onChange={(e) => setMerchantMin(e.target.value)}
-                        />
-                      </Field>
-                      <Field label="Delivery instructions (optional)" htmlFor="mInstr">
-                        <input
-                          id="mInstr"
-                          type="text"
-                          className={inputClass}
-                          value={cfg.merchant.instructions ?? ''}
-                          onChange={(e) =>
-                            setCfg({
-                              ...cfg,
-                              merchant: { ...cfg.merchant, instructions: e.target.value || null },
-                            })
-                          }
-                        />
-                      </Field>
+                    <div className="mt-4 space-y-4">
+                      <div>
+                        <p className="mb-1.5 text-xs font-semibold text-foreground">Pricing</p>
+                        <div className="inline-flex rounded-lg border border-border p-0.5">
+                          {(['FLAT', 'MILEAGE'] as const).map((mode) => (
+                            <button
+                              key={mode}
+                              type="button"
+                              onClick={() =>
+                                setCfg({ ...cfg, merchant: { ...cfg.merchant, pricingMode: mode } })
+                              }
+                              className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
+                                cfg.merchant.pricingMode === mode
+                                  ? 'bg-primary text-primary-foreground'
+                                  : 'text-muted-foreground'
+                              }`}
+                            >
+                              {mode === 'FLAT' ? 'Flat fee' : 'By distance'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {cfg.merchant.pricingMode === 'FLAT' ? (
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <Field label="Delivery fee ($)" htmlFor="mFee">
+                            <input
+                              id="mFee"
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              className={inputClass}
+                              value={merchantFee}
+                              onChange={(e) => setMerchantFee(e.target.value)}
+                            />
+                          </Field>
+                        </div>
+                      ) : (
+                        <div>
+                          <p className="mb-3 text-xs text-muted-foreground">
+                            Fee = base fee + (per-mile rate × straight-line distance from your store
+                            address). Requires a saved store address —{' '}
+                            <Link href="/dashboard/settings" className="font-medium text-accent">
+                              set it in Settings
+                            </Link>{' '}
+                            if you haven&apos;t.
+                          </p>
+                          <div className="grid gap-4 sm:grid-cols-3">
+                            <Field label="Base fee ($)" htmlFor="mMileageBase">
+                              <input
+                                id="mMileageBase"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                className={inputClass}
+                                value={mileageBase}
+                                onChange={(e) => setMileageBase(e.target.value)}
+                              />
+                            </Field>
+                            <Field label="Per mile ($)" htmlFor="mMileagePerMile">
+                              <input
+                                id="mMileagePerMile"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                className={inputClass}
+                                value={mileagePerMile}
+                                onChange={(e) => setMileagePerMile(e.target.value)}
+                              />
+                            </Field>
+                            <Field label="Max miles (blank = no limit)" htmlFor="mMileageMax">
+                              <input
+                                id="mMileageMax"
+                                type="number"
+                                min="0"
+                                step="0.1"
+                                className={inputClass}
+                                value={mileageMaxMiles}
+                                onChange={(e) => setMileageMaxMiles(e.target.value)}
+                              />
+                            </Field>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <Field label="Minimum order ($, 0 = none)" htmlFor="mMin">
+                          <input
+                            id="mMin"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            className={inputClass}
+                            value={merchantMin}
+                            onChange={(e) => setMerchantMin(e.target.value)}
+                          />
+                        </Field>
+                        <Field label="Delivery instructions (optional)" htmlFor="mInstr">
+                          <input
+                            id="mInstr"
+                            type="text"
+                            className={inputClass}
+                            value={cfg.merchant.instructions ?? ''}
+                            onChange={(e) =>
+                              setCfg({
+                                ...cfg,
+                                merchant: { ...cfg.merchant, instructions: e.target.value || null },
+                              })
+                            }
+                          />
+                        </Field>
+                      </div>
                     </div>
                   )}
                 </div>

@@ -531,6 +531,8 @@ export interface CreateQuoteInput {
   config: FulfillmentConfig;
   pickupAddress: string | null;
   pickupPhone: string | null;
+  pickupLat: number | null;
+  pickupLng: number | null;
   dropoffAddress: Record<string, unknown> | null;
   dropoffPhone: string | null;
   subtotalCents: number;
@@ -581,6 +583,8 @@ export async function createQuote(
   const quoteInput = {
     pickupAddress: input.pickupAddress,
     pickupPhone: input.pickupPhone,
+    pickupLat: input.pickupLat,
+    pickupLng: input.pickupLng,
     dropoffAddress: input.dropoffAddress,
     dropoffPhone: input.dropoffPhone,
     subtotalCents: input.subtotalCents,
@@ -688,6 +692,8 @@ export interface PriceDeliveryInput {
     deliveryProvider: string;
     deliveryFeeCents: number;
     pickupAddress: string | null;
+    pickupLat: number | null;
+    pickupLng: number | null;
     phone: string | null;
   };
   /** The `Quote` row id the buyer selected at checkout, if any. */
@@ -736,6 +742,8 @@ export async function priceDeliveryForOrder(
   const quoteInput: DeliveryQuoteInput = {
     pickupAddress: input.store.pickupAddress,
     pickupPhone: input.store.phone,
+    pickupLat: input.store.pickupLat,
+    pickupLng: input.store.pickupLng,
     dropoffAddress: input.deliveryAddress,
     dropoffPhone: input.customerPhone,
     subtotalCents: input.subtotalCents,

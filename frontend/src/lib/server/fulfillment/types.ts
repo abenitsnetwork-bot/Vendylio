@@ -66,6 +66,11 @@ export interface DeliveryQuoteInput {
   /** Store's own pickup origin. */
   pickupAddress: string | null;
   pickupPhone: string | null;
+  /** Cached geocode of `pickupAddress` (Store.pickupLat/Lng) — MERCHANT
+   *  mileage pricing uses this instead of geocoding the store's own address
+   *  on every quote. Null when never geocoded / geocoding unconfigured. */
+  pickupLat: number | null;
+  pickupLng: number | null;
   /** Buyer's destination — the raw {street,city,state,zip} checkout blob. */
   dropoffAddress: Record<string, unknown> | null;
   dropoffPhone: string | null;

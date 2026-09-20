@@ -14,11 +14,24 @@ export interface MethodConfigPickup {
   enabled: boolean;
   instructions: string | null;
 }
+export interface MethodConfigMileage {
+  /** Flat starting fee, added on top of the per-mile charge. */
+  baseFeeCents: number;
+  /** Charged per straight-line mile between the store and the dropoff
+   *  address (haversine — see lib/server/geocoding/distance.ts). */
+  perMileCents: number;
+  /** Beyond this radius the quote is unserviceable. null = no cap. */
+  maxMiles: number | null;
+}
 export interface MethodConfigMerchant {
   enabled: boolean;
+  /** Used when pricingMode === 'FLAT'. */
   feeCents: number;
   minOrderCents: number;
   instructions: string | null;
+  pricingMode: 'FLAT' | 'MILEAGE';
+  /** Used when pricingMode === 'MILEAGE'. */
+  mileage: MethodConfigMileage;
 }
 export interface MethodConfigCourier {
   enabled: boolean;
@@ -53,11 +66,18 @@ function intCents(v: unknown, fallback: number): number {
 function str(v: unknown): string | null {
   return typeof v === 'string' && v.trim() ? v.trim() : null;
 }
+function pricingMode(v: unknown): 'FLAT' | 'MILEAGE' {
+  return v === 'MILEAGE' ? 'MILEAGE' : 'FLAT';
+}
+function nullableNonNegative(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null;
+}
 
 export function readFulfillmentConfig(store: StoreFulfillmentInput): FulfillmentConfig {
   const cfg = asRecord(store.fulfillmentConfig);
   const pickup = asRecord(cfg.pickup);
   const merchant = asRecord(cfg.merchant);
+  const mileage = asRecord(merchant.mileage);
   const uber = asRecord(cfg.uberDirect);
   const dd = asRecord(cfg.doordash);
 
@@ -73,6 +93,12 @@ export function readFulfillmentConfig(store: StoreFulfillmentInput): Fulfillment
       feeCents: intCents(merchant.feeCents, store.deliveryFeeCents),
       minOrderCents: intCents(merchant.minOrderCents, 0),
       instructions: str(merchant.instructions),
+      pricingMode: pricingMode(merchant.pricingMode),
+      mileage: {
+        baseFeeCents: intCents(mileage.baseFeeCents, 0),
+        perMileCents: intCents(mileage.perMileCents, 0),
+        maxMiles: nullableNonNegative(mileage.maxMiles),
+      },
     },
     uberDirect: { enabled: bool(uber.enabled, legacyIsUber) },
     doordash: { enabled: bool(dd.enabled, false) },
@@ -128,6 +154,12 @@ export function serializeFulfillmentConfig(cfg: FulfillmentConfig): Record<strin
       feeCents: cfg.merchant.feeCents,
       minOrderCents: cfg.merchant.minOrderCents,
       instructions: cfg.merchant.instructions,
+      pricingMode: cfg.merchant.pricingMode,
+      mileage: {
+        baseFeeCents: cfg.merchant.mileage.baseFeeCents,
+        perMileCents: cfg.merchant.mileage.perMileCents,
+        maxMiles: cfg.merchant.mileage.maxMiles,
+      },
     },
     uberDirect: { enabled: cfg.uberDirect.enabled },
     doordash: { enabled: cfg.doordash.enabled },
