@@ -6,3 +6,6 @@ coverage
 pnpm-lock.yaml
 *.md
 backend/src/generated
+# Dropped-in reference material (design-reference/vendylio-landing) — not part
+# of the shipped app; left untouched so it stays comparable to the original.
+design-reference

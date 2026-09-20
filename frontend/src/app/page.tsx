@@ -34,7 +34,7 @@ export default async function HomePage() {
       <PublicNavBar />
       <LandingMotion>
         <main>
-          <HeroFilm video={video} />
+          <HeroFilm video={video} showcaseImage={images.hero_showcase} />
           <IntroEditorial showcaseImage={images.hero_showcase} productImage={images.hero_product} />
           <JourneySteps images={images} />
           <DeliveryMethods image={images.feature_delivery} />

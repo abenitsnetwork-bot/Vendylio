@@ -1,6 +1,6 @@
 import { createElement as h } from 'react';
 import { ScrollScrub, type ScrollScrubScene, type ScrollScrubTheme } from './ScrollScrub';
-import type { LandingVideo } from '@/lib/server/landing';
+import type { LandingImage, LandingVideo } from '@/lib/server/landing';
 
 // Same accent/panel/ivory/soft tokens as the rest of the page (globals.css
 // @theme) — kept as literal hex here because ScrollScrub sets them as inline
@@ -20,7 +20,16 @@ const HERO_THEME: ScrollScrubTheme = {
 const FALLBACK_CLIP = '/assets/landing/scene-01.mp4';
 const FALLBACK_POSTER = '/assets/landing/scene-01-poster.png';
 
-function buildHeroScene(video: LandingVideo | null): ScrollScrubScene {
+function buildHeroScene(
+  video: LandingVideo | null,
+  showcaseImage: LandingImage | undefined,
+): ScrollScrubScene {
+  // The poster is the frame shown before/while the clip buffers, and the
+  // fallback whenever the browser can't play video — it doubles as a real
+  // hero image, so it defaults to the same admin-editable photo used in the
+  // intro section right below (hero_showcase) rather than the bundled
+  // stock still, unless the admin set an explicit poster on their own
+  // uploaded video.
   return {
     id: 'scene-01',
     label: 'Your business',
@@ -28,7 +37,7 @@ function buildHeroScene(video: LandingVideo | null): ScrollScrubScene {
     title: 'Your Business.\nOnline. Delivered.',
     body: 'Turn what you do into a store people can shop. Build your storefront, take orders and make the next move.',
     clip: video?.url ?? FALLBACK_CLIP,
-    poster: video?.posterUrl ?? FALLBACK_POSTER,
+    poster: video?.posterUrl ?? showcaseImage?.url ?? FALLBACK_POSTER,
     scroll: 2.35,
     linger: 0.12,
     objectPosition: 'center center',
@@ -47,8 +56,14 @@ function buildHeroScene(video: LandingVideo | null): ScrollScrubScene {
   };
 }
 
-export function HeroFilm({ video }: { video: LandingVideo | null }) {
-  const scene = buildHeroScene(video);
+export function HeroFilm({
+  video,
+  showcaseImage,
+}: {
+  video: LandingVideo | null;
+  showcaseImage?: LandingImage | undefined;
+}) {
+  const scene = buildHeroScene(video, showcaseImage);
   return (
     <div className="vendylio-film">
       <ScrollScrub scenes={[scene]} theme={HERO_THEME} />
