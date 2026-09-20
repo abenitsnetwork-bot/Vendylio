@@ -209,7 +209,7 @@
   position: relative;
 }
 .vendylio-landing .editorial-image {
-  height: 520px;
+  height: 640px;
   position: relative;
   overflow: hidden;
   background: var(--v-forest);
@@ -237,7 +237,9 @@
   width: 100%;
   height: 100%;
   display: block;
-  object-fit: cover;
+  /* contain, not cover — the whole frame stays visible (no cropping); any
+   * letterbox space shows the figure's forest background behind it. */
+  object-fit: contain;
   background: var(--v-forest);
 }
 .vendylio-landing .editorial-play {
@@ -864,7 +866,7 @@
     max-width: 100%;
   }
   .vendylio-landing .editorial-image {
-    height: 370px;
+    height: 460px;
   }
   .vendylio-landing .editorial-image img {
     object-position: 62% center;

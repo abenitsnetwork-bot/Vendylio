@@ -61,6 +61,7 @@ export function IntroEditorial({ video, showcaseImage, productImage }: IntroEdit
               controls
               autoPlay
               playsInline
+              onEnded={() => setPlaying(false)}
             />
           ) : (
             <>
