@@ -449,6 +449,7 @@ export default function DeliveryPage() {
                                 type="number"
                                 min="0"
                                 step="0.01"
+                                placeholder="e.g. 3.00"
                                 className={inputClass}
                                 value={mileageBase}
                                 onChange={(e) => setMileageBase(e.target.value)}
@@ -460,6 +461,7 @@ export default function DeliveryPage() {
                                 type="number"
                                 min="0"
                                 step="0.01"
+                                placeholder="e.g. 1.00"
                                 className={inputClass}
                                 value={mileagePerMile}
                                 onChange={(e) => setMileagePerMile(e.target.value)}
@@ -471,12 +473,17 @@ export default function DeliveryPage() {
                                 type="number"
                                 min="0"
                                 step="0.1"
+                                placeholder="e.g. 10"
                                 className={inputClass}
                                 value={mileageMaxMiles}
                                 onChange={(e) => setMileageMaxMiles(e.target.value)}
                               />
                             </Field>
                           </div>
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            No required amount — you set your own rate. Local couriers typically
+                            charge around $2–5 base + $0.75–$1.50 per mile as a starting point.
+                          </p>
                         </div>
                       )}
 
