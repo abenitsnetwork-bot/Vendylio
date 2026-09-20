@@ -44,9 +44,9 @@ export function CtaFooter() {
           <Link href="/refund-policy" className="hover:text-foreground">
             Refund Policy
           </Link>
-          <a href="mailto:no-reply@vendylio.com" className="hover:text-foreground">
+          <Link href="/contact" className="hover:text-foreground">
             Contact
-          </a>
+          </Link>
           <span>Instagram</span>
         </div>
       </footer>

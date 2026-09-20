@@ -1202,6 +1202,21 @@ model BusinessLead {
   createdAt DateTime @default(now())
 }
 
+// Public /contact form submissions. Visible to a SUPERADMIN via the
+// "Contact messages" admin report (/admin/reports) — same pattern as
+// BusinessLead. Anti-spam is a per-IP limiter on the public route; no unique
+// constraint here since the same person may legitimately write in twice.
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  topic     String? // free-text "subject" the visitor picked, e.g. "Support"
+  message   String
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
 model PlatformSettings {
   id                  String   @id @default("default")
   // Basis points: 600 = 6%. 0 = no commission taken.

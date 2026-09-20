@@ -60,6 +60,7 @@ const REPORT_ICON: Record<string, IconName> = {
   'onboarding-funnel': 'rocket',
   'storefront-traffic': 'bar-chart-3',
   'business-waitlist': 'inbox',
+  'contact-messages': 'mail',
   'admin-activity': 'shield',
   'seller-tax-summary': 'file-text',
   'suspended-accounts': 'lock',

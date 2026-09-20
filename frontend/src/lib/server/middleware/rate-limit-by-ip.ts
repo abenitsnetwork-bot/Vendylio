@@ -137,6 +137,17 @@ export const leadIpLimiter = createIpLimiter({
   message: 'Too many submissions. Wait a minute and try again.',
 });
 
+// The public /contact form (`POST /api/contact`). A real person submits it
+// once or twice; the cap just stops a script filling the ContactMessage
+// table.
+export const contactIpLimiter = createIpLimiter({
+  bucket: 'pub:contact',
+  windowMs: 60_000,
+  max: Number(process.env.CONTACT_IP_RATE_LIMIT_MAX ?? 5),
+  code: 'TOO_MANY_REQUESTS',
+  message: 'Too many submissions. Wait a minute and try again.',
+});
+
 // Team-invite public endpoints (`GET /api/team/invites/peek`, `POST
 // /api/team/invites/claim`). Both key on the invite token, not a session; the
 // caps just bound token-guessing and account-creation spam.

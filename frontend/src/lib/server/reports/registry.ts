@@ -11,6 +11,7 @@ import { buildRefunds } from './builders/refunds';
 import { buildOnboardingFunnel } from './builders/onboardingFunnel';
 import { buildStorefrontTraffic } from './builders/storefrontTraffic';
 import { buildBusinessWaitlist } from './builders/businessWaitlist';
+import { buildContactMessages } from './builders/contactMessages';
 import { buildAdminActivity } from './builders/adminActivity';
 import { buildSellerTaxSummary } from './builders/sellerTaxSummary';
 import { buildSuspendedAccounts } from './builders/suspendedAccounts';
@@ -125,6 +126,14 @@ export const REPORTS: Record<ReportType, ReportDef> = {
     usesDateRange: false,
     usesStoreFilter: false,
     build: buildBusinessWaitlist,
+  },
+  'contact-messages': {
+    type: 'contact-messages',
+    label: 'Contact messages',
+    description: 'Everyone who submitted the public /contact form in the period.',
+    usesDateRange: true,
+    usesStoreFilter: false,
+    build: buildContactMessages,
   },
   'admin-activity': {
     type: 'admin-activity',

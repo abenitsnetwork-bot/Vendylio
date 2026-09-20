@@ -17,6 +17,7 @@ export type ReportType =
   | 'onboarding-funnel'
   | 'storefront-traffic'
   | 'business-waitlist'
+  | 'contact-messages'
   | 'admin-activity'
   | 'seller-tax-summary'
   | 'suspended-accounts'

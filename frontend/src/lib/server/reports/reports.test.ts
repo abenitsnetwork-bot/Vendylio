@@ -33,6 +33,7 @@ beforeEach(() => {
   prismaMock.product.findMany.mockResolvedValue([] as never);
   prismaMock.adminAction.findMany.mockResolvedValue([] as never);
   prismaMock.businessLead.findMany.mockResolvedValue([] as never);
+  prismaMock.contactMessage.findMany.mockResolvedValue([] as never);
   prismaMock.user.findMany.mockResolvedValue([] as never);
   // Lot 3 builders
   prismaMock.stockMovement.findMany.mockResolvedValue([] as never);
