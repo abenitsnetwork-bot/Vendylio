@@ -1,7 +1,7 @@
 // Public homepage — Server Component with a direct data read (mirrors the
 // storefront page's pattern, see s/[slug]/page.tsx) so superadmin-edited
-// photos/testimonials show up without any client-side fetch or caching to
-// invalidate.
+// photos/video/testimonials show up without any client-side fetch or
+// caching to invalidate.
 //
 // `dynamic = 'force-dynamic'` is required here specifically (unlike
 // s/[slug], which is automatically dynamic because it reads a route param):
@@ -14,29 +14,42 @@ export const runtime = 'nodejs';
 
 import { getLandingPageContent } from '@/lib/server/landing';
 import { PublicNavBar } from '@/components/marketing/PublicNavBar';
-import { HeroSection } from '@/components/marketing/HeroSection';
-import { VideoSection } from '@/components/marketing/VideoSection';
-import { HowItWorksSection } from '@/components/marketing/HowItWorksSection';
-import { FeaturesSection } from '@/components/marketing/FeaturesSection';
-import { PlansSection } from '@/components/marketing/PlansSection';
-import { TestimonialSection } from '@/components/marketing/TestimonialSection';
 import { CtaFooter } from '@/components/marketing/CtaFooter';
+import { TestimonialSection } from '@/components/marketing/TestimonialSection';
+import { LandingMotion } from '@/components/marketing/landing/LandingMotion';
+import { HeroFilm } from '@/components/marketing/landing/HeroFilm';
+import { IntroEditorial } from '@/components/marketing/landing/IntroEditorial';
+import { JourneySteps } from '@/components/marketing/landing/JourneySteps';
+import { DeliveryMethods } from '@/components/marketing/landing/DeliveryMethods';
+import { PricingSection } from '@/components/marketing/landing/PricingSection';
+import { FaqSection } from '@/components/marketing/landing/FaqSection';
+import { ClosingSection } from '@/components/marketing/landing/ClosingSection';
+import '@/components/marketing/landing/landing.css';
 
 export default async function HomePage() {
-  const { images, testimonials, sellerCount, video } = await getLandingPageContent();
+  const { images, testimonials, videos } = await getLandingPageContent();
 
   return (
     <div className="bg-background font-body">
       <PublicNavBar />
-      <HeroSection
-        showcaseImage={images.hero_showcase}
-        productImage={images.hero_product}
-        sellerCount={sellerCount}
-      />
-      {video && <VideoSection url={video.url} posterUrl={video.posterUrl} />}
-      <HowItWorksSection images={images} />
-      <FeaturesSection images={images} />
-      <PlansSection />
+      <LandingMotion>
+        <main>
+          <HeroFilm
+            video={videos.landing_hero_video ?? null}
+            showcaseImage={images.hero_showcase}
+          />
+          <IntroEditorial
+            video={videos.landing_intro_video ?? null}
+            showcaseImage={images.hero_showcase}
+            productImage={images.hero_product}
+          />
+          <JourneySteps images={images} />
+          <DeliveryMethods image={images.feature_delivery} />
+          <PricingSection />
+          <FaqSection />
+          <ClosingSection />
+        </main>
+      </LandingMotion>
       <TestimonialSection testimonials={testimonials} />
       <CtaFooter />
     </div>
