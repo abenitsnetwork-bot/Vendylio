@@ -53,6 +53,8 @@ export interface UploadResult {
 
 let _configured = false;
 let _preset: string | null = null;
+let _cloudName = '';
+let _apiKey = '';
 
 function configureOnce(): void {
   if (_configured) return;
@@ -73,6 +75,8 @@ function configureOnce(): void {
     secure: true,
   });
   _preset = uploadPreset || null;
+  _cloudName = cloudName;
+  _apiKey = apiKey;
   _configured = true;
 }
 
@@ -112,6 +116,47 @@ export async function uploadBuffer(publicId: string, body: Buffer): Promise<Uplo
   };
 }
 
+export interface SignedUpload {
+  cloudName: string;
+  apiKey: string;
+  timestamp: number;
+  signature: string;
+  publicId: string;
+  /** The browser POSTs the file directly here — bytes never pass through
+   * our server. */
+  uploadUrl: string;
+}
+
+/**
+ * Signs a direct browser→Cloudinary upload. Vercel Serverless Functions cap
+ * request bodies at ~4.5MB, far below a real video file, so video uploads
+ * cannot be proxied through our own route the way image uploads are
+ * (POST /api/upload buffers the whole body first). Instead the browser
+ * uploads straight to Cloudinary's API using a short-lived signature we mint
+ * here — our server never sees the video bytes at all.
+ *
+ * `resource_type` is encoded in `uploadUrl`'s path (not a signed param).
+ */
+export function signVideoUpload(publicId: string): SignedUpload {
+  configureOnce();
+
+  const timestamp = Math.floor(Date.now() / 1000);
+  const paramsToSign: Record<string, string | number> = { public_id: publicId, timestamp };
+  if (_preset) paramsToSign.upload_preset = _preset;
+
+  const apiSecret = process.env.CLOUDINARY_API_SECRET ?? '';
+  const signature = cloudinary.utils.api_sign_request(paramsToSign, apiSecret);
+
+  return {
+    cloudName: _cloudName,
+    apiKey: _apiKey,
+    timestamp,
+    signature,
+    publicId,
+    uploadUrl: `https://api.cloudinary.com/v1_1/${_cloudName}/video/upload`,
+  };
+}
+
 /**
  * Test-only escape hatch — clears the cached configuration flag so a test can
  * mutate `process.env.CLOUDINARY_*` and re-trigger lazy init. Never call this
@@ -122,4 +167,6 @@ export async function uploadBuffer(publicId: string, body: Buffer): Promise<Uplo
 export function __resetCloudinarySingleton(): void {
   _configured = false;
   _preset = null;
+  _cloudName = '';
+  _apiKey = '';
 }

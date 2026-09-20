@@ -60,15 +60,6 @@ const SNIFFERS: Record<string, (buf: Buffer) => boolean> = {
       'hevm',
       'hevs',
     ]),
-
-  // MP4 / QuickTime — same ISO BMFF `ftyp` box as HEIC, different brand list.
-  'video/mp4': (buf) =>
-    isFtypBrand(buf, ['isom', 'iso2', 'mp41', 'mp42', 'avc1', 'M4V ', 'M4A ', 'dash']),
-  'video/quicktime': (buf) => isFtypBrand(buf, ['qt  ']),
-
-  // WebM (and Matroska generally) — EBML header.
-  'video/webm': (buf) =>
-    buf.length >= 4 && buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3,
 };
 
 function isFtypBrand(buf: Buffer, brands: string[]): boolean {

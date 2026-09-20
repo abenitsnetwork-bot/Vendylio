@@ -88,6 +88,11 @@ function buildCsp(nonce: string): string {
     ...hcaptcha,
     'https://*.sentry.io',
     'https://*.ingest.sentry.io',
+    // Admin video upload (VideoDropzone) posts the file straight from the
+    // browser to Cloudinary — Vercel Serverless Functions cap request bodies
+    // at ~4.5MB, well below a real video, so it can't be proxied through our
+    // own API the way image uploads are.
+    'https://api.cloudinary.com',
     ...(previewTooling ? ['https://vercel.live', 'wss://ws-us3.pusher.com'] : []),
   ].join(' ');
 

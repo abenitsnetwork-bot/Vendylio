@@ -27,7 +27,7 @@ const cspReportOnly = [
   "img-src 'self' data: blob: https://res.cloudinary.com",
   "media-src 'self' https://res.cloudinary.com",
   "font-src 'self' data:",
-  "connect-src 'self' https://*.hcaptcha.com https://*.sentry.io https://*.ingest.sentry.io",
+  "connect-src 'self' https://*.hcaptcha.com https://*.sentry.io https://*.ingest.sentry.io https://api.cloudinary.com",
   'frame-src https://*.hcaptcha.com',
   "form-action 'self'",
   'report-uri /api/csp-report',

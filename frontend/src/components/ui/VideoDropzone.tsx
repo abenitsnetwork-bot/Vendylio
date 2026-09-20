@@ -1,26 +1,65 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { uploadFile } from '@/lib/uploadFile';
-import { ApiError } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { Icon } from '@/components/ui/Icon';
 
 const UPLOAD_ERROR_MESSAGES: Record<string, string> = {
-  FILE_TOO_LARGE: 'That video is too large — try one under 100MB.',
-  INVALID_MIME: 'Unsupported file type — use MP4, WebM or MOV.',
-  MAGIC_BYTE_MISMATCH: "That file doesn't look like a real video. Try a different one.",
   STORAGE_NOT_CONFIGURED: 'Video storage isn’t configured yet — contact support.',
 };
 
-function describeUploadError(err: unknown): string {
+function describeSignError(err: unknown): string {
   if (err instanceof ApiError) {
     if (err.status === 401 || err.status === 403) {
       return 'Your session expired — refresh the page and try again.';
     }
     const code = typeof err.body?.code === 'string' ? err.body.code : err.code;
-    return UPLOAD_ERROR_MESSAGES[code] ?? 'Upload failed. Try again.';
+    return UPLOAD_ERROR_MESSAGES[code] ?? 'Could not start the upload. Try again.';
   }
   return 'Network error. Try again.';
+}
+
+interface SignedUpload {
+  cloudName: string;
+  apiKey: string;
+  timestamp: number;
+  signature: string;
+  publicId: string;
+  uploadUrl: string;
+}
+
+/**
+ * Video files routinely exceed Vercel Serverless Functions' ~4.5MB request
+ * body cap, so — unlike ImageDropzone, which buffers the file through our
+ * own POST /api/upload — this uploads straight from the browser to
+ * Cloudinary. Our server only mints a short-lived signature
+ * (POST /api/admin/upload-video/sign); the video bytes never touch it.
+ */
+async function uploadVideoFile(file: File): Promise<{ url: string }> {
+  let signed: SignedUpload;
+  try {
+    signed = await api<SignedUpload>('/api/admin/upload-video/sign', { method: 'POST' });
+  } catch (err) {
+    throw new Error(describeSignError(err));
+  }
+
+  const form = new FormData();
+  form.append('file', file);
+  form.append('api_key', signed.apiKey);
+  form.append('timestamp', String(signed.timestamp));
+  form.append('signature', signed.signature);
+  form.append('public_id', signed.publicId);
+
+  const res = await fetch(signed.uploadUrl, { method: 'POST', body: form });
+  const body = await res.json().catch(() => ({}) as Record<string, unknown>);
+  if (!res.ok) {
+    const message =
+      typeof (body as { error?: { message?: string } }).error?.message === 'string'
+        ? (body as { error: { message: string } }).error.message
+        : 'Upload failed. Try again.';
+    throw new Error(message);
+  }
+  return { url: (body as { secure_url: string }).secure_url };
 }
 
 /** Mirrors ImageDropzone, but posts to the SUPERADMIN-only video upload
@@ -48,10 +87,10 @@ export function VideoDropzone({
     setError(null);
     setUploading(true);
     try {
-      const { url } = await uploadFile(file, '/api/admin/upload-video');
+      const { url } = await uploadVideoFile(file);
       onUploaded(url);
     } catch (err) {
-      setError(describeUploadError(err));
+      setError(err instanceof Error ? err.message : 'Upload failed. Try again.');
     } finally {
       setUploading(false);
     }
