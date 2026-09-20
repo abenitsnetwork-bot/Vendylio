@@ -15,6 +15,7 @@ export const runtime = 'nodejs';
 import { getLandingPageContent } from '@/lib/server/landing';
 import { PublicNavBar } from '@/components/marketing/PublicNavBar';
 import { HeroSection } from '@/components/marketing/HeroSection';
+import { VideoSection } from '@/components/marketing/VideoSection';
 import { HowItWorksSection } from '@/components/marketing/HowItWorksSection';
 import { FeaturesSection } from '@/components/marketing/FeaturesSection';
 import { PlansSection } from '@/components/marketing/PlansSection';
@@ -22,7 +23,7 @@ import { TestimonialSection } from '@/components/marketing/TestimonialSection';
 import { CtaFooter } from '@/components/marketing/CtaFooter';
 
 export default async function HomePage() {
-  const { images, testimonials, sellerCount } = await getLandingPageContent();
+  const { images, testimonials, sellerCount, video } = await getLandingPageContent();
 
   return (
     <div className="bg-background font-body">
@@ -32,6 +33,7 @@ export default async function HomePage() {
         productImage={images.hero_product}
         sellerCount={sellerCount}
       />
+      {video && <VideoSection url={video.url} posterUrl={video.posterUrl} />}
       <HowItWorksSection images={images} />
       <FeaturesSection images={images} />
       <PlansSection />

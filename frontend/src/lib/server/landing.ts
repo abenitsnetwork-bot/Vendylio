@@ -7,6 +7,13 @@ export interface LandingImage {
   altText: string | null;
 }
 
+export interface LandingVideo {
+  url: string;
+  posterUrl: string | null;
+}
+
+const LANDING_HERO_VIDEO_KEY = 'landing_hero_video';
+
 export interface LandingTestimonial {
   id: string;
   name: string;
@@ -25,6 +32,10 @@ export interface LandingPageContent {
   /** Live count of published stores — drives the social-proof element via
    * `sellerProof()` (hidden entirely below MIN_SELLERS_FOR_PROOF). */
   sellerCount: number;
+  /** The homepage's below-the-hero video, or null when nobody has uploaded
+   * one yet — the marketing component renders nothing in that case (unlike
+   * images, there's no built-in placeholder video). */
+  video: LandingVideo | null;
 }
 
 /** Public, unauthenticated: number of published storefronts. */
@@ -42,7 +53,7 @@ export function getPublishedSellerCount(): Promise<number> {
 export async function getLandingPageContent(): Promise<LandingPageContent> {
   const knownKeys = SITE_IMAGE_KEYS.map((k) => k.key);
 
-  const [imageRows, testimonialRows, sellerCount] = await Promise.all([
+  const [imageRows, testimonialRows, sellerCount, videoRow] = await Promise.all([
     prisma.siteImage.findMany({
       where: { key: { in: knownKeys } },
       select: { key: true, url: true, altText: true },
@@ -61,6 +72,10 @@ export async function getLandingPageContent(): Promise<LandingPageContent> {
       },
     }),
     getPublishedSellerCount(),
+    prisma.siteVideo.findUnique({
+      where: { key: LANDING_HERO_VIDEO_KEY },
+      select: { url: true, posterUrl: true },
+    }),
   ]);
 
   const images: Partial<Record<SiteImageKey, LandingImage>> = {};
@@ -68,5 +83,9 @@ export async function getLandingPageContent(): Promise<LandingPageContent> {
     images[row.key as SiteImageKey] = { url: row.url, altText: row.altText };
   }
 
-  return { images, testimonials: testimonialRows, sellerCount };
+  const video: LandingVideo | null = videoRow
+    ? { url: videoRow.url, posterUrl: videoRow.posterUrl }
+    : null;
+
+  return { images, testimonials: testimonialRows, sellerCount, video };
 }

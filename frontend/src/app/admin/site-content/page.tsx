@@ -5,6 +5,7 @@ import { api, ApiError } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Icon } from '@/components/ui/Icon';
 import { ImageDropzone } from '@/components/ui/ImageDropzone';
+import { VideoDropzone } from '@/components/ui/VideoDropzone';
 import { Field, inputClass } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 
@@ -14,6 +15,14 @@ interface SiteImageSlot {
   hint: string;
   url: string | null;
   altText: string | null;
+}
+
+interface SiteVideoSlot {
+  key: string;
+  label: string;
+  hint: string;
+  url: string | null;
+  posterUrl: string | null;
 }
 
 interface Testimonial {
@@ -93,6 +102,67 @@ function ImageSlotCard({
           {savingAlt ? 'Saving…' : 'Save'}
         </button>
       </div>
+      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+    </Card>
+  );
+}
+
+function VideoSlotCard({
+  slot,
+  onSaved,
+}: {
+  slot: SiteVideoSlot;
+  onSaved: (updated: SiteVideoSlot) => void;
+}) {
+  const [error, setError] = useState<string | null>(null);
+
+  async function persist(url: string | null, posterUrl: string | null) {
+    setError(null);
+    try {
+      if (url) {
+        const res = await api<{ video: { key: string; url: string; posterUrl: string | null } }>(
+          `/api/admin/site-videos/${slot.key}`,
+          { method: 'PUT', body: { url, posterUrl } },
+        );
+        onSaved({ ...slot, url: res.video.url, posterUrl: res.video.posterUrl });
+      } else {
+        await api(`/api/admin/site-videos/${slot.key}`, { method: 'DELETE' });
+        onSaved({ ...slot, url: null, posterUrl: null });
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save this video.');
+    }
+  }
+
+  return (
+    <Card className="p-5">
+      <p className="mb-1 text-sm font-semibold text-foreground">{slot.label}</p>
+      <p className="mb-3 text-xs text-muted-foreground">{slot.hint}</p>
+      <VideoDropzone
+        label="Click to upload or drag and drop"
+        hint="MP4, WebM or MOV up to 100MB"
+        value={slot.url}
+        onUploaded={(url) => void persist(url, slot.posterUrl)}
+        onRemove={() => void persist(null, null)}
+      />
+      {slot.url && (
+        <div className="mt-4 border-t border-border pt-3">
+          <p className="mb-2 text-xs font-semibold text-foreground">
+            Poster image <span className="font-normal text-muted-foreground">(optional)</span>
+          </p>
+          <p className="mb-2 text-xs text-muted-foreground">
+            Shown before the visitor presses play. Without one, the first frame of the video is
+            used.
+          </p>
+          <ImageDropzone
+            label="Click to upload or drag and drop"
+            hint="PNG, JPG up to 5MB"
+            value={slot.posterUrl}
+            onUploaded={(posterUrl) => void persist(slot.url, posterUrl)}
+            onRemove={() => void persist(slot.url, null)}
+          />
+        </div>
+      )}
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
     </Card>
   );
@@ -332,16 +402,19 @@ function TestimonialRow({
 
 export default function AdminSiteContentPage() {
   const [images, setImages] = useState<SiteImageSlot[] | null>(null);
+  const [videos, setVideos] = useState<SiteVideoSlot[] | null>(null);
   const [testimonials, setTestimonials] = useState<Testimonial[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     Promise.all([
       api<{ images: SiteImageSlot[] }>('/api/admin/site-images'),
+      api<{ videos: SiteVideoSlot[] }>('/api/admin/site-videos'),
       api<{ testimonials: Testimonial[] }>('/api/admin/testimonials'),
     ])
-      .then(([imgRes, tRes]) => {
+      .then(([imgRes, vidRes, tRes]) => {
         setImages(imgRes.images);
+        setVideos(vidRes.videos);
         setTestimonials(tRes.testimonials);
       })
       .catch((err) =>
@@ -362,7 +435,7 @@ export default function AdminSiteContentPage() {
         Landing Page Content
       </h1>
       <p className="mb-8 text-sm text-muted-foreground">
-        Photos and seller testimonials shown on the public homepage.
+        Photos, video and seller testimonials shown on the public homepage.
       </p>
 
       {error && <p className="mb-6 text-sm text-red-600">{error}</p>}
@@ -378,6 +451,24 @@ export default function AdminSiteContentPage() {
                 slot={slot}
                 onSaved={(updated) =>
                   setImages((prev) => prev!.map((s) => (s.key === slot.key ? updated : s)))
+                }
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="mb-12">
+        <h2 className="mb-4 font-headings text-lg font-bold text-foreground">Video</h2>
+        {!videos && !error && <p className="text-sm text-muted-foreground">Loading…</p>}
+        {videos && (
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {videos.map((slot) => (
+              <VideoSlotCard
+                key={slot.key}
+                slot={slot}
+                onSaved={(updated) =>
+                  setVideos((prev) => prev!.map((s) => (s.key === slot.key ? updated : s)))
                 }
               />
             ))}

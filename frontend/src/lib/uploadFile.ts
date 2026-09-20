@@ -21,7 +21,7 @@ function getCsrfToken(): string | null {
   return match && match[1] ? decodeURIComponent(match[1]) : null;
 }
 
-export async function uploadFile(file: File): Promise<{ url: string }> {
+export async function uploadFile(file: File, endpoint = '/api/upload'): Promise<{ url: string }> {
   const form = new FormData();
   form.append('file', file);
 
@@ -29,7 +29,7 @@ export async function uploadFile(file: File): Promise<{ url: string }> {
   const csrfToken = getCsrfToken();
   if (csrfToken) headers['x-csrf-token'] = csrfToken;
 
-  const res = await fetch(`${API_URL}/api/upload`, {
+  const res = await fetch(`${API_URL}${endpoint}`, {
     method: 'POST',
     credentials: 'include',
     headers,

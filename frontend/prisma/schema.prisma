@@ -103,6 +103,19 @@ model SiteImage {
   updatedAt DateTime @updatedAt
 }
 
+// Mirrors SiteImage but for video slots (e.g. the homepage's below-the-hero
+// clip) — kept as a separate model rather than overloading SiteImage because
+// the admin UI/player need a distinct shape (posterUrl, no altText).
+// `key` is a fixed manifest in lib/siteVideoKeys.ts, same convention as
+// SITE_IMAGE_KEYS.
+model SiteVideo {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  url       String
+  posterUrl String?
+  updatedAt DateTime @updatedAt
+}
+
 // Editable legal pages — Terms of Service, Privacy Policy, Refund Policy.
 // SUPERADMIN-authored from Settings → Legal pages, platform-wide (not
 // per-store). `slug` is a fixed allow-list in lib/legal/defaults.ts

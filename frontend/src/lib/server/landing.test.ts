@@ -7,12 +7,30 @@ beforeEach(() => {
   prismaMock.siteImage.findMany.mockResolvedValue([]);
   prismaMock.testimonial.findMany.mockResolvedValue([]);
   prismaMock.store.count.mockResolvedValue(0);
+  prismaMock.siteVideo.findUnique.mockResolvedValue(null);
 });
 
 describe('getLandingPageContent', () => {
-  it('returns an empty images map and empty testimonials when nothing is set', async () => {
+  it('returns an empty images map, no video, and empty testimonials when nothing is set', async () => {
     const result = await getLandingPageContent();
-    expect(result).toEqual({ images: {}, testimonials: [], sellerCount: 0 });
+    expect(result).toEqual({ images: {}, testimonials: [], sellerCount: 0, video: null });
+  });
+
+  it('returns the video when a SiteVideo row exists for the landing key', async () => {
+    prismaMock.siteVideo.findUnique.mockResolvedValueOnce({
+      url: 'https://cdn/video.mp4',
+      posterUrl: 'https://cdn/poster.jpg',
+    } as never);
+
+    const result = await getLandingPageContent();
+    expect(result.video).toEqual({
+      url: 'https://cdn/video.mp4',
+      posterUrl: 'https://cdn/poster.jpg',
+    });
+    expect(prismaMock.siteVideo.findUnique).toHaveBeenCalledWith({
+      where: { key: 'landing_hero_video' },
+      select: { url: true, posterUrl: true },
+    });
   });
 
   it('includes a live published-store count', async () => {

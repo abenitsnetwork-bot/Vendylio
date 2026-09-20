@@ -25,6 +25,7 @@ const cspReportOnly = [
   "script-src 'self' 'unsafe-inline' https://js.hcaptcha.com https://*.hcaptcha.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://res.cloudinary.com",
+  "media-src 'self' https://res.cloudinary.com",
   "font-src 'self' data:",
   "connect-src 'self' https://*.hcaptcha.com https://*.sentry.io https://*.ingest.sentry.io",
   'frame-src https://*.hcaptcha.com',
