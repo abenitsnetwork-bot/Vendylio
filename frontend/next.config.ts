@@ -30,7 +30,11 @@ const cspReportOnly = [
   // buffered before frame-accurate seeking begins.
   "media-src 'self' blob: https://res.cloudinary.com",
   "font-src 'self' data:",
-  "connect-src 'self' https://*.hcaptcha.com https://*.sentry.io https://*.ingest.sentry.io https://api.cloudinary.com",
+  // res.cloudinary.com (asset delivery, distinct from api.cloudinary.com
+  // used for uploads) — the scroll-scrubbed hero film `fetch()`es its clip
+  // as a Blob before playback, and that fetch is governed by connect-src,
+  // not media-src.
+  "connect-src 'self' https://*.hcaptcha.com https://*.sentry.io https://*.ingest.sentry.io https://api.cloudinary.com https://res.cloudinary.com",
   'frame-src https://*.hcaptcha.com',
   "form-action 'self'",
   'report-uri /api/csp-report',

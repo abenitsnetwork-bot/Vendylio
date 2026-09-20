@@ -93,6 +93,12 @@ function buildCsp(nonce: string): string {
     // at ~4.5MB, well below a real video, so it can't be proxied through our
     // own API the way image uploads are.
     'https://api.cloudinary.com',
+    // res.cloudinary.com (asset delivery, distinct from the upload API
+    // above) — the homepage's scroll-scrubbed hero film `fetch()`es its
+    // clip as a Blob before playback, governed by connect-src, not
+    // media-src (which already allowed this host for the <video> element
+    // itself).
+    'https://res.cloudinary.com',
     ...(previewTooling ? ['https://vercel.live', 'wss://ws-us3.pusher.com'] : []),
   ].join(' ');
 
