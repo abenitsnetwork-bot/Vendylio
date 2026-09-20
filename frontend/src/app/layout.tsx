@@ -17,10 +17,14 @@ const inter = Inter({
 
 // Bold soft-serif for headings — the "Find Your Signature Seat" style
 // display type from the reference theme. Inter stays the body font.
+// `weight: 'variable'` (not a fixed list) loads the true variable font file
+// so the landing page's font-weight:550 headings and font-weight:350 <em>
+// emphasis render on their real weights via the variable axis, instead of
+// being clamped to the nearest of a fixed set.
 const fraunces = Fraunces({
   subsets: ['latin'],
   variable: '--font-fraunces',
-  weight: ['600', '700'],
+  weight: 'variable',
   display: 'swap',
 });
 

@@ -108,7 +108,9 @@ function buildCsp(nonce: string): string {
     `img-src 'self' data: blob: https://res.cloudinary.com${
       previewTooling ? ' https://vercel.live https://vercel.com' : ''
     }`,
-    "media-src 'self' https://res.cloudinary.com",
+    // blob: — the homepage's scroll-scrubbed hero film (ScrollScrub) plays
+    // its clip back from a Blob URL (see next.config.ts's mirror of this).
+    "media-src 'self' blob: https://res.cloudinary.com",
     `font-src 'self' data:${previewTooling ? ' https://vercel.live https://assets.vercel.com' : ''}`,
     `connect-src ${connectSrc}`,
     `frame-src ${frameSrc}`,

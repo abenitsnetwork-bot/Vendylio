@@ -25,7 +25,10 @@ const cspReportOnly = [
   "script-src 'self' 'unsafe-inline' https://js.hcaptcha.com https://*.hcaptcha.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://res.cloudinary.com",
-  "media-src 'self' https://res.cloudinary.com",
+  // blob: — the homepage's scroll-scrubbed hero film (ScrollScrub) fetches
+  // its clip and plays it back from a Blob URL so the video is fully
+  // buffered before frame-accurate seeking begins.
+  "media-src 'self' blob: https://res.cloudinary.com",
   "font-src 'self' data:",
   "connect-src 'self' https://*.hcaptcha.com https://*.sentry.io https://*.ingest.sentry.io https://api.cloudinary.com",
   'frame-src https://*.hcaptcha.com',

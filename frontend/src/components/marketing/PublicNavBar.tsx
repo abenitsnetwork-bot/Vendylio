@@ -7,8 +7,7 @@ import { Icon } from '@/components/ui/Icon';
 
 const LINKS = [
   { href: '#how-it-works', label: 'How It Works' },
-  { href: '#features', label: 'Features' },
-  { href: '#plans', label: 'Plans' },
+  { href: '#delivery', label: 'Delivery' },
   { href: '/pricing', label: 'Pricing' },
   { href: '#testimonials', label: 'Reviews' },
 ];
@@ -75,7 +74,7 @@ export function PublicNavBar() {
             href="/register"
             className="rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
           >
-            Open Store Now
+            Open your store
           </Link>
         </div>
 
@@ -114,7 +113,7 @@ export function PublicNavBar() {
               onClick={() => setOpen(false)}
               className="mt-2 rounded-full bg-primary px-3 py-3 text-center text-sm font-semibold text-primary-foreground"
             >
-              Open Store Now
+              Open your store
             </Link>
           </nav>
         </div>
