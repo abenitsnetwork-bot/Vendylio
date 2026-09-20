@@ -14,8 +14,9 @@ import {
 import { sellerFirstName } from '@/lib/utils';
 import { useAuth, useUser } from '@/contexts/AuthContext';
 import { api, ApiError } from '@/lib/api';
-import { Icon, type IconName } from '@/components/ui/Icon';
+import { Icon } from '@/components/ui/Icon';
 import { Card } from '@/components/ui/Card';
+import { StatCard } from '@/components/ui/StatCard';
 import { SellerHeader } from '@/components/seller/SellerHeader';
 import { ProUpgradeCard } from '@/components/seller/ProUpgradeCard';
 import {
@@ -109,34 +110,6 @@ function DeltaBadge({ pct }: { pct: number | null }) {
       <Icon i={up ? 'arrow-up' : 'arrow-down'} size={11} />
       {Math.abs(pct)}%
     </span>
-  );
-}
-
-function KpiCard({
-  label,
-  icon,
-  value,
-  sub,
-  delta,
-}: {
-  label: string;
-  icon: IconName;
-  value: string;
-  sub?: string;
-  delta: number | null;
-}) {
-  return (
-    <Card className="p-5">
-      <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        <Icon i={icon} size={14} />
-        {label}
-      </div>
-      <div className="flex flex-wrap items-baseline gap-2">
-        <p className="font-headings text-2xl font-bold text-foreground">{value}</p>
-        <DeltaBadge pct={delta} />
-      </div>
-      {sub && <p className="mt-1 text-xs text-muted-foreground">{sub}</p>}
-    </Card>
   );
 }
 
@@ -309,29 +282,33 @@ export default function AnalyticsPage() {
           {!locked && !error && data && t && (
             <>
               <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-                <KpiCard
+                <StatCard
                   label="Total sales"
                   icon="dollar-sign"
+                  accent="indigo"
                   value={usd(t.salesCents)}
                   sub={`${t.orders} order${t.orders === 1 ? '' : 's'}`}
                   delta={halfDelta(data.series.map((p) => p.salesCents))}
                 />
-                <KpiCard
+                <StatCard
                   label="Storefront views"
                   icon="bar-chart-3"
+                  accent="violet"
                   value={t.views.toLocaleString('en-US')}
                   sub={`${t.productViews.toLocaleString('en-US')} product views`}
                   delta={halfDelta(data.series.map((p) => p.storeViews + p.productViews))}
                 />
-                <KpiCard
+                <StatCard
                   label="Unique visitors"
                   icon="users"
+                  accent="emerald"
                   value={t.visitors.toLocaleString('en-US')}
                   delta={halfDelta(data.series.map((p) => p.visitors))}
                 />
-                <KpiCard
+                <StatCard
                   label="Conversion"
                   icon="trending-up"
+                  accent="amber"
                   value={`${(t.conversionRate * 100).toFixed(1)}%`}
                   sub="orders / visitor"
                   delta={halfDelta(data.series.map((p) => p.orders))}

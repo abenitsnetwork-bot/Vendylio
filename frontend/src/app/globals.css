@@ -23,6 +23,18 @@
   --color-panel: #16322d;
   --color-panel-foreground: #f3f1ea;
 
+  /* Vivid per-card accents for the seller dashboard's stat cards/icon badges
+     ONLY — never brand/CTA colors (those stay --color-accent). A card picks
+     one of these for its icon badge (soft tint background + solid icon),
+     rotating through the set so a row of stats reads as colorful rather
+     than repeating the same accent six times. Dark-mode overrides below. */
+  --color-stat-indigo: #6366f1;
+  --color-stat-emerald: #10b981;
+  --color-stat-amber: #f59e0b;
+  --color-stat-rose: #e11d48;
+  --color-stat-sky: #0ea5e9;
+  --color-stat-violet: #8b5cf6;
+
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 16px;
@@ -116,6 +128,15 @@
   --color-card-foreground: #e8ede9;
   --color-panel: #1f3d37;
   --color-panel-foreground: #eef3ef;
+
+  /* Brightened so each stays legible (icon on a low-opacity tint of itself)
+     against the near-black dashboard background. */
+  --color-stat-indigo: #818cf8;
+  --color-stat-emerald: #34d399;
+  --color-stat-amber: #fbbf24;
+  --color-stat-rose: #fb7185;
+  --color-stat-sky: #38bdf8;
+  --color-stat-violet: #a78bfa;
 }
 
 /* The viewer's browser paints its own ground behind the page; give body an
@@ -133,6 +154,17 @@ body {
       background-color 0.18s ease,
       color 0.18s ease;
   }
+}
+
+/* Seller dashboard gets a rounder display face (Plus Jakarta Sans, loaded in
+   dashboard/(shell)/layout.tsx) instead of Inter/Fraunces — scoped to the
+   shell wrapper so every existing `font-body`/`font-headings` Tailwind
+   utility across the ~20 dashboard pages picks it up automatically, with no
+   per-page change, and the rest of the app (storefront, landing, admin) is
+   untouched. */
+[data-dashboard-shell] {
+  --font-body: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-headings: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
 }
 
 /* "How it works" timeline — each node lights up in turn (01→02→03→04) so a

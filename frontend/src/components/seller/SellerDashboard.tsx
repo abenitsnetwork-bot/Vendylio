@@ -1,14 +1,41 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
-import { Icon } from '@/components/ui/Icon';
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import { useAuth } from '@/contexts/AuthContext';
+import { useRouter } from 'next/navigation';
+import { Icon, type IconName } from '@/components/ui/Icon';
 import { Card } from '@/components/ui/Card';
+import { StatCard, type StatAccent } from '@/components/ui/StatCard';
+import { RadialGauge } from '@/components/ui/RadialGauge';
 import { Modal } from '@/components/ui/Modal';
 import { SellerHeader } from '@/components/seller/SellerHeader';
 import { ShareStoreModal } from '@/components/seller/ShareStoreModal';
 import { formatOrderNumber } from '@/lib/orderNumber';
 import { usePlan } from '@/lib/usePlan';
+import type { OnboardingProgress } from '@/lib/onboardingProgress';
+import {
+  CHART_ACCENT,
+  CHART_AXIS,
+  CHART_GRID,
+  TOOLTIP_STYLE,
+} from '@/components/admin/dashboard/colors';
+import type {
+  DashboardStats,
+  DashboardStore,
+  DashboardOpenState,
+  RecentOrder,
+  DailySales,
+} from '@/lib/server/dashboard/overview';
 
 function PlanButton() {
   const { isPro, loading } = usePlan();
@@ -19,60 +46,17 @@ function PlanButton() {
       className={`inline-flex flex-shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
         isPro
           ? 'bg-green-100 text-green-700 hover:bg-green-200'
-          : 'bg-accent/10 text-accent hover:bg-accent/20'
+          : 'bg-white/15 text-panel-foreground hover:bg-white/25'
       }`}
     >
       <span
-        className={`h-1.5 w-1.5 rounded-full ${isPro ? 'bg-green-600' : 'bg-accent'}`}
+        className={`h-1.5 w-1.5 rounded-full ${isPro ? 'bg-green-600' : 'bg-panel-foreground'}`}
         aria-hidden="true"
       />
       {isPro ? 'Pro plan' : 'Free plan · Upgrade to Pro'}
       <Icon i="arrow-right" size={12} />
     </Link>
   );
-}
-
-export interface DashboardStore {
-  id: string;
-  slug: string;
-  name: string;
-}
-
-export interface DashboardStats {
-  productCount: number;
-  todaySalesCents: number;
-  todayOrdersCount: number;
-  monthSalesCents: number;
-  monthOrdersCount: number;
-  /** Every paid sale ever — no date window (matches the withdrawable balance's scope). */
-  allTimeSalesCents: number;
-  allTimeOrdersCount: number;
-  visits: number;
-  /** Phase 8 — orders sitting in PAID/PREPARING/READY (need merchant action). */
-  pendingOrdersCount: number;
-  /** Phase 4 — products/variants at or below their low-stock threshold (still > 0). */
-  lowStockCount: number;
-  /** Phase 4 — products/variants at zero. */
-  outOfStockCount: number;
-}
-
-export interface DashboardOpenState {
-  acceptingOrders: boolean;
-  ordersPaused: boolean;
-  pauseMessage: string | null;
-  hoursConfigured: boolean;
-  openNow: boolean;
-  nextOpenLabel: string | null;
-}
-
-export interface RecentOrder {
-  id: string;
-  orderNumber: number;
-  status: string;
-  amount: number;
-  currency: string;
-  customerName: string | null;
-  createdAt: string;
 }
 
 function formatUsd(cents: number): string {
@@ -101,6 +85,72 @@ function storeStatusLabel(open: DashboardOpenState): {
   return { text: 'Open · taking orders', tone: 'ok' };
 }
 
+function SetupBanner({
+  href,
+  title,
+  subtitle,
+  cta,
+}: {
+  href: string;
+  title: string;
+  subtitle: string;
+  cta: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="mb-6 flex items-center justify-between gap-4 rounded-xl border border-accent/40 bg-accent/5 p-5 hover:opacity-90"
+    >
+      <div>
+        <p className="text-sm font-semibold text-foreground">{title}</p>
+        <p className="text-xs text-muted-foreground">{subtitle}</p>
+      </div>
+      <span className="flex flex-shrink-0 items-center gap-1 text-sm font-semibold text-accent">
+        {cta} <Icon i="arrow-right" size={14} />
+      </span>
+    </Link>
+  );
+}
+
+function ActionCard({
+  icon,
+  accent,
+  title,
+  desc,
+  href,
+  cta,
+}: {
+  icon: IconName;
+  accent: StatAccent;
+  title: string;
+  desc: string;
+  href: string;
+  cta: string;
+}) {
+  const colorVar = `var(--color-stat-${accent})`;
+  return (
+    <Card>
+      <span
+        className="mb-4 flex h-9 w-9 items-center justify-center rounded-full"
+        style={{
+          backgroundColor: `color-mix(in srgb, ${colorVar} 16%, transparent)`,
+          color: colorVar,
+        }}
+      >
+        <Icon i={icon} size={18} />
+      </span>
+      <p className="mb-2 text-sm font-semibold text-foreground">{title}</p>
+      <p className="mb-4 text-xs text-muted-foreground">{desc}</p>
+      <Link
+        href={href}
+        className="block w-full rounded-md border border-border py-2 text-center text-xs font-semibold text-foreground hover:bg-secondary"
+      >
+        {cta}
+      </Link>
+    </Card>
+  );
+}
+
 export function SellerDashboard({
   greetingName,
   userEmail,
@@ -108,9 +158,10 @@ export function SellerDashboard({
   stats,
   openState,
   recentOrders,
-  topBanner,
+  weeklySales,
+  fulfillmentRatePct,
+  progress,
   published = true,
-  onLogout,
 }: {
   greetingName: string;
   userEmail: string;
@@ -118,12 +169,14 @@ export function SellerDashboard({
   stats: DashboardStats;
   openState: DashboardOpenState;
   recentOrders: RecentOrder[];
-  /** Optional slot rendered between the header and the "Welcome" heading — e.g. a "finish setup" nudge. */
-  topBanner?: ReactNode;
+  weeklySales: DailySales[];
+  fulfillmentRatePct: number;
+  progress: OnboardingProgress;
   /** Phase 14 — the store has been launched. Drives the "get your first order" nudge. */
   published?: boolean;
-  onLogout: () => void;
 }) {
+  const { logout } = useAuth();
+  const router = useRouter();
   const status = storeStatusLabel(openState);
   const [shareOpen, setShareOpen] = useState(false);
   const storeUrl =
@@ -131,9 +184,47 @@ export function SellerDashboard({
       ? `${window.location.origin}/s/${store.slug}`
       : `/s/${store.slug}`;
 
+  const restockCount = stats.lowStockCount + stats.outOfStockCount;
+  const stockHealthPct =
+    stats.productCount > 0
+      ? Math.round(((stats.productCount - restockCount) / stats.productCount) * 100)
+      : null;
+
+  let topBanner: React.ReactNode = null;
+  let bannerSubtext = status.text;
+  if (!progress.mandatoryComplete) {
+    const stepsAway = 1 + progress.incompleteOptionalCount;
+    topBanner = (
+      <SetupBanner
+        href="/onboarding"
+        title="Finish setting up your store"
+        subtitle={`You're ${stepsAway} step${stepsAway === 1 ? '' : 's'} away from going live.`}
+        cta="Continue setup"
+      />
+    );
+  } else if (progress.readyToLaunch) {
+    topBanner = (
+      <SetupBanner
+        href="/onboarding/launch"
+        title="Your store is ready to launch"
+        subtitle="Everything required is done — publish it so customers can start ordering."
+        cta="Review & launch"
+      />
+    );
+  } else if (stats.pendingOrdersCount > 0) {
+    bannerSubtext = `${stats.pendingOrdersCount} order${stats.pendingOrdersCount === 1 ? '' : 's'} waiting on you`;
+  }
+
   return (
     <div className="min-h-screen bg-background">
-      <SellerHeader userName={greetingName} userEmail={userEmail} onSignOut={onLogout} />
+      <SellerHeader
+        userName={greetingName}
+        userEmail={userEmail}
+        onSignOut={async () => {
+          await logout();
+          router.push('/');
+        }}
+      />
 
       {/* Main content */}
       <div className="px-4 py-8 font-body lg:px-14">
@@ -155,102 +246,181 @@ export function SellerDashboard({
             </button>
           </div>
         )}
-        <div className="mb-10">
-          <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
-            <h1
-              className="font-headings font-bold text-foreground"
-              style={{ fontSize: 'clamp(24px, 4vw, 32px)', letterSpacing: '-0.8px' }}
-            >
-              Welcome, {greetingName}!
-            </h1>
+
+        {/* Greeting banner */}
+        <div className="relative mb-8 overflow-hidden rounded-2xl bg-panel p-6 text-panel-foreground sm:p-8">
+          <div
+            aria-hidden="true"
+            className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-accent/25"
+          />
+          <div
+            aria-hidden="true"
+            className="absolute -right-2 bottom-0 h-24 w-24 rounded-full bg-panel-foreground/10"
+          />
+          <div className="relative flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h1
+                className="mb-2 font-headings font-bold"
+                style={{ fontSize: 'clamp(24px, 4vw, 32px)', letterSpacing: '-0.8px' }}
+              >
+                Welcome, {greetingName}!
+              </h1>
+              <Link
+                href="/dashboard/settings?tab=hours"
+                className="inline-flex items-center gap-2 text-sm text-panel-foreground/80 hover:text-panel-foreground"
+              >
+                <span
+                  className={`inline-block h-2 w-2 rounded-full ${
+                    status.tone === 'ok'
+                      ? 'bg-green-400'
+                      : status.tone === 'warn'
+                        ? 'bg-amber-400'
+                        : 'bg-panel-foreground/50'
+                  }`}
+                  aria-hidden="true"
+                />
+                {bannerSubtext}
+              </Link>
+            </div>
             <PlanButton />
           </div>
-          <Link
-            href="/dashboard/settings?tab=hours"
-            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-          >
-            <span
-              className={`inline-block h-2 w-2 rounded-full ${
-                status.tone === 'ok'
-                  ? 'bg-green-500'
-                  : status.tone === 'warn'
-                    ? 'bg-amber-500'
-                    : 'bg-muted-foreground'
-              }`}
-              aria-hidden="true"
-            />
-            {status.text}
-          </Link>
         </div>
 
         {/* Stats grid */}
-        <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-          <Card>
-            <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
-              Today&apos;s Sales
-            </p>
-            <p className="font-headings text-2xl font-bold text-foreground">
-              {formatUsd(stats.todaySalesCents)}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">Orders: {stats.todayOrdersCount}</p>
+        <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+          <StatCard
+            icon="dollar-sign"
+            accent="indigo"
+            label="Today's Sales"
+            value={formatUsd(stats.todaySalesCents)}
+            sub={`Orders: ${stats.todayOrdersCount}`}
+          />
+          <StatCard
+            icon="trending-up"
+            accent="violet"
+            label="This Month"
+            value={formatUsd(stats.monthSalesCents)}
+            sub={`Orders: ${stats.monthOrdersCount}`}
+          />
+          <StatCard
+            icon="bar-chart-3"
+            accent="emerald"
+            label="All-Time Sales"
+            value={formatUsd(stats.allTimeSalesCents)}
+            sub={`Orders: ${stats.allTimeOrdersCount}`}
+          />
+          <StatCard
+            icon="clock"
+            accent="amber"
+            label="Pending Orders"
+            value={stats.pendingOrdersCount}
+            sub={stats.pendingOrdersCount > 0 ? 'Needs attention →' : 'All caught up'}
+            subTone={stats.pendingOrdersCount > 0 ? 'accent' : 'muted'}
+            href="/dashboard/orders?status=PAID"
+          />
+          <StatCard
+            icon="package"
+            accent="sky"
+            label="Active Products"
+            value={stats.productCount}
+            sub={restockCount > 0 ? `⚠ ${restockCount} to restock →` : 'Manage products →'}
+            subTone={restockCount > 0 ? 'warn' : 'muted'}
+            href={restockCount > 0 ? '/dashboard/inventory' : '/dashboard/products'}
+          />
+          <StatCard
+            icon="eye"
+            accent="rose"
+            label="Visits (30d)"
+            value={stats.visits}
+            sub="Storefront views"
+          />
+        </div>
+
+        {/* Trend + health */}
+        <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <Card className="lg:col-span-2">
+            <div className="mb-4 flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-panel text-panel-foreground">
+                <Icon i="trending-up" size={13} />
+              </span>
+              <h2 className="font-headings text-lg font-bold text-foreground">
+                Sales — last 7 days
+              </h2>
+            </div>
+            <div style={{ height: 220 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={weeklySales} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                  <defs>
+                    <linearGradient id="weeklySalesFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={CHART_ACCENT} stopOpacity={0.28} />
+                      <stop offset="100%" stopColor={CHART_ACCENT} stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fontSize: 11, fill: CHART_AXIS }}
+                    tickLine={false}
+                    axisLine={{ stroke: CHART_GRID }}
+                  />
+                  <YAxis
+                    width={48}
+                    tick={{ fontSize: 11, fill: CHART_AXIS }}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(v: number) =>
+                      v >= 1000 ? `$${Math.round(v / 1000)}k` : `$${v}`
+                    }
+                  />
+                  <Tooltip
+                    contentStyle={TOOLTIP_STYLE}
+                    formatter={(v) => [formatUsd(Number(v)), 'Sales']}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="salesCents"
+                    name="Sales"
+                    stroke={CHART_ACCENT}
+                    strokeWidth={2}
+                    fill="url(#weeklySalesFill)"
+                    dot={false}
+                    activeDot={{ r: 4 }}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </Card>
-          <Card>
-            <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">This Month</p>
-            <p className="font-headings text-2xl font-bold text-foreground">
-              {formatUsd(stats.monthSalesCents)}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">Orders: {stats.monthOrdersCount}</p>
+
+          <Card className="flex flex-col justify-center gap-6">
+            <div className="flex items-center gap-4">
+              <RadialGauge value={fulfillmentRatePct} color="var(--color-stat-emerald)" />
+              <div>
+                <p className="font-headings text-sm font-bold text-foreground">Fulfillment rate</p>
+                <p className="text-xs text-muted-foreground">Delivered vs. paid, this month</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              {stockHealthPct === null ? (
+                <>
+                  <div className="flex h-24 w-24 flex-shrink-0 items-center justify-center rounded-full bg-secondary">
+                    <Icon i="package" size={20} className="text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="font-headings text-sm font-bold text-foreground">Stock health</p>
+                    <p className="text-xs text-muted-foreground">Add products to track this</p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <RadialGauge value={stockHealthPct} color="var(--color-stat-sky)" />
+                  <div>
+                    <p className="font-headings text-sm font-bold text-foreground">Stock health</p>
+                    <p className="text-xs text-muted-foreground">Products above their threshold</p>
+                  </div>
+                </>
+              )}
+            </div>
           </Card>
-          <Card>
-            <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
-              All-Time Sales
-            </p>
-            <p className="font-headings text-2xl font-bold text-foreground">
-              {formatUsd(stats.allTimeSalesCents)}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">Orders: {stats.allTimeOrdersCount}</p>
-          </Card>
-          <Link href="/dashboard/orders?status=PAID">
-            <Card className="transition-colors hover:border-accent">
-              <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
-                Pending Orders
-              </p>
-              <p className="font-headings text-2xl font-bold text-foreground">
-                {stats.pendingOrdersCount}
-              </p>
-              <p
-                className={`mt-1 text-xs ${
-                  stats.pendingOrdersCount > 0
-                    ? 'font-semibold text-accent'
-                    : 'text-muted-foreground'
-                }`}
-              >
-                {stats.pendingOrdersCount > 0 ? 'Needs attention →' : 'All caught up'}
-              </p>
-            </Card>
-          </Link>
-          {(() => {
-            const restockCount = stats.lowStockCount + stats.outOfStockCount;
-            return (
-              <Link href={restockCount > 0 ? '/dashboard/inventory' : '/dashboard/products'}>
-                <Card className="transition-colors hover:border-accent">
-                  <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
-                    Active Products
-                  </p>
-                  <p className="font-headings text-2xl font-bold text-foreground">
-                    {stats.productCount}
-                  </p>
-                  {restockCount > 0 ? (
-                    <p className="mt-1 text-xs font-semibold text-amber-600">
-                      ⚠ {restockCount} to restock →
-                    </p>
-                  ) : (
-                    <p className="mt-1 text-xs text-muted-foreground">Manage products →</p>
-                  )}
-                </Card>
-              </Link>
-            );
-          })()}
         </div>
 
         {/* Main dashboard grid */}
@@ -284,16 +454,21 @@ export function SellerDashboard({
                     href={`/dashboard/orders/${order.id}`}
                     className="flex items-center justify-between rounded-lg border border-border p-4 transition-colors hover:border-accent"
                   >
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground">
-                        {formatOrderNumber(order.orderNumber)}
-                      </p>
-                      <p className="text-sm font-semibold text-foreground">
-                        {order.customerName ?? 'Guest'}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(order.createdAt).toLocaleString()}
-                      </p>
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-stat-indigo/15 text-stat-indigo">
+                        <Icon i="shopping-bag" size={16} />
+                      </span>
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground">
+                          {formatOrderNumber(order.orderNumber)}
+                        </p>
+                        <p className="text-sm font-semibold text-foreground">
+                          {order.customerName ?? 'Guest'}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(order.createdAt).toLocaleString()}
+                        </p>
+                      </div>
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-bold text-foreground">{formatUsd(order.amount)}</p>
@@ -306,7 +481,7 @@ export function SellerDashboard({
           </Card>
 
           <div className="flex flex-col gap-4">
-            <div className="rounded-lg bg-panel p-6 text-panel-foreground">
+            <div className="rounded-xl bg-panel p-6 text-panel-foreground">
               <Icon i="share-2" size={20} className="mb-4" />
               <p className="mb-2 text-sm font-semibold">Share Your Store</p>
               <p className="mb-4 text-xs" style={{ opacity: 0.9 }}>
@@ -321,85 +496,54 @@ export function SellerDashboard({
               </button>
             </div>
 
-            <Card>
-              <Icon i="package" size={20} className="mb-4 text-foreground" />
-              <p className="mb-2 text-sm font-semibold text-foreground">Add Products</p>
-              <p className="mb-4 text-xs text-muted-foreground">Build your product catalog.</p>
-              <Link
-                href="/dashboard/products/new"
-                className="block w-full rounded-md border border-border bg-secondary py-2 text-center text-xs font-semibold text-foreground hover:bg-border"
-              >
-                Add Now
-              </Link>
-            </Card>
-
-            <Card>
-              <Icon i="store" size={20} className="mb-4 text-foreground" />
-              <p className="mb-2 text-sm font-semibold text-foreground">Customize Store</p>
-              <p className="mb-4 text-xs text-muted-foreground">Logo, template, and store link.</p>
-              <Link
-                href="/dashboard/settings"
-                className="block w-full rounded-md border border-border py-2 text-center text-xs font-semibold text-foreground hover:bg-secondary"
-              >
-                Customize
-              </Link>
-            </Card>
-
-            <Card>
-              <Icon i="truck" size={20} className="mb-4 text-foreground" />
-              <p className="mb-2 text-sm font-semibold text-foreground">Delivery</p>
-              <p className="mb-4 text-xs text-muted-foreground">
-                You deliver — no setup required. Set a fee, track deliveries.
-              </p>
-              <Link
-                href="/dashboard/delivery"
-                className="block w-full rounded-md border border-border py-2 text-center text-xs font-semibold text-foreground hover:bg-secondary"
-              >
-                Manage Delivery
-              </Link>
-            </Card>
-
-            <Card>
-              <Icon i="users" size={20} className="mb-4 text-foreground" />
-              <p className="mb-2 text-sm font-semibold text-foreground">Customers</p>
-              <p className="mb-4 text-xs text-muted-foreground">
-                See who's bought from you and how much they've spent.
-              </p>
-              <Link
-                href="/dashboard/customers"
-                className="block w-full rounded-md border border-border py-2 text-center text-xs font-semibold text-foreground hover:bg-secondary"
-              >
-                View Customers
-              </Link>
-            </Card>
-
-            <Card>
-              <Icon i="star" size={20} className="mb-4 text-foreground" />
-              <p className="mb-2 text-sm font-semibold text-foreground">Reviews</p>
-              <p className="mb-4 text-xs text-muted-foreground">
-                Moderate what shows up on your public storefront.
-              </p>
-              <Link
-                href="/dashboard/reviews"
-                className="block w-full rounded-md border border-border py-2 text-center text-xs font-semibold text-foreground hover:bg-secondary"
-              >
-                View Reviews
-              </Link>
-            </Card>
-
-            <Card>
-              <Icon i="message-circle" size={20} className="mb-4 text-foreground" />
-              <p className="mb-2 text-sm font-semibold text-foreground">Share Your Story</p>
-              <p className="mb-4 text-xs text-muted-foreground">
-                Love Vendylio? Send us a few words — we might feature you on the homepage.
-              </p>
-              <Link
-                href="/dashboard/testimonial"
-                className="block w-full rounded-md border border-border py-2 text-center text-xs font-semibold text-foreground hover:bg-secondary"
-              >
-                Write a Testimonial
-              </Link>
-            </Card>
+            <ActionCard
+              icon="package"
+              accent="indigo"
+              title="Add Products"
+              desc="Build your product catalog."
+              href="/dashboard/products/new"
+              cta="Add Now"
+            />
+            <ActionCard
+              icon="store"
+              accent="violet"
+              title="Customize Store"
+              desc="Logo, template, and store link."
+              href="/dashboard/settings"
+              cta="Customize"
+            />
+            <ActionCard
+              icon="truck"
+              accent="sky"
+              title="Delivery"
+              desc="You deliver — no setup required. Set a fee, track deliveries."
+              href="/dashboard/delivery"
+              cta="Manage Delivery"
+            />
+            <ActionCard
+              icon="users"
+              accent="emerald"
+              title="Customers"
+              desc="See who's bought from you and how much they've spent."
+              href="/dashboard/customers"
+              cta="View Customers"
+            />
+            <ActionCard
+              icon="star"
+              accent="amber"
+              title="Reviews"
+              desc="Moderate what shows up on your public storefront."
+              href="/dashboard/reviews"
+              cta="View Reviews"
+            />
+            <ActionCard
+              icon="message-circle"
+              accent="rose"
+              title="Share Your Story"
+              desc="Love Vendylio? Send us a few words — we might feature you on the homepage."
+              href="/dashboard/testimonial"
+              cta="Write a Testimonial"
+            />
           </div>
         </div>
 
@@ -413,7 +557,7 @@ export function SellerDashboard({
                 <div key={step.title} className="flex items-start gap-3">
                   <div
                     className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                      done ? 'bg-panel text-panel-foreground' : 'bg-muted text-foreground'
+                      done ? 'bg-stat-emerald text-white' : 'bg-muted text-foreground'
                     }`}
                   >
                     {done ? '✓' : i + 1}

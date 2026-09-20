@@ -7,6 +7,7 @@ import { useAuth, useUser } from '@/contexts/AuthContext';
 import { api, ApiError } from '@/lib/api';
 import { Icon } from '@/components/ui/Icon';
 import { Card } from '@/components/ui/Card';
+import { StatCard } from '@/components/ui/StatCard';
 import { SellerHeader } from '@/components/seller/SellerHeader';
 import { WithdrawalRequestForm } from '@/components/seller/WithdrawalRequestForm';
 import { DowngradeDialog } from '@/components/seller/DowngradeDialog';
@@ -261,47 +262,46 @@ export default function BillingPayoutsPage() {
           </Card>
 
           <div className="mb-12 grid grid-cols-1 gap-6 sm:grid-cols-3">
-            <Card>
-              <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
-                Available to Withdraw
-              </p>
-              <p className="font-headings text-3xl font-bold text-foreground">
-                {availableCents === null ? '—' : formatUsd(availableCents)}
-              </p>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Card sales held by Vendylio, net of commission
-                {stripe?.stripeOnboardingStatus === 'ACTIVE'
-                  ? ' (from before you connected Stripe).'
-                  : '.'}
-              </p>
-            </Card>
-            <Card>
-              <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">Pending</p>
-              <p className="font-headings text-3xl font-bold text-foreground">
-                {formatUsd(pendingCents)}
-              </p>
-              {commissionOwedCents > 0 && (
-                <p className="mt-2 text-xs text-amber-700">
-                  {formatUsd(commissionOwedCents)} Vendylio commission due — settled from your next
-                  withdrawal.
-                </p>
-              )}
-              {commissionOwedCents < 0 && (
-                <p className="mt-2 text-xs text-green-700">
-                  {formatUsd(-commissionOwedCents)} commission credit — applied to your next
-                  withdrawal.
-                </p>
-              )}
-            </Card>
-            <Card>
-              <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
-                Total Withdrawn
-              </p>
-              <p className="font-headings text-3xl font-bold text-foreground">
-                {formatUsd(totalWithdrawnCents)}
-              </p>
-              <p className="mt-2 text-xs text-muted-foreground">0% fees</p>
-            </Card>
+            <StatCard
+              icon="dollar-sign"
+              accent="indigo"
+              label="Available to Withdraw"
+              value={availableCents === null ? '—' : formatUsd(availableCents)}
+              sub={
+                <>
+                  Card sales held by Vendylio, net of commission
+                  {stripe?.stripeOnboardingStatus === 'ACTIVE'
+                    ? ' (from before you connected Stripe).'
+                    : '.'}
+                </>
+              }
+            />
+            <StatCard
+              icon="clock"
+              accent="amber"
+              label="Pending"
+              value={formatUsd(pendingCents)}
+              sub={
+                commissionOwedCents > 0 ? (
+                  <span className="text-amber-700">
+                    {formatUsd(commissionOwedCents)} Vendylio commission due — settled from your
+                    next withdrawal.
+                  </span>
+                ) : commissionOwedCents < 0 ? (
+                  <span className="text-green-700">
+                    {formatUsd(-commissionOwedCents)} commission credit — applied to your next
+                    withdrawal.
+                  </span>
+                ) : undefined
+              }
+            />
+            <StatCard
+              icon="bar-chart-3"
+              accent="emerald"
+              label="Total Withdrawn"
+              value={formatUsd(totalWithdrawnCents)}
+              sub="0% fees"
+            />
           </div>
 
           {billing && (

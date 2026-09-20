@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
 import { STORE_TEMPLATES, type StoreTemplate } from '@/lib/storeTemplates';
 import { parseHeroImages } from '@/lib/storeHero';
 import { StoreHeroEditor } from '@/components/seller/StoreHeroEditor';
-import type { DashboardStore } from '@/components/seller/SellerDashboard';
+import type { DashboardStore } from '@/lib/server/dashboard/overview';
 
 interface StoreDetails extends DashboardStore {
   description: string | null;

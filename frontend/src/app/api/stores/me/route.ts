@@ -8,36 +8,20 @@
 // real 30-day storefront-view sum (StorefrontDayStat) — the headline number
 // for every plan; the detailed breakdown lives on the Pro-only
 // /dashboard/analytics page (GET /api/analytics).
+//
+// The actual store-resolution + aggregate queries live in
+// `getDashboardOverview` (lib/server/dashboard/overview.ts) — the dashboard
+// home page calls that directly (server-side, no HTTP round-trip); this
+// route is a thin wrapper around the same function for client consumers
+// (SellerSidebar, and anything that refetches after a mutation).
 export const runtime = 'nodejs';
 
 import 'server-only';
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { requireAuth } from '@/lib/server/middleware';
-import { prisma } from '@/lib/server/prisma';
-import { resolveOwnStore } from '@/lib/server/org';
-import { countLowStock } from '@/lib/server/inventory/low-stock';
-import { getStoreOpenState } from '@/lib/server/store/availability';
-import { startOfStoreDay, startOfStoreMonth } from '@/lib/server/store/timezoneWindow';
-import { recentVisitCount } from '@/lib/server/analytics/aggregate';
+import { getDashboardOverview } from '@/lib/server/dashboard/overview';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
-
-// Sales stats must count every order that was actually paid, not just ones
-// currently sitting in the PAID status — an order that has since progressed
-// to PREPARING/READY/OUT_FOR_DELIVERY/DELIVERED was still a real sale. An
-// exact `status: 'PAID'` match made revenue drop to $0 the moment a seller
-// advanced an order past that first post-payment status.
-const PAID_ORDER_STATUSES: string[] = [
-  'PAID',
-  'PREPARING',
-  'READY',
-  'OUT_FOR_DELIVERY',
-  'DELIVERED',
-];
-
-// Orders that still need the merchant to do something (surfaced as the nav
-// badge + dashboard "needs attention" count).
-const PENDING_ACTION_STATUSES: string[] = ['PAID', 'PREPARING', 'READY'];
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const ctx = makeRequestContext(req.headers);
@@ -45,83 +29,16 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const auth = await requireAuth();
     if (auth instanceof NextResponse) return auth;
 
-    const ownStore = await resolveOwnStore(auth.user.sub);
-    if (!ownStore) {
+    const overview = await getDashboardOverview(auth.user.sub);
+    if (!overview) {
       return NextResponse.json(
         { error: 'NO_STORE', message: 'No store yet.' },
         { status: 404, headers: { 'x-request-id': ctx.requestId } },
       );
     }
 
-    const store = await prisma.store.findUniqueOrThrow({
-      where: { id: ownStore.id },
-      include: { _count: { select: { products: true } } },
-    });
-
-    const now = new Date();
-    const tz = store.timezone || 'UTC';
-    const [todayAgg, monthAgg, allTimeAgg, lowStock, pendingCount, visits] = await Promise.all([
-      prisma.order.aggregate({
-        where: {
-          storeId: store.id,
-          status: { in: PAID_ORDER_STATUSES },
-          paidAt: { gte: startOfStoreDay(tz, now) },
-        },
-        _sum: { amount: true },
-        _count: true,
-      }),
-      prisma.order.aggregate({
-        where: {
-          storeId: store.id,
-          status: { in: PAID_ORDER_STATUSES },
-          paidAt: { gte: startOfStoreMonth(tz, now) },
-        },
-        _sum: { amount: true },
-        _count: true,
-      }),
-      // All-time — every paid sale ever, no date window. Sits next to the
-      // calendar-month figure so a low "This Month" early in the month
-      // doesn't read as "no money" when there's a withdrawable balance.
-      prisma.order.aggregate({
-        where: { storeId: store.id, status: { in: PAID_ORDER_STATUSES } },
-        _sum: { amount: true },
-        _count: true,
-      }),
-      countLowStock(prisma, store.id),
-      prisma.order.count({
-        where: { storeId: store.id, status: { in: PENDING_ACTION_STATUSES } },
-      }),
-      recentVisitCount(prisma, { storeId: store.id, tz }),
-    ]);
-
-    const openState = getStoreOpenState({ timezone: tz, hours: store.hours }, now);
-
-    const { _count, ...storeFields } = store;
     return NextResponse.json(
-      {
-        store: storeFields,
-        openState: {
-          acceptingOrders: !store.ordersPaused,
-          ordersPaused: store.ordersPaused,
-          pauseMessage: store.pauseMessage,
-          hoursConfigured: openState.hoursConfigured,
-          openNow: openState.openNow,
-          nextOpenLabel: openState.nextOpenLabel,
-        },
-        stats: {
-          productCount: _count.products,
-          todaySalesCents: todayAgg._sum.amount ?? 0,
-          todayOrdersCount: todayAgg._count,
-          monthSalesCents: monthAgg._sum.amount ?? 0,
-          monthOrdersCount: monthAgg._count,
-          allTimeSalesCents: allTimeAgg._sum.amount ?? 0,
-          allTimeOrdersCount: allTimeAgg._count,
-          pendingOrdersCount: pendingCount,
-          visits,
-          lowStockCount: lowStock.lowStockCount,
-          outOfStockCount: lowStock.outOfStockCount,
-        },
-      },
+      { store: overview.store, openState: overview.openState, stats: overview.stats },
       { headers: { 'x-request-id': ctx.requestId } },
     );
   });

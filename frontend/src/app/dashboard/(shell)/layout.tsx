@@ -1,9 +1,20 @@
 'use client';
 
+import { Plus_Jakarta_Sans } from 'next/font/google';
 import { SellerSidebar } from '@/components/seller/SellerSidebar';
 import { ForcePasswordChange } from '@/components/auth/ForcePasswordChange';
 import { UpgradeModalHost } from '@/components/seller/UpgradeModalHost';
 import { MobileNavProvider } from '@/components/nav/MobileNav';
+
+// Rounder display face for the seller dashboard only — see globals.css'
+// `[data-dashboard-shell]` rule, which redefines --font-body/--font-headings
+// to this variable so every existing font-body/font-headings class across
+// the dashboard's pages picks it up with no per-page change.
+const plusJakartaSans = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  variable: '--font-jakarta',
+  display: 'swap',
+});
 
 // Phase 9 — persistent nav shell for the day-to-day seller pages (Dashboard,
 // Orders, Products, Customers, Reviews, Delivery, Settings, Billing,
@@ -18,7 +29,10 @@ import { MobileNavProvider } from '@/components/nav/MobileNav';
 export default function DashboardShellLayout({ children }: { children: React.ReactNode }) {
   return (
     <MobileNavProvider>
-      <div className="min-h-screen bg-background">
+      <div
+        data-dashboard-shell
+        className={`min-h-screen bg-background ${plusJakartaSans.variable}`}
+      >
         <ForcePasswordChange />
         <UpgradeModalHost />
         <SellerSidebar />
