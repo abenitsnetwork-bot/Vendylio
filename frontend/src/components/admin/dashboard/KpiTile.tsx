@@ -1,4 +1,5 @@
 import { Icon, type IconName } from '@/components/ui/Icon';
+import type { StatAccent } from '@/components/ui/StatCard';
 import { DeltaChip } from './DeltaChip';
 import { Sparkline } from './Sparkline';
 
@@ -10,6 +11,10 @@ import { Sparkline } from './Sparkline';
  * `compact` tightens the padding and shrinks the sparkline for the stacked
  * column next to the revenue donut; `valueTone="positive"` prints the value in
  * green (the Octoboard treatment for money KPIs).
+ *
+ * `accent` is `true` for the plain brand-coral badge (unchanged), a
+ * --color-stat-* name (see StatCard) for one of the seller-dashboard's vivid
+ * badge colors, or `false`/omitted for the neutral gray badge.
  */
 export function KpiTile({
   label,
@@ -34,10 +39,17 @@ export function KpiTile({
   addedNote?: string | undefined;
   spark?: number[] | undefined;
   sparkTone?: 'ink' | 'accent';
-  accent?: boolean;
+  accent?: boolean | StatAccent;
   compact?: boolean;
   valueTone?: 'default' | 'positive';
 }) {
+  const badgeColor =
+    typeof accent === 'string'
+      ? `var(--color-stat-${accent})`
+      : accent
+        ? 'var(--color-accent)'
+        : null;
+
   return (
     <div
       className={`group relative overflow-hidden rounded-lg border border-border bg-card transition-transform duration-150 hover:-translate-y-0.5 ${
@@ -45,14 +57,23 @@ export function KpiTile({
       }`}
     >
       <span
-        className={`absolute inset-x-0 top-0 h-0.5 ${accent ? 'bg-accent' : 'bg-primary/25'}`}
+        className={`absolute inset-x-0 top-0 h-0.5 ${badgeColor ? '' : 'bg-primary/25'}`}
+        style={badgeColor ? { backgroundColor: badgeColor } : undefined}
         aria-hidden="true"
       />
       <div className="mb-2 flex items-center gap-2">
         <span
           className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md ${
-            accent ? 'bg-accent/10 text-accent' : 'bg-secondary text-muted-foreground'
+            badgeColor ? '' : 'bg-secondary text-muted-foreground'
           }`}
+          style={
+            badgeColor
+              ? {
+                  backgroundColor: `color-mix(in srgb, ${badgeColor} 16%, transparent)`,
+                  color: badgeColor,
+                }
+              : undefined
+          }
         >
           <Icon i={icon} size={13} />
         </span>

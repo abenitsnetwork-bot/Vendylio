@@ -156,13 +156,14 @@ body {
   }
 }
 
-/* Seller dashboard gets a rounder display face (Plus Jakarta Sans, loaded in
-   dashboard/(shell)/layout.tsx) instead of Inter/Fraunces — scoped to the
-   shell wrapper so every existing `font-body`/`font-headings` Tailwind
-   utility across the ~20 dashboard pages picks it up automatically, with no
-   per-page change, and the rest of the app (storefront, landing, admin) is
-   untouched. */
-[data-dashboard-shell] {
+/* Seller + admin dashboards get a rounder display face (Plus Jakarta Sans,
+   loaded in dashboard/(shell)/layout.tsx and admin/AdminShell.tsx) instead
+   of Inter/Fraunces — scoped to each shell wrapper so every existing
+   `font-body`/`font-headings` Tailwind utility across both back-offices
+   picks it up automatically, with no per-page change. The public site
+   (storefront, landing) is untouched. */
+[data-dashboard-shell],
+[data-admin-shell] {
   --font-body: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
   --font-headings: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
 }

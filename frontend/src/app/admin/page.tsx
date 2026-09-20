@@ -199,7 +199,7 @@ export default function AdminDashboardPage() {
                 deltaPct={k.gmv.deltaPct ?? null}
                 deltaSuffix={period}
                 spark={k.gmv.spark}
-                accent
+                accent="emerald"
                 compact
                 valueTone="positive"
               />
@@ -210,7 +210,7 @@ export default function AdminDashboardPage() {
                 deltaPct={k.platformRevenue.deltaPct ?? null}
                 deltaSuffix={period}
                 spark={k.platformRevenue.spark}
-                accent
+                accent="indigo"
                 compact
                 valueTone="positive"
               />
@@ -221,6 +221,7 @@ export default function AdminDashboardPage() {
                 deltaPct={k.orders.deltaPct ?? null}
                 deltaSuffix={period}
                 spark={k.orders.spark}
+                accent="sky"
                 compact
               />
               <KpiTile
@@ -231,6 +232,7 @@ export default function AdminDashboardPage() {
                 deltaSuffix={period}
                 spark={k.newCustomers.spark}
                 sparkTone="accent"
+                accent="violet"
                 compact
               />
             </div>
@@ -378,6 +380,7 @@ export default function AdminDashboardPage() {
               label="Merchants"
               icon="briefcase"
               value={count(k.merchants.value)}
+              accent="amber"
               addedNote={
                 (k.merchants.addedInPeriod ?? 0) > 0
                   ? `+${k.merchants.addedInPeriod} new / ${period}`
@@ -388,6 +391,7 @@ export default function AdminDashboardPage() {
               label="Active stores"
               icon="store"
               value={count(k.activeStores.value)}
+              accent="emerald"
               addedNote={
                 (k.activeStores.addedInPeriod ?? 0) > 0
                   ? `+${k.activeStores.addedInPeriod} new / ${period}`
@@ -398,6 +402,7 @@ export default function AdminDashboardPage() {
               label="Active deliveries"
               icon="truck"
               value={count(k.activeDeliveries.value)}
+              accent="sky"
             />
             <KpiTile
               label="Failed payments"
@@ -405,6 +410,7 @@ export default function AdminDashboardPage() {
               value={count(k.failedPayments.value)}
               deltaPct={k.failedPayments.deltaPct ?? null}
               deltaSuffix={period}
+              accent="rose"
               invertDelta
             />
           </div>
