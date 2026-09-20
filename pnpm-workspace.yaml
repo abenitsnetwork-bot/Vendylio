@@ -36,3 +36,8 @@ overrides:
   # (already used elsewhere via @sentry/nextjs's own otel chain) collapses
   # both paths onto the same patched core@2.10.0 instance.
   '@opentelemetry/sdk-logs': ^0.221.0
+  # Pulled in transitively by @sentry/nextjs's build-time plugins
+  # (@sentry/bundler-plugin-core + @sentry/webpack-plugin, via
+  # @babel/helper-compilation-targets and webpack) — not our own dependency,
+  # same reasoning as the entries above.
+  browserslist: ^4.29.0
