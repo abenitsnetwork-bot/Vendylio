@@ -55,9 +55,12 @@ describe('GET /api/admin/site-videos', () => {
     const res = await GET(makeGet());
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.videos).toHaveLength(1);
-    expect(body.videos[0].url).toBeNull();
-    expect(body.videos[0].key).toBe('landing_hero_video');
+    expect(body.videos).toHaveLength(2);
+    expect(body.videos.every((v: { url: string | null }) => v.url === null)).toBe(true);
+    expect(body.videos.map((v: { key: string }) => v.key)).toEqual([
+      'landing_hero_video',
+      'landing_intro_video',
+    ]);
   });
 
   it('merges an existing SiteVideo row into its manifest slot', async () => {

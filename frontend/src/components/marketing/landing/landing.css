@@ -233,6 +233,43 @@
   color: var(--v-ivory);
   text-shadow: 0 1px 8px var(--v-forest);
 }
+.vendylio-landing .editorial-video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  background: var(--v-forest);
+}
+.vendylio-landing .editorial-play {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: rgba(8, 25, 20, 0.18);
+  transition: background 0.3s;
+}
+.vendylio-landing .editorial-play:hover {
+  background: rgba(8, 25, 20, 0.3);
+}
+.vendylio-landing .editorial-play span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--v-ivory);
+  color: var(--v-forest);
+  transition: transform 0.3s;
+}
+.vendylio-landing .editorial-play:hover span {
+  transform: scale(1.06);
+}
 .vendylio-landing .intro-product-card {
   position: absolute;
   left: 28px;

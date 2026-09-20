@@ -6,8 +6,13 @@
 export const SITE_VIDEO_KEYS = [
   {
     key: 'landing_hero_video',
-    label: 'Homepage video',
-    hint: 'Shown below the hero section on the public homepage. MP4 or WebM, up to 100MB.',
+    label: 'Hero film',
+    hint: 'The scroll-scrubbed film at the very top of the homepage. MP4 or WebM, up to 100MB. The poster shows before it loads and while it plays back on scroll.',
+  },
+  {
+    key: 'landing_intro_video',
+    label: 'Intro section video',
+    hint: 'Click-to-play video in the "You bring the ambition..." section, just below the hero. MP4 or WebM, up to 100MB. Shows a poster image until the visitor presses play.',
   },
 ] as const;
 

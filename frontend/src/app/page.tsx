@@ -27,15 +27,22 @@ import { ClosingSection } from '@/components/marketing/landing/ClosingSection';
 import '@/components/marketing/landing/landing.css';
 
 export default async function HomePage() {
-  const { images, testimonials, video } = await getLandingPageContent();
+  const { images, testimonials, videos } = await getLandingPageContent();
 
   return (
     <div className="bg-background font-body">
       <PublicNavBar />
       <LandingMotion>
         <main>
-          <HeroFilm video={video} showcaseImage={images.hero_showcase} />
-          <IntroEditorial showcaseImage={images.hero_showcase} productImage={images.hero_product} />
+          <HeroFilm
+            video={videos.landing_hero_video ?? null}
+            showcaseImage={images.hero_showcase}
+          />
+          <IntroEditorial
+            video={videos.landing_intro_video ?? null}
+            showcaseImage={images.hero_showcase}
+            productImage={images.hero_product}
+          />
           <JourneySteps images={images} />
           <DeliveryMethods image={images.feature_delivery} />
           <PricingSection />

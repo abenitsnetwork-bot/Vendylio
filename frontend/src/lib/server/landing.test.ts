@@ -7,29 +7,33 @@ beforeEach(() => {
   prismaMock.siteImage.findMany.mockResolvedValue([]);
   prismaMock.testimonial.findMany.mockResolvedValue([]);
   prismaMock.store.count.mockResolvedValue(0);
-  prismaMock.siteVideo.findUnique.mockResolvedValue(null);
+  prismaMock.siteVideo.findMany.mockResolvedValue([]);
 });
 
 describe('getLandingPageContent', () => {
-  it('returns an empty images map, no video, and empty testimonials when nothing is set', async () => {
+  it('returns empty images/videos maps and empty testimonials when nothing is set', async () => {
     const result = await getLandingPageContent();
-    expect(result).toEqual({ images: {}, testimonials: [], sellerCount: 0, video: null });
+    expect(result).toEqual({ images: {}, testimonials: [], sellerCount: 0, videos: {} });
   });
 
-  it('returns the video when a SiteVideo row exists for the landing key', async () => {
-    prismaMock.siteVideo.findUnique.mockResolvedValueOnce({
-      url: 'https://cdn/video.mp4',
-      posterUrl: 'https://cdn/poster.jpg',
-    } as never);
+  it('keys the videos map by SiteVideo.key', async () => {
+    prismaMock.siteVideo.findMany.mockResolvedValueOnce([
+      {
+        key: 'landing_hero_video',
+        url: 'https://cdn/video.mp4',
+        posterUrl: 'https://cdn/poster.jpg',
+      },
+      { key: 'landing_intro_video', url: 'https://cdn/intro.mp4', posterUrl: null },
+    ] as never);
 
     const result = await getLandingPageContent();
-    expect(result.video).toEqual({
-      url: 'https://cdn/video.mp4',
-      posterUrl: 'https://cdn/poster.jpg',
+    expect(result.videos).toEqual({
+      landing_hero_video: { url: 'https://cdn/video.mp4', posterUrl: 'https://cdn/poster.jpg' },
+      landing_intro_video: { url: 'https://cdn/intro.mp4', posterUrl: null },
     });
-    expect(prismaMock.siteVideo.findUnique).toHaveBeenCalledWith({
-      where: { key: 'landing_hero_video' },
-      select: { url: true, posterUrl: true },
+    expect(prismaMock.siteVideo.findMany).toHaveBeenCalledWith({
+      where: { key: { in: ['landing_hero_video', 'landing_intro_video'] } },
+      select: { key: true, url: true, posterUrl: true },
     });
   });
 
