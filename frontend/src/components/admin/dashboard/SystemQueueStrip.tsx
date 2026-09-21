@@ -67,30 +67,48 @@ const TONE_CLASS: Record<Tile['tone'], string> = {
   failure: 'border-red-300 bg-red-50',
 };
 
+const TONE_BADGE: Record<Tile['tone'], string> = {
+  ok: 'bg-secondary text-muted-foreground',
+  attention: 'bg-amber-100 text-amber-700',
+  failure: 'bg-red-100 text-red-700',
+};
+
 const TONE_VALUE: Record<Tile['tone'], string> = {
   ok: 'text-foreground',
   attention: 'text-amber-700',
   failure: 'text-red-700',
 };
 
+/**
+ * Same visual weight as the seller dashboard's StatCard (rounded-xl, shadow,
+ * circular icon badge, big tabular value) — but the badge/value colour stays
+ * driven by operational tone (ok/attention/failure), never a decorative
+ * accent, so a real problem still reads as amber/red at a glance.
+ */
 export function SystemQueueStrip({ queue }: { queue: QueueSnapshot }) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
       {tiles(queue).map((t) => {
         const inner = (
           <>
-            <div className="mb-1.5 flex items-center gap-1.5 text-muted-foreground">
-              <Icon i={t.icon} size={12} />
-              <span className="text-[10px] font-semibold uppercase tracking-wide">{t.label}</span>
+            <div className="mb-2.5 flex items-center gap-2.5">
+              <span
+                className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full ${TONE_BADGE[t.tone]}`}
+              >
+                <Icon i={t.icon} size={16} />
+              </span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {t.label}
+              </span>
             </div>
-            <p className={`font-headings text-xl font-bold tabular-nums ${TONE_VALUE[t.tone]}`}>
+            <p className={`font-headings text-2xl font-bold tabular-nums ${TONE_VALUE[t.tone]}`}>
               {t.value}
             </p>
           </>
         );
-        const cls = `block rounded-lg border p-3 ${TONE_CLASS[t.tone]}`;
+        const cls = `block rounded-xl border p-4 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md ${TONE_CLASS[t.tone]}`;
         return t.href ? (
-          <Link key={t.label} href={t.href} className={`${cls} hover:brightness-95`}>
+          <Link key={t.label} href={t.href} className={cls}>
             {inner}
           </Link>
         ) : (
