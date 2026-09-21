@@ -176,12 +176,20 @@ export default function ProductsPage() {
                 Edit, replace photos, or remove products from your store.
               </p>
             </div>
-            <Link
-              href="/dashboard/products/new"
-              className="inline-block whitespace-nowrap rounded-lg border border-border bg-secondary px-5 py-2.5 text-sm font-semibold text-foreground"
-            >
-              Add Product
-            </Link>
+            <div className="flex flex-shrink-0 gap-2">
+              <Link
+                href="/dashboard/products/import"
+                className="inline-block whitespace-nowrap rounded-lg border border-border bg-card px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-secondary"
+              >
+                Import CSV
+              </Link>
+              <Link
+                href="/dashboard/products/new"
+                className="inline-block whitespace-nowrap rounded-lg border border-border bg-secondary px-5 py-2.5 text-sm font-semibold text-foreground"
+              >
+                Add Product
+              </Link>
+            </div>
           </div>
 
           {/* Toolbar */}
@@ -296,12 +304,20 @@ export default function ProductsPage() {
                 Add your first product to start selling — physical goods, services, or local
                 offerings all work.
               </p>
-              <Link
-                href="/dashboard/products/new"
-                className="inline-block rounded-lg border border-border bg-secondary px-5 py-2.5 text-sm font-semibold text-foreground"
-              >
-                + Add Your First Product
-              </Link>
+              <div className="flex justify-center gap-2">
+                <Link
+                  href="/dashboard/products/new"
+                  className="inline-block rounded-lg border border-border bg-secondary px-5 py-2.5 text-sm font-semibold text-foreground"
+                >
+                  + Add Your First Product
+                </Link>
+                <Link
+                  href="/dashboard/products/import"
+                  className="inline-block rounded-lg border border-border bg-card px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-secondary"
+                >
+                  Import CSV
+                </Link>
+              </div>
             </div>
           )}
 
