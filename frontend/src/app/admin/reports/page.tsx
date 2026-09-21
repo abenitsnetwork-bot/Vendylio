@@ -63,6 +63,7 @@ const REPORT_ICON: Record<string, IconName> = {
   'contact-messages': 'mail',
   'admin-activity': 'shield',
   'seller-tax-summary': 'file-text',
+  'sales-tax-nexus': 'map-pin',
   'suspended-accounts': 'lock',
   disputes: 'alert-circle',
   'reconciliation-discrepancies': 'search',

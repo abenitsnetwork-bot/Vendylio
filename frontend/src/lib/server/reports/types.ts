@@ -20,6 +20,7 @@ export type ReportType =
   | 'contact-messages'
   | 'admin-activity'
   | 'seller-tax-summary'
+  | 'sales-tax-nexus'
   | 'suspended-accounts'
   | 'product-performance'
   | 'dead-stock'

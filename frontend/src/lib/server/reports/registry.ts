@@ -14,6 +14,7 @@ import { buildBusinessWaitlist } from './builders/businessWaitlist';
 import { buildContactMessages } from './builders/contactMessages';
 import { buildAdminActivity } from './builders/adminActivity';
 import { buildSellerTaxSummary } from './builders/sellerTaxSummary';
+import { buildSalesTaxNexus } from './builders/salesTaxNexus';
 import { buildSuspendedAccounts } from './builders/suspendedAccounts';
 import { buildProductPerformance } from './builders/productPerformance';
 import { buildDeadStock } from './builders/deadStock';
@@ -152,6 +153,15 @@ export const REPORTS: Record<ReportType, ReportDef> = {
     usesDateRange: true,
     usesStoreFilter: true,
     build: buildSellerTaxSummary,
+  },
+  'sales-tax-nexus': {
+    type: 'sales-tax-nexus',
+    label: 'Sales-tax nexus tracker',
+    description:
+      'Revenue by US state (all payment methods), flagged against the classic economic-nexus thresholds — a hint for when to look into sales-tax registration, not a filed calculation.',
+    usesDateRange: true,
+    usesStoreFilter: false,
+    build: buildSalesTaxNexus,
   },
   'suspended-accounts': {
     type: 'suspended-accounts',
