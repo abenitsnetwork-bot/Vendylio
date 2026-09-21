@@ -10,7 +10,9 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { CHART_ACCENT, CHART_AXIS, CHART_GRID, CHART_INK, TOOLTIP_STYLE } from './colors';
+import { CHART_ACCENT, CHART_AXIS, CHART_GRID, TOOLTIP_STYLE } from './colors';
+
+const GMV_BAR_COLOR = 'var(--color-stat-rose)';
 
 export interface TrendPoint {
   label: string;
@@ -40,8 +42,8 @@ export function TrendComboChart({
         <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
           <defs>
             <linearGradient id="trend-gmv-bar" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={CHART_INK} stopOpacity={0.9} />
-              <stop offset="100%" stopColor={CHART_INK} stopOpacity={0.45} />
+              <stop offset="0%" stopColor={GMV_BAR_COLOR} stopOpacity={0.95} />
+              <stop offset="100%" stopColor={GMV_BAR_COLOR} stopOpacity={0.5} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
