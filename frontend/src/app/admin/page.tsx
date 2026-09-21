@@ -268,9 +268,24 @@ export default function AdminDashboardPage() {
             </div>
           }
         >
-          <div className="grid gap-4 lg:grid-cols-3 xl:grid-cols-4">
-            {/* Left — the money story, stacked */}
-            <div className="space-y-3 lg:col-span-1">
+          {/* Bento row 1 — the big trend anchor + the 4 headline numbers */}
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
+            <div className="rounded-lg border border-border bg-card p-4 xl:col-span-7">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {trendRange === '30d' ? 'Daily' : 'Monthly'} GMV &amp; orders
+              </p>
+              {!pulse && !analytics ? (
+                <p className="py-16 text-center text-sm text-muted-foreground">Loading…</p>
+              ) : trendData.length === 0 ? (
+                <p className="py-16 text-center text-sm text-muted-foreground">
+                  No revenue data yet.
+                </p>
+              ) : (
+                <TrendComboChart data={trendData} formatMoney={usd} height={280} />
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 xl:col-span-5">
               <KpiTile
                 label="GMV"
                 icon="trending-up"
@@ -315,9 +330,11 @@ export default function AdminDashboardPage() {
                 compact
               />
             </div>
+          </div>
 
-            {/* Centre — the "Sales revenue" ring (GMV split by payment method) */}
-            <div className="rounded-lg border border-border bg-card p-4 lg:col-span-1">
+          {/* Bento row 2 — revenue mix ring · Pro-adoption ring · storefront traffic */}
+          <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
+            <div className="rounded-lg border border-border bg-card p-4">
               <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Sales revenue · by method
               </p>
@@ -331,11 +348,16 @@ export default function AdminDashboardPage() {
                 centerLabel={`total · ${period}`}
                 formatMoney={usd}
               />
+            </div>
 
-              {/* Plan mix + recurring revenue — the Free/Pro business story */}
+            {/* Plan mix + recurring revenue — the Free/Pro business story */}
+            <div className="rounded-lg border border-border bg-card p-4">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Plan mix · Pro adoption
+              </p>
               {pulse && (
-                <div className="mt-4 space-y-3 border-t border-border pt-4">
-                  <div className="flex items-center gap-4">
+                <>
+                  <div className="flex flex-col items-center gap-2 py-2">
                     <RadialGauge
                       value={
                         pulse.planMix.pro + pulse.planMix.free > 0
@@ -343,18 +365,13 @@ export default function AdminDashboardPage() {
                           : 0
                       }
                       color="var(--color-stat-emerald)"
-                      size={72}
+                      size={110}
                     />
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        Plan mix · Pro adoption
-                      </p>
-                      <p className="text-sm font-semibold text-foreground">
-                        {pulse.planMix.pro} Pro · {pulse.planMix.free} Free
-                      </p>
-                    </div>
+                    <p className="text-sm font-semibold text-foreground">
+                      {pulse.planMix.pro} Pro · {pulse.planMix.free} Free
+                    </p>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="mt-3 grid grid-cols-2 gap-3 border-t border-border pt-4">
                     <div>
                       <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
                         MRR
@@ -382,41 +399,29 @@ export default function AdminDashboardPage() {
                     </div>
                   </div>
                   {pulse.subscriptions.pastDue > 0 && (
-                    <p className="text-[11px] font-semibold text-red-600">
+                    <p className="mt-2 text-[11px] font-semibold text-red-600">
                       {pulse.subscriptions.pastDue} subscription
                       {pulse.subscriptions.pastDue > 1 ? 's' : ''} past due
                     </p>
                   )}
-                </div>
+                </>
               )}
             </div>
 
-            {/* Right — the trend combo */}
-            <div className="rounded-lg border border-border bg-card p-4 lg:col-span-1 xl:col-span-2">
-              <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                {trendRange === '30d' ? 'Daily' : 'Monthly'} GMV &amp; orders
+            {/* Storefront traffic — the platform is alive even with no orders */}
+            <div className="rounded-lg border border-border bg-card p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Storefront visitors · 30d
               </p>
-              {!pulse && !analytics ? (
-                <p className="py-16 text-center text-sm text-muted-foreground">Loading…</p>
-              ) : trendData.length === 0 ? (
-                <p className="py-16 text-center text-sm text-muted-foreground">
-                  No revenue data yet.
-                </p>
-              ) : (
-                <TrendComboChart data={trendData} formatMoney={usd} height={240} />
-              )}
-
-              {/* Storefront traffic — the platform is alive even with no orders */}
               {pulse && (
-                <div className="mt-4 border-t border-border pt-3">
-                  <div className="mb-1 flex items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    <span>Storefront visitors · 30d</span>
-                    <span className="text-foreground">
-                      {count(pulse.traffic.visitors30d)} visitors ·{' '}
-                      {count(pulse.traffic.storeViews30d)} views
-                    </span>
-                  </div>
-                  <div style={{ height: 64 }}>
+                <>
+                  <p className="mt-1 font-headings text-2xl font-bold tabular-nums text-foreground">
+                    {count(pulse.traffic.visitors30d)}
+                  </p>
+                  <p className="mb-2 text-[11px] text-muted-foreground">
+                    {count(pulse.traffic.storeViews30d)} storefront views
+                  </p>
+                  <div style={{ height: 120 }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart
                         data={pulse.daily.map((d) => ({
@@ -444,7 +449,7 @@ export default function AdminDashboardPage() {
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
-                </div>
+                </>
               )}
             </div>
           </div>
