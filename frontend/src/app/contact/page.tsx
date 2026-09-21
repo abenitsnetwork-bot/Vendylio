@@ -3,6 +3,7 @@ import { PublicNavBar } from '@/components/marketing/PublicNavBar';
 import { CtaFooter } from '@/components/marketing/CtaFooter';
 import { ContactForm } from '@/components/marketing/ContactForm';
 import { Icon, type IconName } from '@/components/ui/Icon';
+import { SocialIcon, SOCIAL_NETWORKS } from '@/components/ui/SocialIcon';
 import { getSiteSettings } from '@/lib/server/siteSettings';
 
 export const metadata: Metadata = {
@@ -17,6 +18,9 @@ export default async function ContactPage() {
     { icon: 'clock', label: 'Response time', value: 'Usually within a business day' },
     { icon: 'map-pin', label: 'Based in', value: settings.location },
   ];
+  const socials = SOCIAL_NETWORKS.map((s) => ({ ...s, url: settings[s.key] })).filter(
+    (s): s is (typeof SOCIAL_NETWORKS)[number] & { url: string } => Boolean(s.url),
+  );
 
   return (
     <div className="bg-background font-body">
@@ -50,6 +54,28 @@ export default async function ContactPage() {
                 </div>
               </div>
             ))}
+
+            {socials.length > 0 && (
+              <div>
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Follow us
+                </p>
+                <div className="flex items-center gap-2">
+                  {socials.map((s) => (
+                    <a
+                      key={s.network}
+                      href={s.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={s.label}
+                      className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-foreground hover:bg-border"
+                    >
+                      <SocialIcon network={s.network} size={18} />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <ContactForm />

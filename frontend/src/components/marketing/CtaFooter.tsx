@@ -1,19 +1,12 @@
 import Link from 'next/link';
 import { getSiteSettings } from '@/lib/server/siteSettings';
-
-const SOCIAL_LABELS = {
-  instagramUrl: 'Instagram',
-  facebookUrl: 'Facebook',
-  twitterUrl: 'X',
-  tiktokUrl: 'TikTok',
-  linkedinUrl: 'LinkedIn',
-} as const;
+import { SocialIcon, SOCIAL_NETWORKS } from '@/components/ui/SocialIcon';
 
 export async function CtaFooter() {
   const settings = await getSiteSettings();
-  const socials = (Object.keys(SOCIAL_LABELS) as (keyof typeof SOCIAL_LABELS)[])
-    .map((key) => ({ label: SOCIAL_LABELS[key] as string, url: settings[key] }))
-    .filter((s): s is { label: string; url: string } => Boolean(s.url));
+  const socials = SOCIAL_NETWORKS.map((s) => ({ ...s, url: settings[s.key] })).filter(
+    (s): s is (typeof SOCIAL_NETWORKS)[number] & { url: string } => Boolean(s.url),
+  );
 
   return (
     <>
@@ -64,17 +57,22 @@ export async function CtaFooter() {
           <Link href="/contact" className="hover:text-foreground">
             Contact
           </Link>
-          {socials.map((s) => (
-            <a
-              key={s.label}
-              href={s.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-foreground"
-            >
-              {s.label}
-            </a>
-          ))}
+          {socials.length > 0 && (
+            <div className="flex items-center gap-1 border-l border-border pl-5">
+              {socials.map((s) => (
+                <a
+                  key={s.network}
+                  href={s.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={s.label}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground"
+                >
+                  <SocialIcon network={s.network} size={16} />
+                </a>
+              ))}
+            </div>
+          )}
         </div>
       </footer>
     </>
