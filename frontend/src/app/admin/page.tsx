@@ -17,6 +17,7 @@ import { api, ApiError } from '@/lib/api';
 import { formatUsdPerUnit } from '@/lib/productUnits';
 import { sellerFirstName } from '@/lib/utils';
 import { useAdminAuth } from '@/contexts/AdminContext';
+import { RadialGauge } from '@/components/ui/RadialGauge';
 import { StatusBadge, formatUsd } from '@/components/seller/OrdersTable';
 import { formatOrderNumber } from '@/lib/orderNumber';
 import { StoreOverviewSection } from '@/components/admin/StoreOverviewSection';
@@ -334,29 +335,23 @@ export default function AdminDashboardPage() {
               {/* Plan mix + recurring revenue — the Free/Pro business story */}
               {pulse && (
                 <div className="mt-4 space-y-3 border-t border-border pt-4">
-                  <div>
-                    <div className="mb-1 flex items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      <span>Plan mix</span>
-                      <span className="text-foreground">
+                  <div className="flex items-center gap-4">
+                    <RadialGauge
+                      value={
+                        pulse.planMix.pro + pulse.planMix.free > 0
+                          ? (pulse.planMix.pro / (pulse.planMix.pro + pulse.planMix.free)) * 100
+                          : 0
+                      }
+                      color="var(--color-stat-emerald)"
+                      size={72}
+                    />
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Plan mix · Pro adoption
+                      </p>
+                      <p className="text-sm font-semibold text-foreground">
                         {pulse.planMix.pro} Pro · {pulse.planMix.free} Free
-                      </span>
-                    </div>
-                    <div className="flex h-2 overflow-hidden rounded-full bg-secondary">
-                      {(() => {
-                        const total = pulse.planMix.pro + pulse.planMix.free || 1;
-                        return (
-                          <>
-                            <div
-                              className="bg-green-500"
-                              style={{ width: `${(pulse.planMix.pro / total) * 100}%` }}
-                            />
-                            <div
-                              className="bg-accent"
-                              style={{ width: `${(pulse.planMix.free / total) * 100}%` }}
-                            />
-                          </>
-                        );
-                      })()}
+                      </p>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
@@ -430,15 +425,21 @@ export default function AdminDashboardPage() {
                         }))}
                         margin={{ top: 4, right: 0, bottom: 0, left: 0 }}
                       >
+                        <defs>
+                          <linearGradient id="visitors-area" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={CHART_ACCENT} stopOpacity={0.4} />
+                            <stop offset="100%" stopColor={CHART_ACCENT} stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
                         <Tooltip contentStyle={TOOLTIP_STYLE} />
                         <Area
-                          type="monotone"
+                          type="natural"
                           dataKey="visitors"
                           name="Visitors"
                           stroke={CHART_ACCENT}
-                          fill={CHART_ACCENT}
-                          fillOpacity={0.15}
-                          strokeWidth={1.5}
+                          fill="url(#visitors-area)"
+                          strokeWidth={2}
+                          dot={false}
                         />
                       </AreaChart>
                     </ResponsiveContainer>
@@ -552,6 +553,12 @@ export default function AdminDashboardPage() {
                 data={analytics.customerGrowthByMonth}
                 margin={{ top: 8, right: 8, left: 0 }}
               >
+                <defs>
+                  <linearGradient id="customer-growth-bar" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={CHART_ACCENT} stopOpacity={1} />
+                    <stop offset="100%" stopColor={CHART_ACCENT} stopOpacity={0.45} />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
                 <XAxis dataKey="month" tick={{ fontSize: 11, fill: CHART_AXIS }} />
                 <YAxis tick={{ fontSize: 11, fill: CHART_AXIS }} allowDecimals={false} width={30} />
@@ -559,8 +566,8 @@ export default function AdminDashboardPage() {
                 <Bar
                   dataKey="newCustomers"
                   name="New customers"
-                  fill={CHART_ACCENT}
-                  radius={[4, 4, 0, 0]}
+                  fill="url(#customer-growth-bar)"
+                  radius={[6, 6, 0, 0]}
                   maxBarSize={48}
                 />
               </BarChart>

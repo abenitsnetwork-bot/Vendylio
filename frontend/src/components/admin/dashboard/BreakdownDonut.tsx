@@ -38,9 +38,10 @@ export function BreakdownDonut({
               data={sorted}
               dataKey="valueCents"
               nameKey="label"
-              innerRadius={58}
+              innerRadius={56}
               outerRadius={90}
-              paddingAngle={2}
+              paddingAngle={sorted.length > 1 ? 3 : 0}
+              cornerRadius={sorted.length > 1 ? 8 : 0}
               strokeWidth={0}
             >
               {sorted.map((row, i) => (

@@ -46,9 +46,10 @@ export function RevenueDonut({
                 data={sorted}
                 dataKey="valueCents"
                 nameKey="label"
-                innerRadius={62}
+                innerRadius={58}
                 outerRadius={92}
-                paddingAngle={sorted.length > 1 ? 2 : 0}
+                paddingAngle={sorted.length > 1 ? 3 : 0}
+                cornerRadius={sorted.length > 1 ? 8 : 0}
                 strokeWidth={0}
                 startAngle={90}
                 endAngle={-270}
