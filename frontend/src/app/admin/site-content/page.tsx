@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Icon } from '@/components/ui/Icon';
@@ -35,6 +35,138 @@ interface Testimonial {
   rating: number | null;
   sortOrder: number;
   visible: boolean;
+}
+
+interface SiteSettingsData {
+  location: string;
+  contactEmail: string;
+  websiteUrl: string | null;
+  instagramUrl: string | null;
+  facebookUrl: string | null;
+  twitterUrl: string | null;
+  tiktokUrl: string | null;
+  linkedinUrl: string | null;
+}
+
+function SiteSettingsForm({
+  settings,
+  onSaved,
+}: {
+  settings: SiteSettingsData;
+  onSaved: (updated: SiteSettingsData) => void;
+}) {
+  const [form, setForm] = useState(settings);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  function field<K extends keyof SiteSettingsData>(key: K) {
+    return {
+      value: form[key] ?? '',
+      onChange: (e: ChangeEvent<HTMLInputElement>) => {
+        setSaved(false);
+        setForm((prev) => ({ ...prev, [key]: e.target.value }));
+      },
+    };
+  }
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await api<SiteSettingsData>('/api/admin/site-settings', {
+        method: 'PATCH',
+        body: form,
+      });
+      setForm(res);
+      onSaved(res);
+      setSaved(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card className="p-6">
+      <form onSubmit={onSubmit} className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <Field label="Location" htmlFor="location">
+          <input
+            id="location"
+            className={inputClass}
+            placeholder="Phoenix, Arizona, USA"
+            {...field('location')}
+          />
+        </Field>
+        <Field label="Contact email" htmlFor="contactEmail">
+          <input
+            id="contactEmail"
+            type="email"
+            className={inputClass}
+            placeholder="no-reply@vendylio.com"
+            {...field('contactEmail')}
+          />
+        </Field>
+        <Field label="Website URL" htmlFor="websiteUrl">
+          <input
+            id="websiteUrl"
+            className={inputClass}
+            placeholder="https://vendylio.com"
+            {...field('websiteUrl')}
+          />
+        </Field>
+        <Field label="Instagram" htmlFor="instagramUrl">
+          <input
+            id="instagramUrl"
+            className={inputClass}
+            placeholder="https://instagram.com/vendylio"
+            {...field('instagramUrl')}
+          />
+        </Field>
+        <Field label="Facebook" htmlFor="facebookUrl">
+          <input
+            id="facebookUrl"
+            className={inputClass}
+            placeholder="https://facebook.com/vendylio"
+            {...field('facebookUrl')}
+          />
+        </Field>
+        <Field label="X / Twitter" htmlFor="twitterUrl">
+          <input
+            id="twitterUrl"
+            className={inputClass}
+            placeholder="https://x.com/vendylio"
+            {...field('twitterUrl')}
+          />
+        </Field>
+        <Field label="TikTok" htmlFor="tiktokUrl">
+          <input
+            id="tiktokUrl"
+            className={inputClass}
+            placeholder="https://tiktok.com/@vendylio"
+            {...field('tiktokUrl')}
+          />
+        </Field>
+        <Field label="LinkedIn" htmlFor="linkedinUrl">
+          <input
+            id="linkedinUrl"
+            className={inputClass}
+            placeholder="https://linkedin.com/company/vendylio"
+            {...field('linkedinUrl')}
+          />
+        </Field>
+        <div className="flex items-center gap-3 sm:col-span-2">
+          <Button type="submit" variant="accent" disabled={saving}>
+            {saving ? 'Saving…' : 'Save'}
+          </Button>
+          {saved && <span className="text-sm text-green-700">Saved</span>}
+          {error && <span className="text-sm text-red-600">{error}</span>}
+        </div>
+      </form>
+    </Card>
+  );
 }
 
 function ImageSlotCard({
@@ -404,6 +536,7 @@ export default function AdminSiteContentPage() {
   const [images, setImages] = useState<SiteImageSlot[] | null>(null);
   const [videos, setVideos] = useState<SiteVideoSlot[] | null>(null);
   const [testimonials, setTestimonials] = useState<Testimonial[] | null>(null);
+  const [siteSettings, setSiteSettings] = useState<SiteSettingsData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -411,11 +544,13 @@ export default function AdminSiteContentPage() {
       api<{ images: SiteImageSlot[] }>('/api/admin/site-images'),
       api<{ videos: SiteVideoSlot[] }>('/api/admin/site-videos'),
       api<{ testimonials: Testimonial[] }>('/api/admin/testimonials'),
+      api<SiteSettingsData>('/api/admin/site-settings'),
     ])
-      .then(([imgRes, vidRes, tRes]) => {
+      .then(([imgRes, vidRes, tRes, settingsRes]) => {
         setImages(imgRes.images);
         setVideos(vidRes.videos);
         setTestimonials(tRes.testimonials);
+        setSiteSettings(settingsRes);
       })
       .catch((err) =>
         setError(err instanceof ApiError ? err.message : 'Could not load site content.'),
@@ -432,13 +567,25 @@ export default function AdminSiteContentPage() {
         className="mb-2 font-headings font-bold text-foreground"
         style={{ fontSize: 'clamp(24px, 4vw, 32px)', letterSpacing: '-0.8px' }}
       >
-        Landing Page Content
+        Site Content
       </h1>
       <p className="mb-8 text-sm text-muted-foreground">
-        Photos, video and seller testimonials shown on the public homepage.
+        Photos, video, seller testimonials, and contact/company info shown across the public site.
       </p>
 
       {error && <p className="mb-6 text-sm text-red-600">{error}</p>}
+
+      <section className="mb-12">
+        <h2 className="mb-4 font-headings text-lg font-bold text-foreground">
+          Contact &amp; Company Info
+        </h2>
+        <p className="mb-4 text-sm text-muted-foreground">
+          Shown on /contact and in the footer of every marketing page. Leave a field blank to use
+          the default.
+        </p>
+        {!siteSettings && !error && <p className="text-sm text-muted-foreground">Loading…</p>}
+        {siteSettings && <SiteSettingsForm settings={siteSettings} onSaved={setSiteSettings} />}
+      </section>
 
       <section className="mb-12">
         <h2 className="mb-4 font-headings text-lg font-bold text-foreground">Photos</h2>

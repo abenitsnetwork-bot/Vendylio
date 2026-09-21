@@ -1,6 +1,20 @@
 import Link from 'next/link';
+import { getSiteSettings } from '@/lib/server/siteSettings';
 
-export function CtaFooter() {
+const SOCIAL_LABELS = {
+  instagramUrl: 'Instagram',
+  facebookUrl: 'Facebook',
+  twitterUrl: 'X',
+  tiktokUrl: 'TikTok',
+  linkedinUrl: 'LinkedIn',
+} as const;
+
+export async function CtaFooter() {
+  const settings = await getSiteSettings();
+  const socials = (Object.keys(SOCIAL_LABELS) as (keyof typeof SOCIAL_LABELS)[])
+    .map((key) => ({ label: SOCIAL_LABELS[key] as string, url: settings[key] }))
+    .filter((s): s is { label: string; url: string } => Boolean(s.url));
+
   return (
     <>
       <section className="flex flex-col items-start gap-6 bg-panel px-4 py-12 font-body lg:flex-row lg:items-center lg:justify-between lg:px-14 lg:py-16">
@@ -30,7 +44,9 @@ export function CtaFooter() {
         <div>
           <img src="/logo.png" alt="Vendylio" className="h-9 w-auto" />
           <p className="mt-2 text-xs text-muted-foreground">From your hands to their doorstep.</p>
-          <p className="mt-1 text-xs text-muted-foreground">© 2026 Vendylio · Maryland, USA</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            © 2026 Vendylio · {settings.location}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-6 text-sm text-muted-foreground">
           <Link href="/pricing" className="hover:text-foreground">
@@ -48,7 +64,17 @@ export function CtaFooter() {
           <Link href="/contact" className="hover:text-foreground">
             Contact
           </Link>
-          <span>Instagram</span>
+          {socials.map((s) => (
+            <a
+              key={s.label}
+              href={s.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-foreground"
+            >
+              {s.label}
+            </a>
+          ))}
         </div>
       </footer>
     </>

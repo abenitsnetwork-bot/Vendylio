@@ -1237,6 +1237,25 @@ model PlatformSettings {
   updatedAt           DateTime @updatedAt
 }
 
+// Public-facing company info shown on /contact and the marketing footer
+// (location, contact email, social links) — edited by a SUPERADMIN at
+// Site Content → Contact & Company Info. Singleton row, same
+// upsert-on-first-save pattern as PlatformSettings above. Any unset field
+// falls back to a bundled default in code (see lib/server/siteSettings.ts)
+// so a fresh install never shows a blank line on the public site.
+model SiteSettings {
+  id           String   @id @default("default")
+  location     String?
+  contactEmail String?
+  websiteUrl   String?
+  instagramUrl String?
+  facebookUrl  String?
+  twitterUrl   String?
+  tiktokUrl    String?
+  linkedinUrl  String?
+  updatedAt    DateTime @updatedAt
+}
+
 // ───────────────────────────────────────────────────────────────────────
 // Phase 4a — storefront analytics. DAILY AGGREGATES, not raw hit rows:
 // `POST /api/track` (a client beacon on the public storefront + product

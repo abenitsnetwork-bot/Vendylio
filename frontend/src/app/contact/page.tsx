@@ -3,19 +3,21 @@ import { PublicNavBar } from '@/components/marketing/PublicNavBar';
 import { CtaFooter } from '@/components/marketing/CtaFooter';
 import { ContactForm } from '@/components/marketing/ContactForm';
 import { Icon, type IconName } from '@/components/ui/Icon';
+import { getSiteSettings } from '@/lib/server/siteSettings';
 
 export const metadata: Metadata = {
   title: 'Contact — Vendylio',
   description: 'Questions about selling on Vendylio, billing, or press? Reach out — we reply fast.',
 };
 
-const INFO: { icon: IconName; label: string; value: string }[] = [
-  { icon: 'mail', label: 'Email', value: 'no-reply@vendylio.com' },
-  { icon: 'clock', label: 'Response time', value: 'Usually within a business day' },
-  { icon: 'map-pin', label: 'Based in', value: 'Maryland, USA' },
-];
+export default async function ContactPage() {
+  const settings = await getSiteSettings();
+  const INFO: { icon: IconName; label: string; value: string }[] = [
+    { icon: 'mail', label: 'Email', value: settings.contactEmail },
+    { icon: 'clock', label: 'Response time', value: 'Usually within a business day' },
+    { icon: 'map-pin', label: 'Based in', value: settings.location },
+  ];
 
-export default function ContactPage() {
   return (
     <div className="bg-background font-body">
       <PublicNavBar />

@@ -30,7 +30,7 @@ export interface LegalDefault {
   body: string;
 }
 
-const TERMS_BODY = `These Terms of Service ("Terms") govern your access to and use of Vendylio ("Vendylio," "we," "us"), a platform operated from Maryland, USA that lets individuals and businesses ("Sellers") create online stores and sell products to their customers ("Buyers"). By creating an account, opening a store, or placing an order through Vendylio, you agree to these Terms.
+const TERMS_BODY = `These Terms of Service ("Terms") govern your access to and use of Vendylio ("Vendylio," "we," "us"), a platform operated from Phoenix, Arizona, USA that lets individuals and businesses ("Sellers") create online stores and sell products to their customers ("Buyers"). By creating an account, opening a store, or placing an order through Vendylio, you agree to these Terms.
 
 ## 1. What Vendylio is
 
