@@ -12,7 +12,7 @@ export function AdminHeader({ admin }: { admin: AdminInfo }) {
   const router = useRouter();
 
   return (
-    <header className="flex items-center justify-between border-b border-border bg-card px-4 py-4 lg:px-8">
+    <header className="relative z-40 flex items-center justify-between border-b border-border bg-card px-4 py-4 lg:px-8">
       <div className="flex min-w-0 items-center gap-2">
         <MobileNavTrigger className="-ml-2" />
         <p className="truncate text-sm text-muted-foreground">

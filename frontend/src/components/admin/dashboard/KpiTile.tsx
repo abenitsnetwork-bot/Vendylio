@@ -52,8 +52,8 @@ export function KpiTile({
 
   return (
     <div
-      className={`group relative overflow-hidden rounded-lg border border-border bg-card transition-transform duration-150 hover:-translate-y-0.5 ${
-        compact ? 'p-3.5' : 'p-4'
+      className={`group relative overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md ${
+        compact ? 'p-4' : 'p-5'
       }`}
     >
       <span
@@ -61,11 +61,11 @@ export function KpiTile({
         style={badgeColor ? { backgroundColor: badgeColor } : undefined}
         aria-hidden="true"
       />
-      <div className="mb-2 flex items-center gap-2">
+      <div className={`flex items-center gap-2.5 ${compact ? 'mb-2.5' : 'mb-3'}`}>
         <span
-          className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md ${
-            badgeColor ? '' : 'bg-secondary text-muted-foreground'
-          }`}
+          className={`flex flex-shrink-0 items-center justify-center rounded-full ${
+            compact ? 'h-8 w-8' : 'h-9 w-9'
+          } ${badgeColor ? '' : 'bg-secondary text-muted-foreground'}`}
           style={
             badgeColor
               ? {
@@ -75,14 +75,14 @@ export function KpiTile({
               : undefined
           }
         >
-          <Icon i={icon} size={13} />
+          <Icon i={icon} size={compact ? 15 : 17} />
         </span>
         <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           {label}
         </span>
       </div>
       <p
-        className={`font-headings font-bold tabular-nums ${compact ? 'text-xl' : 'text-2xl'} ${
+        className={`font-headings font-bold tabular-nums ${compact ? 'text-2xl' : 'text-3xl'} ${
           valueTone === 'positive' ? 'text-green-700' : 'text-foreground'
         }`}
       >

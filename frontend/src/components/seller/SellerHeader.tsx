@@ -29,7 +29,7 @@ export function SellerHeader({
   }, []);
 
   return (
-    <header className="flex items-center justify-between border-b border-border bg-card px-4 py-4 lg:px-14">
+    <header className="relative z-40 flex items-center justify-between border-b border-border bg-card px-4 py-4 lg:px-14">
       <div className="flex items-center gap-1.5">
         <MobileNavTrigger className="-ml-2" />
         <Link href="/dashboard" className="flex items-center">
@@ -49,7 +49,7 @@ export function SellerHeader({
             {userName.charAt(0).toUpperCase()}
           </button>
           {open && (
-            <div className="absolute right-0 top-full mt-2">
+            <div className="absolute right-0 top-full z-50 mt-2">
               <AccountMenu
                 userName={userName}
                 userEmail={userEmail}

@@ -21,7 +21,9 @@ export function SectionBand({
   className?: string;
 }) {
   return (
-    <section className={`mb-6 overflow-hidden rounded-lg border border-border ${className ?? ''}`}>
+    <section
+      className={`mb-6 overflow-hidden rounded-xl border border-border shadow-sm ${className ?? ''}`}
+    >
       <div className="flex items-center justify-between gap-3 bg-panel px-4 py-2.5 text-panel-foreground">
         <div className="flex items-center gap-2">
           <Icon i={icon} size={14} className="opacity-80" />

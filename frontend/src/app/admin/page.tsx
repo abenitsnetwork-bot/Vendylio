@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import {
   Area,
   AreaChart,
@@ -14,6 +15,8 @@ import {
 } from 'recharts';
 import { api, ApiError } from '@/lib/api';
 import { formatUsdPerUnit } from '@/lib/productUnits';
+import { sellerFirstName } from '@/lib/utils';
+import { useAdminAuth } from '@/contexts/AdminContext';
 import { StatusBadge, formatUsd } from '@/components/seller/OrdersTable';
 import { formatOrderNumber } from '@/lib/orderNumber';
 import { StoreOverviewSection } from '@/components/admin/StoreOverviewSection';
@@ -115,6 +118,7 @@ function dayLabel(iso: string): string {
 }
 
 export default function AdminDashboardPage() {
+  const { admin } = useAdminAuth();
   const [pulse, setPulse] = useState<Pulse | null>(null);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [recentOrders, setRecentOrders] = useState<RecentOrder[] | null>(null);
@@ -153,14 +157,88 @@ export default function AdminDashboardPage() {
           orderCount: m.orderCount,
         }));
 
+  const adminName = admin ? sellerFirstName({ name: null, email: admin.email }) : null;
+
+  let bannerTone: 'ok' | 'warn' | 'muted' = 'muted';
+  let bannerText = 'Loading platform status…';
+  let bannerHref: string | undefined;
+  if (pulse && k) {
+    if (k.failedPayments.value > 0) {
+      bannerTone = 'warn';
+      bannerText = `${k.failedPayments.value} failed payment${k.failedPayments.value > 1 ? 's' : ''} need attention`;
+    } else if (pulse.queue.withdrawalsPending > 0) {
+      bannerTone = 'warn';
+      bannerText = `${pulse.queue.withdrawalsPending} withdrawal${pulse.queue.withdrawalsPending > 1 ? 's' : ''} pending review`;
+      bannerHref = '/admin/withdrawals';
+    } else if (pulse.queue.outboxFailed > 0 || pulse.queue.emailFailed > 0) {
+      bannerTone = 'warn';
+      bannerText = 'Some background jobs failed — see Platform health below';
+    } else {
+      bannerTone = 'ok';
+      bannerText = 'Everything is running smoothly';
+    }
+  }
+
   return (
     <div className="px-4 py-8 font-body lg:px-8">
-      <h1
-        className="mb-6 font-headings font-bold text-foreground"
-        style={{ fontSize: 'clamp(24px, 4vw, 32px)', letterSpacing: '-0.8px' }}
-      >
-        Platform Overview
-      </h1>
+      {/* Greeting banner — mirrors the seller dashboard's welcome banner */}
+      <div className="relative mb-8 overflow-hidden rounded-2xl bg-panel p-6 text-panel-foreground sm:p-8">
+        <div
+          aria-hidden="true"
+          className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-accent/25"
+        />
+        <div
+          aria-hidden="true"
+          className="absolute -right-2 bottom-0 h-24 w-24 rounded-full bg-panel-foreground/10"
+        />
+        <div className="relative flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1
+              className="mb-2 font-headings font-bold"
+              style={{ fontSize: 'clamp(24px, 4vw, 32px)', letterSpacing: '-0.8px' }}
+            >
+              {adminName ? `Welcome, ${adminName}!` : 'Platform Overview'}
+            </h1>
+            {bannerHref ? (
+              <Link
+                href={bannerHref}
+                className="inline-flex items-center gap-2 text-sm text-panel-foreground/80 hover:text-panel-foreground"
+              >
+                <span
+                  className={`inline-block h-2 w-2 rounded-full ${
+                    bannerTone === 'ok'
+                      ? 'bg-green-400'
+                      : bannerTone === 'warn'
+                        ? 'bg-amber-400'
+                        : 'bg-panel-foreground/50'
+                  }`}
+                  aria-hidden="true"
+                />
+                {bannerText}
+              </Link>
+            ) : (
+              <p className="inline-flex items-center gap-2 text-sm text-panel-foreground/80">
+                <span
+                  className={`inline-block h-2 w-2 rounded-full ${
+                    bannerTone === 'ok'
+                      ? 'bg-green-400'
+                      : bannerTone === 'warn'
+                        ? 'bg-amber-400'
+                        : 'bg-panel-foreground/50'
+                  }`}
+                  aria-hidden="true"
+                />
+                {bannerText}
+              </p>
+            )}
+          </div>
+          {admin && (
+            <span className="rounded-full bg-panel-foreground/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-panel-foreground/90">
+              {admin.role}
+            </span>
+          )}
+        </div>
+      </div>
 
       {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
       {!pulse && !error && <p className="text-sm text-muted-foreground">Loading…</p>}
